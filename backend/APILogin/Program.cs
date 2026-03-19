@@ -92,6 +92,31 @@ app.MapPost("/api/login", async (AuthRequest request, FirebaseAuthClient client)
     }
 });
 
+// =================================================================
+// API ENDPOINT 3: QUÊN MẬT KHẨU (Gửi Email Reset)
+// =================================================================
+app.MapPost("/api/forgot-password", async (AuthRequest request, FirebaseAuthClient client) =>
+{
+    // Chỉ cần Email để gửi lệnh reset
+    if (string.IsNullOrEmpty(request.Email))
+    {
+        return Results.BadRequest(new { message = "Vui lòng nhập Email để nhận liên kết khôi phục!" });
+    }
+
+    try
+    {
+        // Lệnh yêu cầu Firebase gửi mail reset mật khẩu
+        await client.ResetEmailPasswordAsync(request.Email);
+
+        return Results.Ok(new { message = "Hệ thống đã gửi liên kết khôi phục vào Email của anh. Vui lòng kiểm tra hộp thư!" });
+    }
+    catch (Exception)
+    {
+        // Thường lỗi do Email không tồn tại trong hệ thống
+        return Results.BadRequest(new { message = "Email này chưa được đăng ký hồ sơ thám tử!" });
+    }
+});
+
 app.Run();
 
 
