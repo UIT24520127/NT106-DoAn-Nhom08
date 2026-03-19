@@ -53,7 +53,7 @@ export default function MainMenu() {
       {/* KHU VỰC TRUNG TÂM */}
       <div className="absolute inset-0 flex flex-col items-center justify-center z-10">
         
-        <div className="mt-[400px] flex flex-col items-center">
+        <div className="mt-[500px] flex flex-col items-center">
           {!showOptions ? (
             <button 
               onClick={() => setShowOptions(true)}
