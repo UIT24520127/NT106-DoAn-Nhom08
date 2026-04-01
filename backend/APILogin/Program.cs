@@ -117,6 +117,19 @@ app.MapPost("/api/forgot-password", async (AuthRequest request, FirebaseAuthClie
     }
 });
 
+// =================================================================
+// API ENDPOINT 4: ĐĂNG XUẤT
+// =================================================================
+app.MapPost("/api/logout", (HttpContext context) =>
+{
+    // Firebase Auth là stateless (dùng JWT token), server không lưu session.
+    // Việc logout thực sự xảy ra ở Front-end (xóa token khỏi localStorage/cookie).
+    // Endpoint này để Front-end có điểm gọi chuẩn, và sau này có thể mở rộng
+    // (ví dụ: thêm token vào blacklist nếu dùng custom auth).
+
+    return Results.Ok(new { message = "Đăng xuất thành công!" });
+});
+
 app.Run();
 
 
