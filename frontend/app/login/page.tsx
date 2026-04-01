@@ -1,6 +1,10 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation"; 
+import { useRouter } from "next/navigation";
+
+import { saveToken } from "@/lib/auth";
+
+
 
 export default function LoginPage() {
   const router = useRouter(); 
@@ -43,9 +47,9 @@ export default function LoginPage() {
       const data = await res.json();
       
       if (res.ok) {
-        // Đăng nhập thành công -> Hiện popup, khi bấm Đóng sẽ chuyển sang /menu
-        showPopup("Thành công!", data.message, true, true);
-      }
+            saveToken(data.token); 
+            showPopup("Thành công!", data.message, true, true);
+          }
       else {
         showPopup("Thất bại", data.message, false);
       }
@@ -100,6 +104,7 @@ export default function LoginPage() {
     }
   };
 
+  
   return (
     // ĐÃ SỬA: Dùng h-screen w-screen và overflow-hidden để form luôn nằm chính giữa, không xê dịch
     <div 
