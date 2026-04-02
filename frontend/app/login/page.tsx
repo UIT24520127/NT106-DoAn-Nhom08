@@ -35,7 +35,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch("https://localhost:7226/api/login", {
+      const res = await fetch("https://localhost:7210/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }), 
@@ -57,7 +57,7 @@ export default function LoginPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch("https://localhost:7226/api/register", {
+      const res = await fetch("https://localhost:7210/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, username, password }),
@@ -83,7 +83,7 @@ export default function LoginPage() {
     }
 
     try {
-      const res = await fetch("https://localhost:7226/api/forgot-password", {
+      const res = await fetch("https://localhost:7210/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
