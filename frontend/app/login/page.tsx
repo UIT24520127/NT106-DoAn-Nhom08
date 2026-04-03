@@ -39,7 +39,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch("https://localhost:7210/api/auth/login", {
+      const res = await fetch("https://192.168.0.104:7210/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }), 
@@ -48,6 +48,13 @@ export default function LoginPage() {
       
       if (res.ok) {
             saveToken(data.token); 
+            const idToSave = data.userId || data.uid || data.Id;
+            if (idToSave) {
+                localStorage.setItem("userId", idToSave);
+                console.log("Đã lưu userId mới:", idToSave);
+            } else {
+                console.warn("Cảnh báo: Backend không trả về userId trong phản hồi login!");
+            }
             showPopup("Thành công!", data.message, true, true);
           }
       else {
@@ -61,7 +68,7 @@ export default function LoginPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch("https://localhost:7210/api/auth/register", {
+      const res = await fetch("https://192.168.0.104:7210/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, username, password }),
@@ -87,7 +94,7 @@ export default function LoginPage() {
     }
 
     try {
-      const res = await fetch("https://localhost:7210/api/auth/forgot-password", {
+      const res = await fetch("https://192.168.0.104:7210/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
