@@ -34,7 +34,13 @@ namespace ServerUndercover.Controllers
                 {
                     username = request.Username,
                     totalGames = 0,
-                    wins = 0,
+
+                    civilianWins = 0,
+                    undercoverWins = 0,
+                    mrWhiteWins = 0,
+
+                    totalWins = 0,
+
                     mostPlayedRole = "Tân binh",
                     createdAt = Timestamp.GetCurrentTimestamp()
                 });

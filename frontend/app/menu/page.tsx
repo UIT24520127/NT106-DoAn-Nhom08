@@ -14,6 +14,9 @@ export default function MainMenu() {
     username: "Đang tải...",
     totalGames: 0,
     wins: 0,
+    civilianWins: 0,   // ✨ Thêm mới
+    undercoverWins: 0, // ✨ Thêm mới
+    mrWhiteWins: 0,    // ✨ Thêm mới
     winRate: "0%",
     mostPlayedRole: "---"
   });
@@ -50,21 +53,28 @@ export default function MainMenu() {
           const data = await response.json();
           console.log("Dữ liệu Firestore nhận được:", data);
 
-          // 3. Đổ data từ API vào Modal (Sửa lỗi hoa-thường và tên biến)
-          // Backend trả về Dictionary nên ta dùng data.username hoặc data.Username tùy cấu hình JSON
+          // 3. Đổ data từ API vào Modal (Xử lý cả hoa-thường cho chắc ăn)
           const username = data.username || data.Username || "Đặc vụ ẩn danh";
           const totalGames = data.totalGames || data.TotalGames || 0;
           const wins = data.wins || data.Wins || 0;
           const mostPlayedRole = data.mostPlayedRole || data.MostPlayedRole || "Tân binh";
 
+          // Lấy thêm 3 biến mới bạn vừa thêm ở Backend
+          const civilianWins = data.civilianWins || data.CivilianWins || 0;
+          const undercoverWins = data.undercoverWins || data.UndercoverWins || 0;
+          const mrWhiteWins = data.mrWhiteWins || data.MrWhiteWins || 0;
+
           setPlayerStats({
-            username: username,
-            totalGames: totalGames,
-            wins: wins,
-            winRate: totalGames > 0 
-              ? ((wins / totalGames) * 100).toFixed(1) + "%" 
+            username: data.username || "Đặc vụ ẩn danh",
+            totalGames: data.totalGames || 0,
+            wins: data.wins || 0,
+            civilianWins: data.civilianWins || 0,     // ✨ Lấy từ backend
+            undercoverWins: data.undercoverWins || 0, // ✨ Lấy từ backend
+            mrWhiteWins: data.mrWhiteWins || 0,       // ✨ Lấy từ backend
+            winRate: data.totalGames > 0 
+              ? ((data.wins / data.totalGames) * 100).toFixed(1) + "%" 
               : "0%",
-            mostPlayedRole: mostPlayedRole
+            mostPlayedRole: data.mostPlayedRole || "Tân binh"
           });
         } else {
           console.error("Không tìm thấy profile trên server.");

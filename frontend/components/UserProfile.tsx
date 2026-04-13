@@ -8,7 +8,10 @@ interface UserProfileProps {
   stats: {
     username: string;
     totalGames: number;
-    wins: number;
+    wins: number; // Đây có thể là tổng trận thắng
+    civilianWins: number;   // Thêm mới
+    undercoverWins: number; // Thêm mới
+    mrWhiteWins: number;    // Thêm mới
     winRate: string;
     mostPlayedRole: string;
   };
@@ -61,12 +64,19 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats }) => 
           </p>
         </div>
 
-        {/* THÔNG SỐ */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* THÔNG SỐ CHÍNH */}
+        <div className="grid grid-cols-2 gap-4 mb-6">
           <StatCard icon={Gamepad2} label="Tổng số trận" value={stats.totalGames} color="#3b82f6" />
-          <StatCard icon={Trophy} label="Số trận thắng" value={stats.wins} color="#22c55e" />
           <StatCard icon={Target} label="Tỉ lệ thắng" value={stats.winRate} color="#e6a822" />
-          <StatCard icon={Star} label="Vai trò chính" value={stats.mostPlayedRole} color="#ec4899" />
+        </div>
+
+        {/* CHI TIẾT TRẬN THẮNG THEO VAI TRÒ */}
+        <p className="text-gray-400 text-xs uppercase tracking-widest mb-3 font-bold">Thắng theo vai trò</p>
+        <div className="space-y-3">
+          {/* Bạn có thể tạo Component mới hoặc dùng lại StatCard nhưng chỉnh layout */}
+          <StatCard icon={Trophy} label="Dân thường" value={stats.civilianWins} color="#22c55e" />
+          <StatCard icon={Trophy} label="Mũ đen" value={stats.undercoverWins} color="#ef4444" />
+          <StatCard icon={Trophy} label="Mũ trắng" value={stats.mrWhiteWins} color="#ffffff" />
         </div>
 
         <button onClick={onClose} className="w-full mt-8 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl transition shadow-md">
