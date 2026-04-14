@@ -1,6 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Firebase.Auth;
 using ServerUndercover.Models.DTOs;
+using Google.Cloud.Firestore;
 
 namespace ServerUndercover.Controllers
 {
@@ -9,10 +10,12 @@ namespace ServerUndercover.Controllers
     public class AuthController : ControllerBase
     {
         private readonly FirebaseAuthClient _client;
+        private readonly FirestoreDb _db;
 
-        public AuthController(FirebaseAuthClient client)
+        public AuthController(FirebaseAuthClient client, FirestoreDb db)
         {
             _client = client;
+            _db = db;
         }
 
         [HttpPost("register")]
@@ -24,6 +27,23 @@ namespace ServerUndercover.Controllers
             try
             {
                 var userCredential = await _client.CreateUserWithEmailAndPasswordAsync(request.Email, request.Password);
+                string uid = userCredential.User.Info.Uid;
+
+                DocumentReference docRef = _db.Collection("users").Document(uid);
+                await docRef.SetAsync(new
+                {
+                    username = request.Username,
+                    totalGames = 0,
+
+                    civilianWins = 0,
+                    undercoverWins = 0,
+                    mrWhiteWins = 0,
+
+                    totalWins = 0,
+
+                    mostPlayedRole = "Tân binh",
+                    createdAt = Timestamp.GetCurrentTimestamp()
+                });
                 return Ok(new { message = "Đăng ký thành công!", uid = userCredential.User.Info.Uid });
             }
             catch (Exception ex)

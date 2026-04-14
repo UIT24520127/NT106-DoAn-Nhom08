@@ -1,13 +1,25 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { Users, Settings, LogOut, X } from "lucide-react";
-import { logout } from "@/lib/auth"; 
+import { Users, Settings, LogOut, X, User } from "lucide-react";
+import { logout } from "@/lib/auth";
+import UserProfile from "@/components/UserProfile"; 
 
 export default function MainMenu() {
   const [showOptions, setShowOptions] = useState(false);
   const [showTitle, setShowTitle] = useState(false);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false); // 👈 THÊM MỚI
   const settingsRef = useRef<HTMLDivElement>(null); // 👈 THÊM MỚI
+  const [isProfileOpen, setIsProfileOpen] = useState(false); //Show profile
+  const [playerStats, setPlayerStats] = useState({
+    username: "Đang tải...",
+    totalGames: 0,
+    wins: 0,
+    civilianWins: 0,   // ✨ Thêm mới
+    undercoverWins: 0, // ✨ Thêm mới
+    mrWhiteWins: 0,    // ✨ Thêm mới
+    winRate: "0%",
+    mostPlayedRole: "---"
+  });
 
   useEffect(() => {
     const timer = setTimeout(() => setShowTitle(true), 200);
@@ -25,10 +37,61 @@ export default function MainMenu() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-const handleLogout = async () => {
-  setShowSettingsMenu(false);
-  await logout(); // xóa token + redirect về /login tự động
-};
+  // Gọi backend để lấy thông tin người chơi
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        // 1. Lấy UID của user hiện tại
+        let uid = localStorage.getItem("userId"); 
+        
+        if (!uid || uid === "null" || uid === "undefined") {
+          console.error("LỖI: Không tìm thấy userId trong localStorage! Bạn đã đăng nhập chưa?");
+          return; // Dừng lại không gọi API nếu không có UID
+        }
+
+        console.log("Đang gọi API lấy profile cho UID:", uid);
+        
+        // 2. Gọi API với ID
+        const response = await fetch(`https://localhost:7210/api/user/profile/${uid}`); 
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log("Dữ liệu Firestore nhận được:", data);
+
+          // 3. Đổ data từ API vào Modal
+          setPlayerStats({
+            username: data.username || data.Username || "Đặc vụ ẩn danh",
+            totalGames: data.totalGames || data.TotalGames || 0,
+            wins: data.wins || data.Wins || 0,
+            civilianWins: data.civilianWins || data.CivilianWins || 0,
+            undercoverWins: data.undercoverWins || data.UndercoverWins || 0,
+            mrWhiteWins: data.mrWhiteWins || data.MrWhiteWins || 0,
+            winRate: (data.totalGames || data.TotalGames) > 0 
+              ? (((data.wins || data.Wins) / (data.totalGames || data.TotalGames)) * 100).toFixed(1) + "%" 
+              : "0%",
+            mostPlayedRole: data.mostPlayedRole || data.MostPlayedRole || "Tân binh"
+          });
+        } else {
+          console.error(`LỖI: Không tìm thấy profile trên server. Mã lỗi: ${response.status}`);
+          // Có thể in thêm message từ backend nếu có
+          const errorData = await response.json().catch(() => null);
+          if (errorData) console.error("Chi tiết lỗi từ backend:", errorData);
+        }
+      } catch (error) {
+        console.error("Lỗi kết nối Backend:", error);
+      }
+    };
+  
+    if (isProfileOpen) {
+      fetchProfile();
+    }
+  }, [isProfileOpen]);
+
+  const handleLogout = async () => {
+    setShowSettingsMenu(false);
+    localStorage.removeItem("userId");
+    await logout(); // xóa token + redirect về /login tự động
+  };
 
   return (
     <div className="relative h-screen w-screen bg-[url('/bg.png')] bg-cover bg-center overflow-hidden">
@@ -98,6 +161,13 @@ const handleLogout = async () => {
         <button className="bg-[#1a1c23] p-3 px-4 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg flex items-center justify-center">
           <span className="text-white text-xl font-bold italic">?</span>
         </button>
+
+        <button 
+          onClick={() => setIsProfileOpen(true)} // <-- Thêm dòng này để "mở cửa"
+          className="bg-[#1a1c23] p-3 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg"
+        >
+          <User size={24} color="white" strokeWidth={2.5} />
+        </button>
       </div>
 
       {/* KHU VỰC TRUNG TÂM */}
@@ -129,6 +199,11 @@ const handleLogout = async () => {
           )}
         </div>
       </div>
+      <UserProfile 
+        isOpen={isProfileOpen} 
+        onClose={() => setIsProfileOpen(false)} 
+        stats={playerStats} 
+      />
     </div>
   );
 }

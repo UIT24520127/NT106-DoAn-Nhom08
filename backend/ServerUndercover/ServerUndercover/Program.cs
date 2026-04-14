@@ -1,7 +1,11 @@
-﻿using Microsoft.AspNetCore.Builder;
-using Microsoft.Extensions.DependencyInjection;
-using Firebase.Auth;
+﻿using Firebase.Auth;
 using Firebase.Auth.Providers;
+using Google.Cloud.Firestore;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
+using ServerUndercover.Controllers;
+
+Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", "game-undercover-d70dd-firebase-adminsdk-fbsvc-a08a981514.json");
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +26,16 @@ builder.Services.AddCors(options =>
               .AllowAnyMethod();
     });
 });
+
+// Đăng ký Service vào DI Container
+builder.Services.AddScoped<IUserService, UserService>();
+
+// --- PHẦN FIRESTORE (Cần thêm vào) ---
+// Thay "your-project-id" bằng ID thật của bạn (ví dụ: game-undercover-d70dd)
+string projectId = "game-undercover-d70dd";
+FirestoreDb firestoreDb = FirestoreDb.Create(projectId);
+builder.Services.AddSingleton(firestoreDb);
+
 
 // 4. Cấu hình Firebase
 var config = new FirebaseAuthConfig

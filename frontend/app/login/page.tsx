@@ -48,6 +48,13 @@ export default function LoginPage() {
       
       if (res.ok) {
             saveToken(data.token); 
+            const idToSave = data.userId || data.uid || data.Id;
+            if (idToSave) {
+                localStorage.setItem("userId", idToSave);
+                console.log("Đã lưu userId mới:", idToSave);
+            } else {
+                console.warn("Cảnh báo: Backend không trả về userId trong phản hồi login!");
+            }
             showPopup("Thành công!", data.message, true, true);
           }
       else {
