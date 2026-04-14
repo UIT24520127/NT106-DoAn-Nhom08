@@ -41,43 +41,41 @@ export default function MainMenu() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        // 1. Lấy UID của user hiện tại (thay thế dòng này bằng cách lấy UID thật của bạn)
+        // 1. Lấy UID của user hiện tại
         let uid = localStorage.getItem("userId"); 
-        // if (!uid || uid === "null" || uid === "undefined") {
-        //   uid = "hYC23os0HJRJGzxMqWrbHV2VDuK2"; // ID này lấy từ ảnh Firestore của bạn
-        // }
-        // 2. Gọi API với đúng ID (khớp với [HttpGet("profile/{userId}")] ở Backend)
+        
+        if (!uid || uid === "null" || uid === "undefined") {
+          console.error("LỖI: Không tìm thấy userId trong localStorage! Bạn đã đăng nhập chưa?");
+          return; // Dừng lại không gọi API nếu không có UID
+        }
+
+        console.log("Đang gọi API lấy profile cho UID:", uid);
+        
+        // 2. Gọi API với ID
         const response = await fetch(`https://localhost:7210/api/user/profile/${uid}`); 
         
         if (response.ok) {
           const data = await response.json();
           console.log("Dữ liệu Firestore nhận được:", data);
 
-          // 3. Đổ data từ API vào Modal (Xử lý cả hoa-thường cho chắc ăn)
-          const username = data.username || data.Username || "Đặc vụ ẩn danh";
-          const totalGames = data.totalGames || data.TotalGames || 0;
-          const wins = data.wins || data.Wins || 0;
-          const mostPlayedRole = data.mostPlayedRole || data.MostPlayedRole || "Tân binh";
-
-          // Lấy thêm 3 biến mới bạn vừa thêm ở Backend
-          const civilianWins = data.civilianWins || data.CivilianWins || 0;
-          const undercoverWins = data.undercoverWins || data.UndercoverWins || 0;
-          const mrWhiteWins = data.mrWhiteWins || data.MrWhiteWins || 0;
-
+          // 3. Đổ data từ API vào Modal
           setPlayerStats({
-            username: data.username || "Đặc vụ ẩn danh",
-            totalGames: data.totalGames || 0,
-            wins: data.wins || 0,
-            civilianWins: data.civilianWins || 0,     // ✨ Lấy từ backend
-            undercoverWins: data.undercoverWins || 0, // ✨ Lấy từ backend
-            mrWhiteWins: data.mrWhiteWins || 0,       // ✨ Lấy từ backend
-            winRate: data.totalGames > 0 
-              ? ((data.wins / data.totalGames) * 100).toFixed(1) + "%" 
+            username: data.username || data.Username || "Đặc vụ ẩn danh",
+            totalGames: data.totalGames || data.TotalGames || 0,
+            wins: data.wins || data.Wins || 0,
+            civilianWins: data.civilianWins || data.CivilianWins || 0,
+            undercoverWins: data.undercoverWins || data.UndercoverWins || 0,
+            mrWhiteWins: data.mrWhiteWins || data.MrWhiteWins || 0,
+            winRate: (data.totalGames || data.TotalGames) > 0 
+              ? (((data.wins || data.Wins) / (data.totalGames || data.TotalGames)) * 100).toFixed(1) + "%" 
               : "0%",
-            mostPlayedRole: data.mostPlayedRole || "Tân binh"
+            mostPlayedRole: data.mostPlayedRole || data.MostPlayedRole || "Tân binh"
           });
         } else {
-          console.error("Không tìm thấy profile trên server.");
+          console.error(`LỖI: Không tìm thấy profile trên server. Mã lỗi: ${response.status}`);
+          // Có thể in thêm message từ backend nếu có
+          const errorData = await response.json().catch(() => null);
+          if (errorData) console.error("Chi tiết lỗi từ backend:", errorData);
         }
       } catch (error) {
         console.error("Lỗi kết nối Backend:", error);
