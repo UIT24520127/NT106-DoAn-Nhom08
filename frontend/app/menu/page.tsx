@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Users, Settings, LogOut, X } from "lucide-react";
 import { logout } from "@/lib/auth"; 
+import * as signalR from "@microsoft/signalr";
+import { useRouter } from "next/navigation";
 
 export default function MainMenu() {
   const [showOptions, setShowOptions] = useState(false);
@@ -9,7 +11,11 @@ export default function MainMenu() {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false); // 👈 THÊM MỚI
   const settingsRef = useRef<HTMLDivElement>(null); // 👈 THÊM MỚI
 
-  useEffect(() => {
+  // Các State phục vụ Matchmaking
+  const [isSearchOverlayOpen, setIsSearchOverlayOpen] = useState(false);
+  const [searchStatus, setSearchStatus] = useState("Đang kết nối Server");
+  const [hubConnection, setHubConnection] = useState<signalR.HubConnection | null>(null);
+  const router = useRouter();  useEffect(() => {
     const timer = setTimeout(() => setShowTitle(true), 200);
     return () => clearTimeout(timer);
   }, []);
@@ -29,6 +35,55 @@ const handleLogout = async () => {
   setShowSettingsMenu(false);
   await logout(); // xóa token + redirect về /login tự động
 };
+
+  const handleFindMatch = async () => {
+    setIsSearchOverlayOpen(true);
+    setSearchStatus("Đang thiết lập kết nối...");
+
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl("https://localhost:7210/gamehub") 
+      .withAutomaticReconnect()
+      .build();
+
+    setHubConnection(connection);
+
+    connection.on("WaitingForPlayers", (message: string) => {
+      setSearchStatus(`⏳ ${message}`);
+    });
+
+    connection.on("MatchFound", (data: { roomPin: string, message: string }) => {
+      setSearchStatus(`🎉 ${data.message} - Chuẩn bị vào game!`);
+      setTimeout(() => {
+        router.push(`/game/${data.roomPin}`);
+      }, 1500);
+    });
+
+    try {
+      await connection.start();
+      setSearchStatus("Đang tìm kiếm phòng...");
+      await connection.invoke("FindMatch");
+    } catch (err) {
+      console.error("Lỗi khi kết nối SignalR:", err);
+      setSearchStatus("❌ Kết nối thất bại. Vui lòng Hủy và thử lại!");
+    }
+  };
+
+  const handleCancelSearch = async () => {
+    if (hubConnection) {
+      await hubConnection.stop();
+      setHubConnection(null);
+    }
+    setIsSearchOverlayOpen(false);
+  };
+  
+  // Dọn dẹp kết nối SignalR khi thoái lui (unmount)
+  useEffect(() => {
+    return () => {
+      if (hubConnection) {
+        hubConnection.stop();
+      }
+    };
+  }, [hubConnection]);
 
   return (
     <div className="relative h-screen w-screen bg-[url('/bg.png')] bg-cover bg-center overflow-hidden">
@@ -113,7 +168,10 @@ const handleLogout = async () => {
             </button>
           ) : (
             <div className="flex flex-col gap-3 items-center">
-              <button className="bg-[#e6a822] text-black w-40 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
+              <button 
+                onClick={handleFindMatch}
+                className="bg-[#e6a822] text-black w-40 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none"
+              >
                 CHƠI NGAY
               </button>
               <button className="bg-[#3b82f6] text-white w-40 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
@@ -129,6 +187,32 @@ const handleLogout = async () => {
           )}
         </div>
       </div>
+
+      {/* OVERLAY TÌM TRẬN */}
+      {isSearchOverlayOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="flex flex-col items-center text-center">
+            {/* Vòng tròn xoay - Animation xịn */}
+            <div className="w-20 h-20 border-[5px] border-[#3b82f6]/20 border-t-[#e6a822] rounded-full animate-spin mb-8 shadow-[0_0_15px_#e6a822]"></div>
+            
+            <h2 className="text-3xl md:text-4xl font-black text-white mb-3">
+              Đang tìm kiếm phòng
+              <span className="animate-pulse ml-1">...</span>
+            </h2>
+            
+            <p className="text-[#a0aec0] mb-10 text-xl font-medium tracking-wide">
+              {searchStatus}
+            </p>
+
+            <button 
+              onClick={handleCancelSearch}
+              className="px-10 py-3 bg-[#1a1c23] hover:bg-red-600 hover:text-white text-red-500 font-bold text-lg rounded-full border-2 border-red-500 hover:border-red-600 transition-all duration-300 shadow-lg active:scale-95"
+            >
+              HỦY TÌM TRẬN
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
