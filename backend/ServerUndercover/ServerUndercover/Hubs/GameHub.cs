@@ -1,25 +1,52 @@
 ﻿using Microsoft.AspNetCore.SignalR;
+using ServerUndercover.Services;
 
-namespace UndercoverServer.Hubs
+namespace ServerUndercover.Hubs
 {
-    // Kế thừa Hub là có ngay các hàm Realtime
     public class GameHub : Hub
     {
-        // Khi client kết nối
-        public override async Task OnConnectedAsync()
+        private readonly MatchmakingService _matchmaking;
+
+        // Nhúng cái ông quản lý hàng đợi vào Hub
+        public GameHub(MatchmakingService matchmaking)
         {
-            Console.WriteLine($"Người chơi đã kết nối: {Context.ConnectionId}");
-            await base.OnConnectedAsync();
+            _matchmaking = matchmaking;
         }
 
-        // Frontend sẽ gọi hàm này để tạo phòng
-        public async Task CreateRoom()
+        // Front-end sẽ gọi hàm này khi người chơi bấm nút "Chơi ngay"
+        public async Task FindMatch()
         {
-            string roomPin = "123456"; // Sinh random mã PIN
-            await Groups.AddToGroupAsync(Context.ConnectionId, roomPin);
+            string playerId = Context.ConnectionId;
 
-            // Bắn mã PIN về lại cho người vừa tạo
-            await Clients.Caller.SendAsync("RoomCreated", roomPin);
+            // 1. Cho người chơi vào hàng đợi
+            _matchmaking.AddPlayerToQueue(playerId);
+
+            // 2. Server kiểm tra xem đã đủ 5 người chưa
+            var matchedPlayers = _matchmaking.TryFormMatch();
+
+            if (matchedPlayers != null)
+            {
+                // ĐÃ ĐỦ 5 NGƯỜI -> TẠO PHÒNG
+                string roomPin = "ROOM-" + Guid.NewGuid().ToString().Substring(0, 5).ToUpper();
+                Console.WriteLine($"[Game] Đã tạo phòng {roomPin} cho 5 người chơi!");
+
+                // Gom 5 người này vào chung 1 Room
+                foreach (var id in matchedPlayers)
+                {
+                    await Groups.AddToGroupAsync(id, roomPin);
+                }
+
+                // Báo cho cả 5 người biết là trận đã tìm thấy để họ đổi màn hình
+                await Clients.Group(roomPin).SendAsync("MatchFound", new { RoomPin = roomPin, Message = "Trận đấu bắt đầu!" });
+
+                // (Tương lai bạn sẽ gọi hàm chia vai trò ở ngay đây)
+            }
+            else
+            {
+                // CHƯA ĐỦ NGƯỜI -> Báo người chơi cứ đợi
+                await Clients.Caller.SendAsync("WaitingForPlayers", "Đang tìm đối thủ...");
+            }
         }
     }
 }
+    
