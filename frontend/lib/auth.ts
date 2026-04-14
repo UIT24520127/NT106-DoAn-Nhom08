@@ -1,6 +1,6 @@
 // lib/auth.ts
 
-const API_URL = "http://localhost:5000"; // URL backend C# của bạn
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"; // URL backend C# của bạn
 
 // Lưu token sau khi đăng nhập thành công
 export function saveToken(token: string) {
