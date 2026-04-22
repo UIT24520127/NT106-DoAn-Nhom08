@@ -7,11 +7,11 @@ import { saveToken } from "@/lib/auth";
 
 
 export default function LoginPage() {
-  const router = useRouter(); 
+  const router = useRouter();
 
-  const [isRegistering, setIsRegistering] = useState(false); 
-  
-  const [email, setEmail] = useState(""); 
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
@@ -31,7 +31,7 @@ export default function LoginPage() {
   const closePopup = () => {
     setPopup((prev) => ({ ...prev, isOpen: false }));
     if (popup.redirectOnClose) {
-      router.push('/menu'); 
+      router.push('/menu');
     }
   };
   // ===============================================================
@@ -42,21 +42,21 @@ export default function LoginPage() {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }), 
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      
+
       if (res.ok) {
-            saveToken(data.token); 
-            const idToSave = data.userId || data.uid || data.Id;
-            if (idToSave) {
-                localStorage.setItem("userId", idToSave);
-                console.log("Đã lưu userId mới:", idToSave);
-            } else {
-                console.warn("Cảnh báo: Backend không trả về userId trong phản hồi login!");
-            }
-            showPopup("Thành công!", data.message, true, true);
-          }
+        saveToken(data.token);
+        const idToSave = data.userId || data.uid || data.Id;
+        if (idToSave) {
+          localStorage.setItem("userId", idToSave);
+          console.log("Đã lưu userId mới:", idToSave);
+        } else {
+          console.warn("Cảnh báo: Backend không trả về userId trong phản hồi login!");
+        }
+        showPopup("Thành công!", data.message, true, true);
+      }
       else {
         showPopup("Thất bại", data.message, false);
       }
@@ -74,11 +74,11 @@ export default function LoginPage() {
         body: JSON.stringify({ email, username, password }),
       });
       const data = await res.json();
-      
+
       if (res.ok) {
         showPopup("Tạo hồ sơ thành công!", data.message, true);
-        setIsRegistering(false); 
-        setPassword(""); 
+        setIsRegistering(false);
+        setPassword("");
       } else {
         showPopup("Đăng ký thất bại", data.message, false);
       }
@@ -100,7 +100,7 @@ export default function LoginPage() {
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
-      
+
       if (res.ok) {
         showPopup("Đã gửi yêu cầu", data.message, true);
       } else {
@@ -111,22 +111,22 @@ export default function LoginPage() {
     }
   };
 
-  
+
   return (
     // ĐÃ SỬA: Dùng h-screen w-screen và overflow-hidden để form luôn nằm chính giữa, không xê dịch
-    <div 
+    <div
       className="relative h-screen w-screen flex items-center justify-center bg-gray-900 overflow-hidden"
-      style={{ 
+      style={{
         backgroundImage: "url('/bg.png')",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat"
       }}
     >
-      
+
       {/* Khung Form màu giấy - Đã thêm w-[90%] max-w-[400px] để scale đẹp trên mọi màn hình */}
       <div className="relative z-10 bg-[#fcf8e8] w-[90%] max-w-[400px] rounded-2xl p-8 shadow-2xl border-2 border-[#d3b88b]">
-        
+
         {!isRegistering ? (
           /* ================= MÀN HÌNH ĐĂNG NHẬP ================= */
           <div className="flex flex-col animate-fade-in">
@@ -160,8 +160,8 @@ export default function LoginPage() {
                 />
               </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="w-full bg-[#9b111e] hover:bg-[#7a0000] text-white font-bold py-3 rounded shadow-lg mt-2 transition-transform duration-150 active:scale-95"
               >
                 VÀO TRÒ CHƠI
@@ -169,7 +169,7 @@ export default function LoginPage() {
             </form>
 
             <div className="text-center mt-5 mb-5">
-              <span 
+              <span
                 onClick={handleForgotPassword}
                 className="text-[#9b111e] text-sm font-bold cursor-pointer hover:underline"
               >
@@ -179,7 +179,7 @@ export default function LoginPage() {
 
             <hr className="border-[#e0d6c8] mb-5 border-t-2" />
 
-            <button 
+            <button
               onClick={() => { setIsRegistering(true); setPassword(""); }}
               className="w-full bg-[#3e2723] hover:bg-[#2b1b18] text-white font-bold py-3 rounded shadow-lg transition-transform duration-150 active:scale-95"
             >
@@ -230,8 +230,8 @@ export default function LoginPage() {
                 />
               </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="w-full bg-[#9b111e] hover:bg-[#7a0000] text-white font-bold py-3 rounded shadow-lg mt-3 transition-transform duration-150 active:scale-95"
               >
                 XÁC NHẬN TẠO
@@ -239,7 +239,7 @@ export default function LoginPage() {
             </form>
 
             <div className="text-center mt-5">
-              <span 
+              <span
                 onClick={() => setIsRegistering(false)}
                 className="text-[#3e2723] text-sm font-bold cursor-pointer hover:underline"
               >
@@ -258,7 +258,7 @@ export default function LoginPage() {
             <div className="text-5xl mb-3 flex justify-center">
               {popup.isSuccess ? "✅" : "❌"}
             </div>
-            
+
             {/* Tiêu đề & Lời nhắn */}
             <h2 className={`text-2xl font-black mb-2 ${popup.isSuccess ? "text-green-700" : "text-red-700"}`}>
               {popup.title}
@@ -266,9 +266,9 @@ export default function LoginPage() {
             <p className="text-[#3e2723] font-medium text-base mb-6">
               {popup.message}
             </p>
-            
+
             {/* Nút đóng */}
-            <button 
+            <button
               onClick={closePopup}
               className="w-full bg-[#3e2723] hover:bg-[#2b1b18] text-white font-bold py-2.5 rounded shadow transition-transform duration-150 active:scale-95"
             >

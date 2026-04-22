@@ -2,7 +2,7 @@
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"; // URL backend C# của bạn
 
-// Lưu token sau khi đăng nhập thành công
+// Lưu token sau khi đăng nhập thành công(locastorage cuar trinh duyet)
 export function saveToken(token: string) {
   localStorage.setItem("token", token);
 }
