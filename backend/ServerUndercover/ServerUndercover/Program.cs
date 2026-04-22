@@ -6,6 +6,7 @@ using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using ServerUndercover.Controllers;
+using ServerUndercover.Services;
 
 Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", "game-undercover-d70dd-firebase-adminsdk-fbsvc-a08a981514.json");
 
@@ -69,6 +70,7 @@ app.UseSwaggerUI();
 app.UseCors("AllowNextJs");
 
 // Map các đường dẫn
+app.UseCors("AllowNextJs");
 app.MapControllers();
 app.MapHub<ServerUndercover.Hubs.GameHub>("/gamehub");
 

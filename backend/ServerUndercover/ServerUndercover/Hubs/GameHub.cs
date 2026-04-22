@@ -47,6 +47,32 @@ namespace ServerUndercover.Hubs
                 await Clients.Caller.SendAsync("WaitingForPlayers", "Đang tìm đối thủ...");
             }
         }
+
+        // Thêm hàm này vào GameHub.cs
+        public async Task JoinRoom(string roomPin)
+        {
+            // Đưa kết nối hiện tại vào nhóm roomPin
+            await Groups.AddToGroupAsync(Context.ConnectionId, roomPin);
+
+            // (Tùy chọn) Thông báo cho mọi người trong phòng biết có người mới vào
+            await Clients.Group(roomPin).SendAsync("ReceiveMessage", new
+            {
+                User = "Hệ thống",
+                Content = $"Một người chơi đã tham gia phòng.",
+                Timestamp = DateTime.Now.ToString("HH:mm")
+            });
+        }
+
+        public async Task SendMessage(string roomPin, string user, string message)
+        {
+            // Gửi tin nhắn đến toàn bộ người chơi trong phòng (bao gồm cả người gửi)
+            await Clients.Group(roomPin).SendAsync("ReceiveMessage", new
+            {
+                User = user,
+                Content = message,
+                Timestamp = DateTime.Now.ToString("HH:mm")
+            });
+        }
     }
 }
     

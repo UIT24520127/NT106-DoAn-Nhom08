@@ -117,7 +117,7 @@ export default function MainMenu() {
     connection.on("MatchFound", (data: { roomPin: string, message: string }) => {
       setSearchStatus(`🎉 ${data.message} - Chuẩn bị vào game!`);
       setTimeout(() => {
-        router.push(`/game/${data.roomPin}`);
+        router.push(`/room/${data.roomPin}`);
       }, 1500);
     });
 

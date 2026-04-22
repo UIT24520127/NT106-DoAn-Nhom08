@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import * as signalR from "@microsoft/signalr";
+import { useRouter } from "next/navigation"; // 1. Import useRouter
 
 export default function TestMatchPage() {
+  const router = useRouter(); // 2. Khởi tạo router
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
   const [status, setStatus] = useState("Chưa kết nối");
   const [room, setRoom] = useState("");
@@ -19,23 +21,25 @@ export default function TestMatchPage() {
 
   useEffect(() => {
     if (connection) {
-      // 2. Bắt đầu kết nối
       connection.start()
         .then(() => setStatus("🟢 Đã kết nối tới Server! Sẵn sàng."))
         .catch((e) => console.log("Lỗi kết nối: ", e));
 
-      // 3. Lắng nghe Server phản hồi khi "Đang đợi"
       connection.on("WaitingForPlayers", (message: string) => {
         setStatus(`⏳ ${message}`);
       });
 
-      // 4. Lắng nghe Server phản hồi khi "Tìm thấy trận"
       connection.on("MatchFound", (data: { roomPin: string, message: string }) => {
         setStatus(`🎉 ${data.message}`);
         setRoom(data.roomPin);
+
+        // 3. Chuyển hướng người chơi sang trang phòng sau 2 giây để họ kịp nhìn thấy mã phòng
+        setTimeout(() => {
+          router.push(`/room/${data.roomPin}`); 
+        }, 2000);
       });
     }
-  }, [connection]);
+  }, [connection, router]);
 
   // Hàm khi bấm nút CHƠI NGAY
   const handleFindMatch = async () => {
@@ -66,5 +70,6 @@ export default function TestMatchPage() {
         CHƠI NGAY
       </button>
     </div>
+    
   );
 }
