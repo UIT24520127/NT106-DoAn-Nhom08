@@ -137,7 +137,7 @@ namespace ServerUndercover.Hubs
             LeaveRoomInternal(userId);
         }
 
-        private async void LeaveRoomInternal(string userId)
+        private async Task LeaveRoomInternal(string userId)
         {
             string? roomId = _roomManager.GetUserRoomId(userId);
             if (string.IsNullOrEmpty(roomId)) return;
