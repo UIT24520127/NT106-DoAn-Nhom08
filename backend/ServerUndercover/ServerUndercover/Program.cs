@@ -108,6 +108,7 @@ app.UseAuthorization();
 // Map các đường dẫn
 app.MapControllers();
 app.MapHub<ServerUndercover.Hubs.GameHub>("/gamehub");
+app.MapHub<ServerUndercover.Hubs.SessionHub>("/sessionhub");
 
 // Chạy Server (Chỉ có 1 lệnh Run duy nhất ở cuối file)
 app.Run();
