@@ -103,8 +103,12 @@ export default function MainMenu() {
     setIsSearchOverlayOpen(true);
     setSearchStatus("Đang thiết lập kết nối...");
 
+    const token = localStorage.getItem("token") || "";
+
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl("https://localhost:7210/gamehub") 
+      .withUrl("https://localhost:7210/gamehub", {
+        accessTokenFactory: () => token
+      })
       .withAutomaticReconnect()
       .build();
 
@@ -114,17 +118,21 @@ export default function MainMenu() {
       setSearchStatus(`⏳ ${message}`);
     });
 
-    connection.on("MatchFound", (data: { roomPin: string, message: string }) => {
-      setSearchStatus(`🎉 ${data.message} - Chuẩn bị vào game!`);
+    connection.on("RoomJoined", (room: any) => {
+      setSearchStatus(`🎉 Đã tìm thấy phòng - Đang vào sảnh...`);
       setTimeout(() => {
-        router.push(`/game/${data.roomPin}`);
-      }, 1500);
+        router.push(`/room/${room.roomId}`); // Sử dụng UI phòng chờ
+      }, 1000);
+    });
+    
+    connection.on("RoomError", (message: string) => {
+        setSearchStatus(`❌ ${message}`);
     });
 
     try {
       await connection.start();
-      setSearchStatus("Đang tìm kiếm phòng...");
-      await connection.invoke("FindMatch");
+      setSearchStatus("Đang tìm kiếm phòng public...");
+      await connection.invoke("PlayNow"); // Đổi từ FindMatch sang PlayNow
     } catch (err) {
       console.error("Lỗi khi kết nối SignalR:", err);
       setSearchStatus("❌ Kết nối thất bại. Vui lòng Hủy và thử lại!");
@@ -244,7 +252,9 @@ export default function MainMenu() {
               >
                 CHƠI NGAY
               </button>
-              <button className="bg-[#3b82f6] text-white w-40 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
+              <button 
+                onClick={() => router.push('/play-with-friends')}
+                className="bg-[#3b82f6] text-white w-40 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
                 CHƠI VỚI BẠN
               </button>
               <button

@@ -6,6 +6,8 @@ using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using ServerUndercover.Controllers;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 
 Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", "game-undercover-d70dd-firebase-adminsdk-fbsvc-a08a981514.json");
 
@@ -16,7 +18,7 @@ var builder = WebApplication.CreateBuilder(args);
 // 1. Đăng ký Controller & SignalR
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
-builder.Services.AddSingleton<ServerUndercover.Services.MatchmakingService>();
+builder.Services.AddSingleton<ServerUndercover.Services.RoomManagerService>();
 
 // 2. Cấu hình Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -33,6 +35,37 @@ builder.Services.AddCors(options =>
               .AllowCredentials(); // Bắt buộc phải có dòng này cho SignalR
     });
 });
+
+// 3.5 Cấu hình Authentication với Firebase JWT
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.Authority = "https://securetoken.google.com/game-undercover-d70dd";
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = "https://securetoken.google.com/game-undercover-d70dd",
+            ValidateAudience = true,
+            ValidAudience = "game-undercover-d70dd",
+            ValidateLifetime = true
+        };
+
+        // Lấy token từ URL queries request để sử dụng cho SignalR
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/gamehub"))
+                {
+                    // Lấy token từ query gán cho request
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
+    });
 
 // Đăng ký Service vào DI Container
 builder.Services.AddScoped<IUserService, UserService>();
@@ -67,6 +100,10 @@ app.UseSwaggerUI();
 
 // Bật CORS (Bắt buộc phải đứng TRƯỚC MapControllers và MapHub)
 app.UseCors("AllowNextJs");
+
+// Bật Authentication và Authorization (Lưu ý: phải đứng TRƯỚC MapControllers/MapHub)
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Map các đường dẫn
 app.MapControllers();
