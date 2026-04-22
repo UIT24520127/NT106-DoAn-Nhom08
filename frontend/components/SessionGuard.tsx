@@ -37,8 +37,12 @@ export default function SessionGuard() {
       }
 
       const connection = new signalR.HubConnectionBuilder()
-        .withUrl("https://localhost:7210/sessionhub")
+        .withUrl("https://localhost:7210/sessionhub", {
+          skipNegotiation: true,
+          transport: signalR.HttpTransportType.WebSockets
+        })
         .withAutomaticReconnect()
+        .configureLogging(signalR.LogLevel.None)
         .build();
 
       connection.on("ForceLogout", () => {

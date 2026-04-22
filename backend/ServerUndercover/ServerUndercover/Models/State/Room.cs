@@ -27,6 +27,9 @@ namespace ServerUndercover.Models.State
         // Key: UserId, Value: RoomPlayer
         public ConcurrentDictionary<string, RoomPlayer> Players { get; set; } = new();
 
+        // Key: UserId, Value: Ban Expiration UTC Time
+        public ConcurrentDictionary<string, DateTime> BannedUsers { get; set; } = new();
+
         public int CurrentPlayerCount => Players.Count;
     }
 }

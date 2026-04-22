@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using ServerUndercover.Services;
 using ServerUndercover.Models.State;
 using System.Security.Claims;
+using Google.Cloud.Firestore;
 
 namespace ServerUndercover.Hubs
 {
@@ -10,10 +11,12 @@ namespace ServerUndercover.Hubs
     public class GameHub : Hub
     {
         private readonly RoomManagerService _roomManager;
+        private readonly FirestoreDb _db;
 
-        public GameHub(RoomManagerService roomManager)
+        public GameHub(RoomManagerService roomManager, FirestoreDb db)
         {
             _roomManager = roomManager;
+            _db = db;
         }
 
         private string GetUserId()
@@ -21,10 +24,24 @@ namespace ServerUndercover.Hubs
             return Context.User?.FindFirst("user_id")?.Value ?? string.Empty;
         }
         
-        private string GetDisplayName()
+        private async Task<string> GetDisplayNameAsync(string userId)
         {
-            // Tạm thời lấy name hoặc mặc định
-            return Context.User?.FindFirst("name")?.Value ?? "Player_" + GetUserId().Substring(0, 4);
+            if (string.IsNullOrEmpty(userId)) return string.Empty;
+            
+            try 
+            {
+                var docRef = _db.Collection("users").Document(userId);
+                var snapshot = await docRef.GetSnapshotAsync();
+                
+                if (snapshot.Exists)
+                {
+                    if (snapshot.TryGetValue("username", out string username)) return username;
+                    if (snapshot.TryGetValue("Username", out string usernameCapital)) return usernameCapital;
+                }
+            }
+            catch (Exception) { /* Bỏ qua lỗi, dùng fallback bên dưới */ }
+            
+            return Context.User?.FindFirst("name")?.Value ?? "Player_" + userId.Substring(0, 4);
         }
 
         public override async Task OnConnectedAsync()
@@ -70,7 +87,7 @@ namespace ServerUndercover.Hubs
         public async Task CreateRoom(int maxPlayers, int maxBlackHats, int maxWhiteHats, bool isPublic)
         {
             string userId = GetUserId();
-            string displayName = GetDisplayName();
+            string displayName = await GetDisplayNameAsync(userId);
 
             var settings = new GameSettings
             {
@@ -95,7 +112,7 @@ namespace ServerUndercover.Hubs
         public async Task JoinRoom(string roomId)
         {
             string userId = GetUserId();
-            string displayName = GetDisplayName();
+            string displayName = await GetDisplayNameAsync(userId);
 
             var room = _roomManager.JoinRoom(roomId, userId, displayName, out string errorMessage);
             if (room == null)
@@ -165,7 +182,7 @@ namespace ServerUndercover.Hubs
             string userId = GetUserId();
             
             // Tìm phòng public tốt nhất để join
-            string? bestRoomId = _roomManager.FindBestPublicRoomToAutoJoin();
+            string? bestRoomId = _roomManager.FindBestPublicRoomToAutoJoin(userId);
 
             if (bestRoomId != null)
             {
@@ -191,6 +208,47 @@ namespace ServerUndercover.Hubs
                 {
                     player.IsReady = isReady;
                     await Clients.Group(roomId).SendAsync("RoomUpdated", room);
+                }
+            }
+        }
+
+        public async Task KickPlayer(string targetUserId)
+        {
+            string userId = GetUserId();
+            string? roomId = _roomManager.GetUserRoomId(userId);
+            if (roomId == null) return;
+
+            var room = _roomManager.GetRoom(roomId);
+            if (room == null || room.HostId != userId)
+            {
+                await Clients.Caller.SendAsync("RoomError", "Bạn không có quyền đuổi người chơi.");
+                return;
+            }
+
+            if (targetUserId == userId) return; // Không thể tự đuổi mình
+
+            if (room.Players.ContainsKey(targetUserId))
+            {
+                // Thêm vào danh sách ban 5s
+                room.BannedUsers[targetUserId] = DateTime.UtcNow.AddSeconds(5);
+
+                string targetConnectionId = _roomManager.GetConnectionId(targetUserId) ?? string.Empty;
+                
+                var updatedRoom = _roomManager.LeaveRoom(targetUserId);
+                
+                if (!string.IsNullOrEmpty(targetConnectionId))
+                {
+                    await Groups.RemoveFromGroupAsync(targetConnectionId, roomId);
+                    await Clients.Client(targetConnectionId).SendAsync("KickedFromRoom", "Bạn đã bị chủ phòng mời ra ngoài.");
+                }
+
+                if (updatedRoom != null) // Phòng vẫn còn tồn tại
+                {
+                    await Clients.Group(roomId).SendAsync("RoomUpdated", updatedRoom);
+                    if (updatedRoom.IsPublic)
+                    {
+                        await BroadcastPublicRooms();
+                    }
                 }
             }
         }

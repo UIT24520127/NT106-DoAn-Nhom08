@@ -4,6 +4,7 @@ import { Users, Settings, LogOut, X, User } from "lucide-react";
 import { logout } from "@/lib/auth";
 import UserProfile from "@/components/UserProfile"; 
 import * as signalR from "@microsoft/signalr";
+import { getSignalRConnection } from "@/lib/signalRConnection";
 import { useRouter } from "next/navigation";
 
 export default function MainMenu() {
@@ -105,14 +106,14 @@ export default function MainMenu() {
 
     const token = localStorage.getItem("token") || "";
 
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl("https://localhost:7210/gamehub", {
-        accessTokenFactory: () => token
-      })
-      .withAutomaticReconnect()
-      .build();
-
+    const connection = getSignalRConnection(token);
     setHubConnection(connection);
+
+    // Xóa listener cũ
+    connection.off("WaitingForPlayers");
+    connection.off("RoomJoined");
+    connection.off("RoomCreated");
+    connection.off("RoomError");
 
     connection.on("WaitingForPlayers", (message: string) => {
       setSearchStatus(`⏳ ${message}`);
@@ -124,34 +125,46 @@ export default function MainMenu() {
         router.push(`/room/${room.roomId}`); // Sử dụng UI phòng chờ
       }, 1000);
     });
+
+    connection.on("RoomCreated", (room: any) => {
+      setSearchStatus(`🎉 Đã tạo phòng mới - Đang vào sảnh...`);
+      setTimeout(() => {
+        router.push(`/room/${room.roomId}`);
+      }, 1000);
+    });
     
     connection.on("RoomError", (message: string) => {
         setSearchStatus(`❌ ${message}`);
     });
 
     try {
-      await connection.start();
+      if (connection.state === signalR.HubConnectionState.Disconnected) {
+        await connection.start();
+      }
       setSearchStatus("Đang tìm kiếm phòng public...");
       await connection.invoke("PlayNow"); // Đổi từ FindMatch sang PlayNow
     } catch (err) {
-      console.error("Lỗi khi kết nối SignalR:", err);
+      console.log("Lỗi khi kết nối SignalR:", err);
       setSearchStatus("❌ Kết nối thất bại. Vui lòng Hủy và thử lại!");
     }
   };
 
   const handleCancelSearch = async () => {
     if (hubConnection) {
-      await hubConnection.stop();
+      // Hủy bỏ việc tìm phòng nếu cần thiết (backend nên xử lý logic leave queue)
       setHubConnection(null);
     }
     setIsSearchOverlayOpen(false);
   };
   
-  // Dọn dẹp kết nối SignalR khi thoái lui (unmount)
+  // Dọn dẹp listener khi unmount
   useEffect(() => {
     return () => {
       if (hubConnection) {
-        hubConnection.stop();
+        hubConnection.off("WaitingForPlayers");
+        hubConnection.off("RoomJoined");
+        hubConnection.off("RoomCreated");
+        hubConnection.off("RoomError");
       }
     };
   }, [hubConnection]);

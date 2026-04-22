@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import * as signalR from "@microsoft/signalr";
-import { Users, LogOut, Play, Shield, ShieldAlert, Crown, CheckCircle2 } from "lucide-react";
+import { Users, LogOut, Play, Shield, ShieldAlert, Crown, CheckCircle2, XCircle } from "lucide-react";
+import { getSignalRConnection } from "@/lib/signalRConnection";
 
 export default function RoomPage() {
   const { roomId } = useParams();
@@ -17,14 +18,14 @@ export default function RoomPage() {
     const currentUserId = localStorage.getItem("userId") || "";
     setUserId(currentUserId);
 
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl("https://localhost:7210/gamehub", {
-        accessTokenFactory: () => token
-      })
-      .withAutomaticReconnect()
-      .build();
-
+    const connection = getSignalRConnection(token);
     setHubConnection(connection);
+
+    // Xóa listener cũ
+    connection.off("RoomUpdated");
+    connection.off("GameStarted");
+    connection.off("RoomError");
+    connection.off("KickedFromRoom");
 
     connection.on("RoomUpdated", (room: any) => {
       setRoomState(room);
@@ -39,14 +40,27 @@ export default function RoomPage() {
       setTimeout(() => setErrorMsg(""), 3000);
     });
 
-    connection.start()
-      .then(() => {
-        connection.invoke("GetRoomState", roomId);
-      })
-      .catch(err => console.error("SignalR Connection Error: ", err));
+    connection.on("KickedFromRoom", (message: string) => {
+      alert(message);
+      router.push("/play-with-friends");
+    });
+
+    if (connection.state === signalR.HubConnectionState.Disconnected) {
+      connection.start()
+        .then(() => {
+          connection.invoke("GetRoomState", roomId);
+        })
+        .catch(err => console.log("SignalR Connection Info: ", err.toString()));
+    } else if (connection.state === signalR.HubConnectionState.Connected) {
+      connection.invoke("GetRoomState", roomId);
+    }
 
     return () => {
-      connection.stop();
+      // Không stop kết nối
+      connection.off("RoomUpdated");
+      connection.off("GameStarted");
+      connection.off("RoomError");
+      connection.off("KickedFromRoom");
     };
   }, [roomId, router]);
 
@@ -66,6 +80,12 @@ export default function RoomPage() {
   const handleStartGame = async () => {
     if (hubConnection) {
       await hubConnection.invoke("StartGame");
+    }
+  };
+
+  const handleKickPlayer = async (targetUserId: string) => {
+    if (hubConnection) {
+      await hubConnection.invoke("KickPlayer", targetUserId);
     }
   };
 
@@ -119,7 +139,17 @@ export default function RoomPage() {
               </div>
             )}
 
-            <div className="w-24 h-24 bg-gray-800 rounded-full border-4 border-gray-600 flex items-center justify-center shadow-inner overflow-hidden">
+            {isHost && player.userId !== userId && (
+              <button 
+                onClick={() => handleKickPlayer(player.userId)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-red-500 hover:scale-110 active:scale-95 transition-all"
+                title="Đuổi khỏi phòng"
+              >
+                <XCircle size={24} />
+              </button>
+            )}
+
+            <div className="w-24 h-24 bg-gray-800 rounded-full border-4 border-gray-600 flex items-center justify-center shadow-inner overflow-hidden mt-4">
               <Users size={40} className="text-gray-500" />
             </div>
 

@@ -128,6 +128,19 @@ namespace ServerUndercover.Services
                 return null;
             }
 
+            if (room.BannedUsers.TryGetValue(userId, out DateTime banExpiration))
+            {
+                if (DateTime.UtcNow < banExpiration)
+                {
+                    errorMessage = "Bạn vừa bị đuổi khỏi phòng này. Vui lòng đợi 5 giây để vào lại.";
+                    return null;
+                }
+                else
+                {
+                    room.BannedUsers.TryRemove(userId, out _);
+                }
+            }
+
             // Nếu user đang ở phòng khác, rời phòng đó trước
             LeaveRoom(userId);
 
@@ -195,11 +208,12 @@ namespace ServerUndercover.Services
                 .ToList();
         }
 
-        public string? FindBestPublicRoomToAutoJoin()
+        public string? FindBestPublicRoomToAutoJoin(string userId)
         {
-            // Lấy các phòng chờ công khai chưa đầy
+            // Lấy các phòng chờ công khai chưa đầy và không bị ban
             var availableRooms = _rooms.Values
                 .Where(r => r.IsPublic && r.State == RoomState.Waiting && r.CurrentPlayerCount < r.Settings.MaxPlayers)
+                .Where(r => !r.BannedUsers.TryGetValue(userId, out var exp) || DateTime.UtcNow >= exp)
                 .ToList();
 
             if (!availableRooms.Any()) return null;
