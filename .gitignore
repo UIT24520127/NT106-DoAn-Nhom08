@@ -4,7 +4,26 @@
 bin/
 obj/
 *.user
+*.rsuser
 *.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+.vs/
+*.vscode/
+
+# Build results
+Debug/
+Release/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# Rider / JetBrains
+.idea/
 
 # ========================
 # Node / Next.js
@@ -12,21 +31,49 @@ obj/
 node_modules/
 .next/
 out/
+dist/
+build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # ========================
 # Environment (bảo mật)
 # ========================
 .env
-.env.local
+.env.*
+!.env.example
+
 appsettings.Development.json
+appsettings.*.json
 
 # ========================
-# Logs
+# Logs & temp
 # ========================
 *.log
+logs/
+*.tmp
+*.temp
 
 # ========================
 # OS files
 # ========================
 .DS_Store
 Thumbs.db
+
+# ========================
+# Coverage / test
+# ========================
+coverage/
+*.coverage
+*.coveragexml
+
+# ========================
+# Misc
+# ========================
+*.cache
+.cache/
+game-undercover-d70dd-firebase-adminsdk-fbsvc-a08a981514.json

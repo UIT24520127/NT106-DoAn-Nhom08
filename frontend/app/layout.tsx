@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import SessionGuard from "@/components/SessionGuard";
 
 // Thay thế font Geist bằng Inter để hỗ trợ hoàn hảo dấu Tiếng Việt
 const inter = Inter({
@@ -24,6 +25,7 @@ export default function RootLayout({
       <body
         className={`${inter.className} antialiased`}
       >
+        <SessionGuard />
         {children}
       </body>
     </html>
