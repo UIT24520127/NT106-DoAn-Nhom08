@@ -8,8 +8,15 @@ using Microsoft.Extensions.DependencyInjection;
 using ServerUndercover.Controllers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using FirebaseAdmin;
+using Google.Apis.Auth.OAuth2;
 
 Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", "game-undercover-d70dd-firebase-adminsdk-fbsvc-a08a981514.json");
+
+FirebaseApp.Create(new AppOptions()
+{
+    Credential = GoogleCredential.GetApplicationDefault(),
+});
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +26,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<ServerUndercover.Services.RoomManagerService>();
+builder.Services.AddMemoryCache(); // 👈 Thêm để cache đăng ký tạm thời
 
 // 2. Cấu hình Swagger
 builder.Services.AddEndpointsApiExplorer();

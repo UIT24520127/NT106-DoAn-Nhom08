@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 export default function MainMenu() {
   const [showOptions, setShowOptions] = useState(false);
   const [showTitle, setShowTitle] = useState(false);
+  const [showGuide, setShowGuide] = useState(false); // 👈 THÊM MỚI
   const [showSettingsMenu, setShowSettingsMenu] = useState(false); // 👈 THÊM MỚI
   const settingsRef = useRef<HTMLDivElement>(null); // 👈 THÊM MỚI
   const [isProfileOpen, setIsProfileOpen] = useState(false); //Show profile
@@ -234,7 +235,9 @@ export default function MainMenu() {
           )}
         </div>
 
-        <button className="bg-[#1a1c23] p-3 px-4 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg flex items-center justify-center">
+        <button 
+          onClick={() => setShowGuide(true)}
+          className="bg-[#1a1c23] p-3 px-4 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg flex items-center justify-center">
           <span className="text-white text-xl font-bold italic">?</span>
         </button>
 
@@ -261,14 +264,19 @@ export default function MainMenu() {
             <div className="flex flex-col gap-3 items-center">
               <button 
                 onClick={handleFindMatch}
-                className="bg-[#e6a822] text-black w-40 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none"
+                className="bg-[#e6a822] text-black w-48 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none"
               >
                 CHƠI NGAY
               </button>
               <button 
                 onClick={() => router.push('/play-with-friends')}
-                className="bg-[#3b82f6] text-white w-40 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
+                className="bg-[#3b82f6] text-white w-48 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
                 CHƠI VỚI BẠN
+              </button>
+              <button 
+                onClick={() => setShowGuide(true)}
+                className="bg-[#10b981] text-white w-48 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
+                CÁCH CHƠI
               </button>
               <button
                 onClick={() => setShowOptions(false)}
@@ -308,6 +316,51 @@ export default function MainMenu() {
             >
               HỦY TÌM TRẬN
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* OVERLAY HƯỚNG DẪN CHƠI */}
+      {showGuide && (
+        <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in px-4">
+          <div className="relative bg-[#1a1c23] border-2 border-[#e6a822] rounded-3xl p-6 md:p-8 max-w-2xl w-full shadow-[0_0_30px_rgba(230,168,34,0.3)]">
+            <button 
+              onClick={() => setShowGuide(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white transition"
+            >
+              <X size={24} />
+            </button>
+            
+            <h2 className="text-2xl md:text-3xl font-black text-[#e6a822] mb-6 text-center text-shadow-sm">
+              🕵️ CÁCH CHƠI UNDERCOVER
+            </h2>
+            
+            <div className="space-y-6 text-gray-200 overflow-y-auto max-h-[60vh] pr-2 custom-scrollbar">
+              <section className="bg-black/30 p-4 rounded-xl border border-gray-700">
+                <h3 className="text-lg md:text-xl font-bold text-white mb-3 border-b border-gray-600 pb-2">VAI TRÒ:</h3>
+                <ul className="space-y-2 font-medium text-sm md:text-base">
+                  <li className="flex items-center gap-2"><span className="text-blue-400">🔹</span> <strong>Dân:</strong> Có từ khóa chính.</li>
+                  <li className="flex items-center gap-2"><span className="text-orange-400">🔸</span> <strong>Mũ Đen:</strong> Có từ khóa gần giống.</li>
+                  <li className="flex items-center gap-2"><span className="text-gray-300">⚪</span> <strong>Mũ Trắng:</strong> Không có từ khóa.</li>
+                </ul>
+              </section>
+
+              <section className="bg-black/30 p-4 rounded-xl border border-gray-700">
+                <h3 className="text-lg md:text-xl font-bold text-white mb-3 border-b border-gray-600 pb-2">LUẬT CHƠI:</h3>
+                <p className="leading-relaxed text-justify text-sm md:text-base">
+                  Mỗi vòng, mọi người lần lượt dùng một từ duy nhất để mô tả về từ khóa mình đang nắm giữ. Hãy mô tả thật khéo léo để đồng đội nhận ra mình nhưng không để kẻ địch đoán được từ khóa. Sau khi kết thúc lượt mô tả, cả phòng sẽ tiến hành thảo luận qua Chat hoặc Voice Chat để tìm ra người có hành tung đáng ngờ nhất và bỏ phiếu loại. Phe Dân thắng khi loại được toàn bộ kẻ gian, Mũ Đen thắng khi số lượng còn lại bằng với phe Dân, riêng Mũ Trắng nếu bị loại mà đoán đúng được từ khóa của phe Dân thì sẽ lật ngược tình thế và giành chiến thắng chung cuộc.
+                </p>
+              </section>
+            </div>
+            
+            <div className="mt-8 flex justify-center">
+              <button 
+                onClick={() => setShowGuide(false)}
+                className="bg-[#e6a822] text-black px-10 py-3 rounded-full text-base md:text-lg font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none"
+              >
+                ĐÃ HIỂU
+              </button>
+            </div>
           </div>
         </div>
       )}
