@@ -1,5 +1,5 @@
 ﻿using System.Threading.Tasks;
-namespace ServerUndercover.Controllers
+namespace ServerUndercover.Services
 {
     public interface IUserService
     {
