@@ -12,6 +12,23 @@ export default function RoomPage() {
     const [connection, setConnection] = useState<HubConnection | null>(null);
     const [currentUser, setCurrentUser] = useState<string>("");
 
+    //Voice Chat
+    // Thêm vào cùng chỗ với các useState khác
+    const [isMicOn, setIsMicOn] = useState(true);
+    const [isSpeakerOn, setIsSpeakerOn] = useState(true);
+
+    // Hàm xử lý bật/tắt (Sau này bạn sẽ gọi SDK Voice Chat ở đây)
+    const toggleMic = () => {
+        setIsMicOn(!isMicOn);
+        console.log(isMicOn ? "Đã tắt Mic" : "Đã bật Mic");
+    };
+
+    const toggleSpeaker = () => {
+        setIsSpeakerOn(!isSpeakerOn);
+        console.log(isSpeakerOn ? "Đã tắt Loa" : "Đã bật Loa");
+    };
+    
+    //Chat
     // 1. Thêm State để quản lý việc đóng/mở
     const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -50,13 +67,38 @@ export default function RoomPage() {
                 Phòng: {roomId}
             </h1>
             
-            {/* 2. Nút bấm nổi (Floating Button) */}
-            <button 
-                onClick={() => setIsChatOpen(!isChatOpen)}
-                className="fixed bottom-6 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-90"
-            >
-                {isChatOpen ? "✖" : "💬"}
-            </button>
+            <div className="fixed bottom-6 right-6 z-50 flex gap-3">
+    
+                {/* Nút Loa */}
+                <button 
+                    onClick={toggleSpeaker}
+                    className={`w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all active:scale-90 ${
+                        isSpeakerOn ? "bg-green-600 hover:bg-green-700" : "bg-gray-600 hover:bg-gray-700"
+                    } text-white`}
+                    title={isSpeakerOn ? "Tắt Loa" : "Bật Loa"}
+                >
+                    {isSpeakerOn ? "🔊" : "🔇"}
+                </button>
+
+                {/* Nút Micro */}
+                <button 
+                    onClick={toggleMic}
+                    className={`w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all active:scale-90 ${
+                        isMicOn ? "bg-blue-600 hover:bg-blue-700" : "bg-red-600 hover:bg-red-700"
+                    } text-white`}
+                    title={isMicOn ? "Tắt Mic" : "Bật Mic"}
+                >
+                    {isMicOn ? "🎙️" : "🚫"}
+                </button>
+
+                {/* Nút Chat Box hiện tại */}
+                <button 
+                    onClick={() => setIsChatOpen(!isChatOpen)}
+                    className="bg-yellow-500 hover:bg-yellow-600 text-black w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-90"
+                >
+                    {isChatOpen ? "✖" : "💬"}
+                </button>
+            </div>
 
             {/* 3. Khung Chat với cơ chế ẩn/hiện bằng CSS */}
             <div className={`fixed bottom-24 right-6 w-80 sm:w-96 transition-all duration-300 transform ${
