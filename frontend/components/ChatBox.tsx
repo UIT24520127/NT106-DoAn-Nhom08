@@ -46,36 +46,64 @@ const ChatBox = ({ connection, roomPin, currentUser }: ChatBoxProps) => {
   };
 
   return (
-    <div className="flex flex-col h-[400px] w-full max-w-md border rounded-lg bg-gray-900 text-white">
-      <div className="p-2 bg-gray-800 font-bold border-b border-gray-700">
-        Phòng: {roomPin} (5 người chơi)
+    <div className="flex flex-col h-[500px] w-full max-w-md overflow-hidden
+                    bg-gray-950/40 backdrop-blur-xl border border-white/10 
+                    rounded-2xl shadow-2xl shadow-black/50">
+      
+      {/* Header: Phong cách tối giản, chữ vàng nhạt như đèn bàn */}
+      <div className="p-4 bg-white/5 border-b border-white/10 flex justify-between items-center">
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-widest text-yellow-500/80 font-bold">In-Game Communication</span>
+          <h2 className="text-white font-medium">Phòng: {roomPin}</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <span className="text-xs text-gray-400">5 Online</span>
+        </div>
       </div>
       
-      {/* Danh sách tin nhắn */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2">
-        {messages.map((msg, index) => (
-          <div key={index} className={`flex flex-col ${msg.user === currentUser ? 'items-end' : 'items-start'}`}>
-            <span className="text-xs text-gray-400">{msg.user} - {msg.timestamp}</span>
-            <div className={`px-3 py-2 rounded-lg mt-1 ${msg.user === currentUser ? 'bg-blue-600' : 'bg-gray-700'}`}>
-              {msg.content}
+      {/* Danh sách tin nhắn: Làm mờ thanh cuộn */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-hide">
+        {messages.map((msg, index) => {
+          const isMe = msg.user === currentUser;
+          return (
+            <div key={index} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+              <span className="text-[10px] text-gray-500 mb-1 px-1">
+                {msg.user} • {msg.timestamp}
+              </span>
+              <div className={`max-w-[85%] px-4 py-2 rounded-2xl text-sm leading-relaxed shadow-sm
+                ${isMe 
+                  ? 'bg-blue-600/80 text-white rounded-tr-none border border-white/10' 
+                  : 'bg-white/10 text-gray-200 rounded-tl-none border border-white/5'
+                }`}>
+                {msg.content}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={scrollRef} />
       </div>
 
-      {/* Ô nhập liệu */}
-      <div className="p-3 border-t border-gray-700 flex gap-2">
+      {/* Ô nhập liệu: Bo tròn và tối giản */}
+      <div className="p-4 bg-black/20 border-t border-white/5 flex gap-2 items-center">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Nhập tin nhắn..."
-          className="flex-1 bg-gray-800 border border-gray-600 rounded px-3 py-1 focus:outline-none focus:border-blue-500"
+          placeholder="Nhập mật tin..."
+          className="flex-1 bg-white/5 border border-white/10 rounded-full px-4 py-2 
+                     text-sm text-white placeholder-gray-500 focus:outline-none 
+                     focus:border-blue-500/50 focus:bg-white/10 transition-all"
         />
-        <button onClick={handleSend} className="bg-blue-600 px-4 py-1 rounded hover:bg-blue-700">
-          Gửi
+        <button 
+          onClick={handleSend} 
+          className="p-2 w-10 h-10 flex items-center justify-center bg-blue-600 
+                     rounded-full hover:bg-blue-500 active:scale-95 transition-all shadow-lg"
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white rotate-90">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+          </svg>
         </button>
       </div>
     </div>
