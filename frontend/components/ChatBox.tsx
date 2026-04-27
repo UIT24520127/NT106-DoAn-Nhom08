@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { HubConnectionState } from "@microsoft/signalr";
 
 interface Message {
   user: string;
@@ -34,14 +35,21 @@ const ChatBox = ({ connection, roomId, currentUser }: ChatBoxProps) => {
   }, [messages]);
 
   const handleSend = async () => {
-    if (input.trim() && connection) {
-      try {
-        // Gọi hàm SendMessage trên Backend
-        await connection.invoke("SendMessage", roomId, currentUser, input);
-        setInput('');
-      } catch (err) {
-        console.error("Gửi tin nhắn thất bại: ", err);
-      }
+    if (!connection) {
+      console.error("❌ connection = null");
+      return;
+    }
+  
+    if (connection.state !== HubConnectionState.Connected) {
+      console.error("❌ SignalR chưa connect:", connection.state);
+      return;
+    }
+  
+    try {
+      await connection.invoke("SendMessage", roomId, currentUser, input);
+      setInput('');
+    } catch (err) {
+      console.error("Gửi tin nhắn thất bại: ", err);
     }
   };
 

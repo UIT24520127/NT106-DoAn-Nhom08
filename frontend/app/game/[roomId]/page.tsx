@@ -22,11 +22,14 @@ export default function RoomPage() {
 
         // 2. Khởi tạo kết nối SignalR đến GameHub
         const newConnection = new HubConnectionBuilder()
-            .withUrl("http://localhost:5120/gamehub") // Thay bằng URL Backend của bạn
-            .withAutomaticReconnect()
-            .configureLogging(LogLevel.Information)
-            .build();
-
+        .withUrl("http://localhost:5120/gamehub", {
+            accessTokenFactory: () => {
+                return localStorage.getItem("token") || "";
+            }
+        })
+        .withAutomaticReconnect()
+        .configureLogging(LogLevel.Information)
+        .build();
         setConnection(newConnection);
     }, []);
 
