@@ -11,27 +11,65 @@ export default function RoomPage() {
     
     const [connection, setConnection] = useState<HubConnection | null>(null);
     const [currentUser, setCurrentUser] = useState<string>("");
-
+    
     // 1. Thêm State để quản lý việc đóng/mở
     const [isChatOpen, setIsChatOpen] = useState(false);
 
-    useEffect(() => {
-        // 1. Giả lập tên người dùng (Sau này bạn sẽ lấy từ Auth hoặc input)
-        const randomName = "Player_" + Math.floor(Math.random() * 1000);
-        setCurrentUser(randomName);
+    const [userStats, setUserStats] = useState<any>(null);
 
-        // 2. Khởi tạo kết nối SignalR đến GameHub
+    useEffect(() => {
+        // Chỉ chạy khi đã ở trình duyệt (Client-side)
+        const savedName = localStorage.getItem("username");
+        
+        if (savedName) {
+            setCurrentUser(savedName);
+        } else {
+            // Nếu lỡ may chưa có (do xóa cache), thì mới dùng tên tạm
+            const tempName = "Player_" + Math.floor(Math.random() * 1000);
+            setCurrentUser(tempName);
+            localStorage.setItem("username", tempName);
+        }
+    
+        const token = localStorage.getItem("token");
+        
+        // Khởi tạo SignalR với token...
         const newConnection = new HubConnectionBuilder()
-        .withUrl("http://localhost:5120/gamehub", {
-            accessTokenFactory: () => {
-                return localStorage.getItem("token") || "";
+            .withUrl("http://localhost:5120/gamehub", {
+                accessTokenFactory: () => token || ""
+            })
+            .withAutomaticReconnect()
+            .build();
+
+        // 3. ĐỂ MÌNH CŨNG THẤY TIN NHẮN: Lắng nghe sự kiện từ Server
+        // Khi Server phát "ReceiveMessage", log này sẽ báo cho bạn biết
+        newConnection.on("ReceiveMessage", (user, message) => {
+            console.log(`[Tin nhắn mới] ${user}: ${message}`);
+            // Logic hiển thị thực tế thường nằm trong ChatBox.tsx 
+            // thông qua việc lắng nghe connection.on
+        });
+
+        async function start() {
+            try {
+                await newConnection.start();
+                console.log("✅ Đã kết nối vào GameHub!");
+                await newConnection.invoke("JoinRoom", roomId);
+                setConnection(newConnection);
+            } catch (err) {
+                console.error("❌ Lỗi kết nối SignalR: ", err);
             }
-        })
-        .withAutomaticReconnect()
-        .configureLogging(LogLevel.Information)
-        .build();
-        setConnection(newConnection);
-    }, []);
+        }
+
+        start();
+
+        // 4. HÀM GIẢI PHÓNG RAM: Quan trọng để tránh lỗi 10GB RAM
+        return () => {
+            if (newConnection) {
+                newConnection.off("ReceiveMessage"); // Gỡ lắng nghe
+                newConnection.stop(); // Ngắt kết nối
+                console.log("🧹 Đã dọn dẹp kết nối cũ");
+            }
+        };
+    }, [roomId]); // Chỉ chạy lại khi roomId thay đổi
 
     useEffect(() => {
         if (connection) {
