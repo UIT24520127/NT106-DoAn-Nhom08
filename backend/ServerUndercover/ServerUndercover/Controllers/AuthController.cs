@@ -2,6 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 using Firebase.Auth;
 using ServerUndercover.Models.DTOs;
 using Google.Cloud.Firestore;
+using Microsoft.Extensions.Caching.Memory;
+using System.Net.Mail;
+using System.Net;
 
 namespace ServerUndercover.Controllers
 {
@@ -11,44 +14,100 @@ namespace ServerUndercover.Controllers
     {
         private readonly FirebaseAuthClient _client;
         private readonly FirestoreDb _db;
+        private readonly IMemoryCache _cache;
 
-        public AuthController(FirebaseAuthClient client, FirestoreDb db)
+        public AuthController(FirebaseAuthClient client, FirestoreDb db, IMemoryCache cache)
         {
             _client = client;
             _db = db;
+            _cache = cache;
         }
 
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        public async Task<IActionResult> RequestRegister([FromBody] RegisterRequest request)
         {
             if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Username))
                 return BadRequest(new { message = "Vui lòng nhập đầy đủ Email, Mật khẩu và Tên hiển thị!" });
 
             try
             {
+                // 1. Tạo user trong Firebase Auth (Điều này sẽ tự động check user tồn tại trong authentication chính)
                 var userCredential = await _client.CreateUserWithEmailAndPasswordAsync(request.Email, request.Password);
                 string uid = userCredential.User.Info.Uid;
 
-                DocumentReference docRef = _db.Collection("users").Document(uid);
-                await docRef.SetAsync(new
+                // 2. Đẩy vào hàng chờ (Cache) thay vì lưu ngay vào Firestore.
+                // Lưu ý: Tuyệt đối KHÔNG kiểm tra tồn tại trong hàng chờ, chỉ ghi đè vào để tránh bug trùng tài khoản ảo.
+                _cache.Set(uid, request.Username, TimeSpan.FromHours(24));
+
+                // 3. Lấy link xác thực từ Firebase bằng FirebaseAdmin SDK (không tự động gửi email)
+                string verificationLink = "";
+                try
                 {
-                    username = request.Username,
-                    totalGames = 0,
+                    verificationLink = await FirebaseAdmin.Auth.FirebaseAuth.DefaultInstance.GenerateEmailVerificationLinkAsync(request.Email);
+                }
+                catch (Exception ex)
+                {
+                    return BadRequest(new { message = "Đã tạo tài khoản nhưng không thể lấy link xác thực từ Firebase. Vui lòng thử lại sau.", error = ex.Message });
+                }
 
-                    civilianWins = 0,
-                    undercoverWins = 0,
-                    mrWhiteWins = 0,
+                if (string.IsNullOrEmpty(verificationLink))
+                {
+                    return BadRequest(new { message = "Không thể lấy link xác thực từ Firebase. Vui lòng thử lại sau." });
+                }
 
-                    totalWins = 0,
+                // 4. Gửi email HTML tuỳ chỉnh qua SMTP Gmail với link Firebase
+                string emailBody = $@"
+                    <div style=""font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4; padding: 40px 10px;"">
+                        <div style=""max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid #e0e0e0;"">
+                            <div style=""background-color: #3e2723; padding: 25px; text-align: center;"">
+                                <h1 style=""color: #e6a822; margin: 0; font-size: 28px; letter-spacing: 3px; font-weight: 900;"">UNDERCOVER</h1>
+                                <p style=""color: #d3b88b; margin: 5px 0 0 0; font-style: italic; font-size: 14px;"">Ai là gián điệp?</p>
+                            </div>
+                            <div style=""padding: 30px 40px; color: #333333; line-height: 1.6;"">
+                                <h2 style=""color: #2b1b18; margin-top: 0; font-size: 20px;"">Chào bạn,</h2>
+                                <p style=""font-size: 16px;"">Cảm ơn bạn đã gia nhập cộng đồng <strong>Undercover</strong>!</p>
+                                <p style=""font-size: 16px;"">Để đảm bảo tính bảo mật và giúp hệ thống nhận diện bạn là một người chơi, vui lòng nhấn vào nút bên dưới để xác thực địa chỉ email của mình:</p>
+                                <div style=""text-align: center; margin: 40px 0;"">
+                                    <a href='{verificationLink}' style=""display: inline-block; background-color: #9b111e; color: #ffffff; padding: 15px 35px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 6px rgba(155, 17, 30, 0.3);"">XÁC THỰC TÀI KHOẢN NGAY</a>
+                                </div>
+                                <p style=""font-size: 13px; color: #888888; text-align: center; margin-bottom: 0; font-style: italic;"">
+                                    (Vui lòng không chia sẻ đường dẫn này cho bất kỳ ai)
+                                </p>
+                            </div>
+                            <div style=""background-color: #f9f9f9; padding: 20px; text-align: center; border-top: 1px solid #eeeeee;"">
+                                <p style=""font-size: 12px; color: #aaaaaa; margin: 0;"">Nếu bạn không yêu cầu đăng ký tài khoản, vui lòng bỏ qua email này.</p>
+                                <p style=""font-size: 12px; color: #aaaaaa; margin: 5px 0 0 0;"">© 2024 Undercover Game. All rights reserved.</p>
+                            </div>
+                        </div>
+                    </div>
+                ";
 
-                    mostPlayedRole = "Tân binh",
-                    createdAt = Timestamp.GetCurrentTimestamp()
-                });
-                return Ok(new { message = "Đăng ký thành công!", uid = userCredential.User.Info.Uid });
+                using (var smtp = new SmtpClient("smtp.gmail.com", 587))
+                {
+                    smtp.EnableSsl = true;
+                    smtp.Credentials = new NetworkCredential("undercovern8@gmail.com", "ycdyzzwlplzj qmlv");
+
+                    var mailMessage = new MailMessage
+                    {
+                        From = new MailAddress("undercovern8@gmail.com", "Undercover Game"),
+                        Subject = "Xác thực tài khoản Undercover",
+                        Body = emailBody,
+                        IsBodyHtml = true,
+                    };
+                    mailMessage.To.Add(request.Email);
+
+                    await smtp.SendMailAsync(mailMessage);
+                }
+
+                return Ok(new { message = "Đăng ký thành công! Vui lòng kiểm tra hộp thư email (và hộp thư rác) của bạn để xác thực tài khoản." });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = "Email đã tồn tại hoặc không hợp lệ!", error = ex.Message });
+                if (ex.Message.Contains("EMAIL_EXISTS"))
+                {
+                    return BadRequest(new { message = "Email này đã được đăng ký! Vui lòng sử dụng email khác." });
+                }
+                return BadRequest(new { message = "Có lỗi xảy ra khi tạo tài khoản.", error = ex.Message });
             }
         }
 
@@ -61,11 +120,49 @@ namespace ServerUndercover.Controllers
             try
             {
                 var result = await _client.SignInWithEmailAndPasswordAsync(request.Email, request.Password);
+                
+                // Kiểm tra xem email đã được xác thực qua Firebase chưa
+                if (!result.User.Info.IsEmailVerified)
+                {
+                    return BadRequest(new { message = "Tài khoản chưa được xác thực! Vui lòng nhấn vào đường link trong email xác thực để kích hoạt tài khoản." });
+                }
+
+                string uid = result.User.Info.Uid;
+
+                // Kiểm tra xem user đã có trong Firestore chưa (nếu đăng nhập lần đầu sau khi xác thực)
+                DocumentReference docRef = _db.Collection("users").Document(uid);
+                DocumentSnapshot snap = await docRef.GetSnapshotAsync();
+
+                if (!snap.Exists)
+                {
+                    // Lấy username từ hàng chờ
+                    string username = "Tân binh";
+                    if (_cache.TryGetValue(uid, out string cachedUsername))
+                    {
+                        username = cachedUsername;
+                        // XÓA SESSION TRONG HÀNG CHỜ
+                        _cache.Remove(uid);
+                    }
+
+                    // Chính thức tạo user trong Firestore
+                    await docRef.SetAsync(new
+                    {
+                        username = username,
+                        totalGames = 0,
+                        civilianWins = 0,
+                        undercoverWins = 0,
+                        mrWhiteWins = 0,
+                        totalWins = 0,
+                        mostPlayedRole = "Tân binh",
+                        createdAt = Timestamp.GetCurrentTimestamp()
+                    });
+                }
+
                 return Ok(new
                 {
                     message = "Đăng nhập thành công!",
                     token = await result.User.GetIdTokenAsync(),
-                    uid = result.User.Info.Uid
+                    uid = uid
                 });
             }
             catch (Exception)
