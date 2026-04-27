@@ -8,11 +8,11 @@ interface Message {
 
 interface ChatBoxProps {
   connection: any; // SignalR Connection
-  roomPin: string;
+  roomId: string;
   currentUser: string;
 }
 
-const ChatBox = ({ connection, roomPin, currentUser }: ChatBoxProps) => {
+const ChatBox = ({ connection, roomId, currentUser }: ChatBoxProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -37,7 +37,7 @@ const ChatBox = ({ connection, roomPin, currentUser }: ChatBoxProps) => {
     if (input.trim() && connection) {
       try {
         // Gọi hàm SendMessage trên Backend
-        await connection.invoke("SendMessage", roomPin, currentUser, input);
+        await connection.invoke("SendMessage", roomId, currentUser, input);
         setInput('');
       } catch (err) {
         console.error("Gửi tin nhắn thất bại: ", err);
@@ -54,7 +54,7 @@ const ChatBox = ({ connection, roomPin, currentUser }: ChatBoxProps) => {
       <div className="p-4 bg-white/5 border-b border-white/10 flex justify-between items-center">
         <div className="flex flex-col">
           <span className="text-[10px] uppercase tracking-widest text-yellow-500/80 font-bold">In-Game Communication</span>
-          <h2 className="text-white font-medium">Phòng: {roomPin}</h2>
+          <h2 className="text-white font-medium">Phòng: {roomId}</h2>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>

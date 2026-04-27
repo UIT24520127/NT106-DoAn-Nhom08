@@ -129,6 +129,14 @@ namespace ServerUndercover.Hubs
             {
                 await BroadcastPublicRooms();
             }
+
+            // (Tùy chọn) Thông báo cho mọi người trong phòng biết có người mới vào
+            await Clients.Group(roomId).SendAsync("ReceiveMessage", new
+            {
+                User = "Hệ thống",
+                Content = $"Một người chơi đã tham gia phòng.",
+                Timestamp = DateTime.Now.ToString("HH:mm")
+            });
         }
 
         public async Task LeaveRoom()
@@ -289,21 +297,6 @@ namespace ServerUndercover.Hubs
             {
                 await Clients.Caller.SendAsync("RoomError", "Phòng không tồn tại hoặc đã bị hủy.");
             }
-        }
-
-        // Thêm hàm này vào GameHub.cs
-        public async Task JoinRoom(string roomPin)
-        {
-            // Đưa kết nối hiện tại vào nhóm roomPin
-            await Groups.AddToGroupAsync(Context.ConnectionId, roomPin);
-
-            // (Tùy chọn) Thông báo cho mọi người trong phòng biết có người mới vào
-            await Clients.Group(roomPin).SendAsync("ReceiveMessage", new
-            {
-                User = "Hệ thống",
-                Content = $"Một người chơi đã tham gia phòng.",
-                Timestamp = DateTime.Now.ToString("HH:mm")
-            });
         }
 
         public async Task SendMessage(string roomPin, string user, string message)

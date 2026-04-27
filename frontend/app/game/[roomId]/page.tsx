@@ -7,7 +7,7 @@ import ChatBox from '@/components/ChatBox'; // Đảm bảo đường dẫn này
 
 export default function RoomPage() {
     const params = useParams();
-    const roomPin = params.roomPin as string;
+    const roomId = params.roomId as string;
     
     const [connection, setConnection] = useState<HubConnection | null>(null);
     const [currentUser, setCurrentUser] = useState<string>("");
@@ -36,18 +36,18 @@ export default function RoomPage() {
                 .then(() => {
                     console.log("Đã kết nối vào GameHub thành công!");
                     
-                    // 3. Tự động join vào Group dựa trên roomPin từ URL
+                    // 3. Tự động join vào Group dựa trên roomId từ URL
                     // Lưu ý: Bạn nên thêm hàm JoinGroup ở Backend để đảm bảo người chơi vào đúng phòng khi truy cập trực tiếp link
-                    connection.invoke("JoinRoom", roomPin); 
+                    connection.invoke("JoinRoom", roomId); 
                 })
                 .catch(err => console.error("Lỗi kết nối SignalR: ", err));
         }
-    }, [connection, roomPin]);
+    }, [connection, roomId]);
 
     return (
         <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-4 relative">
             <h1 className="text-2xl font-bold text-white mb-6">
-                Phòng: {roomPin}
+                Phòng: {roomId}
             </h1>
             
             {/* 2. Nút bấm nổi (Floating Button) */}
@@ -67,7 +67,7 @@ export default function RoomPage() {
                 {connection ? (
                     <ChatBox 
                         connection={connection} 
-                        roomPin={roomPin} 
+                        roomId={roomId} 
                         currentUser={currentUser} 
                     />
                 ) : (
