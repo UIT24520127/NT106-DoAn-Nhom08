@@ -116,6 +116,16 @@ namespace ServerUndercover.Services
                 return null;
             }
 
+            // Nếu user đã ở trong chính phòng này rồi (VD: refresh trang, accept invite khi đã ở sẵn)
+            if (_userRooms.TryGetValue(userId, out string? currentRoomId) && currentRoomId == roomId)
+            {
+                if (room.Players.TryGetValue(userId, out var existingPlayer))
+                {
+                    existingPlayer.ConnectionId = GetConnectionId(userId) ?? string.Empty;
+                }
+                return room;
+            }
+
             if (room.State != RoomState.Waiting)
             {
                 errorMessage = "Phòng đang chơi, không thể tham gia.";

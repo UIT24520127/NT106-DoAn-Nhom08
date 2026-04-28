@@ -120,6 +120,25 @@ namespace ServerUndercover.Controllers
             return Ok(new { message = "Đã chặn người dùng" });
         }
 
+        [HttpPost("invite-room")]
+        public async Task<IActionResult> InviteToRoom([FromBody] RoomInviteDto request)
+        {
+            string userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            if (string.IsNullOrEmpty(request.TargetUserId) || string.IsNullOrEmpty(request.RoomId))
+                return BadRequest(new { message = "Vui lòng cung cấp TargetUserId và RoomId" });
+
+            string connectionId = SessionHub.GetConnectionId(request.TargetUserId);
+            if (!string.IsNullOrEmpty(connectionId))
+            {
+                await _hubContext.Clients.Client(connectionId).SendAsync("ReceiveRoomInvite", new { roomId = request.RoomId, inviterName = request.InviterName });
+                return Ok(new { message = "Đã gửi lời mời vào phòng" });
+            }
+            
+            return BadRequest(new { message = "Người dùng này hiện không online hoặc không ở sảnh." });
+        }
+
         [HttpDelete("{targetUserId}")]
         public async Task<IActionResult> Unfriend(string targetUserId)
         {
