@@ -179,13 +179,19 @@ export default function RoomPage() {
                     {isMicOn ? "🎙️" : "🚫"}
                 </button>
 
-                {/* Nút Chat */}
+                {/* Nút Chat (Bỏ fixed ở đây vì đã có cha nó fixed) */}
                 <button 
                     onClick={() => setIsChatOpen(!isChatOpen)}
-                    className="bg-yellow-500 hover:bg-yellow-600 text-black w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-90"
+                    className="bg-yellow-600 text-black w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95"
                 >
                     {isChatOpen ? "✖" : "💬"}
                 </button>
+            </div>
+            {/* KHUNG CHAT BOX (TÁCH RIÊNG RA) */}
+            <div className={`fixed bottom-24 right-6 z-50 w-80 sm:w-96 transition-all duration-300 transform ${
+                isChatOpen ? "scale-100 opacity-100 translate-y-0" : "scale-95 opacity-0 translate-y-10 pointer-events-none"
+            }`}>
+                {connection && <ChatBox connection={connection} roomId={roomId} currentUser={currentUser} />}
             </div>
         </div>
     );
