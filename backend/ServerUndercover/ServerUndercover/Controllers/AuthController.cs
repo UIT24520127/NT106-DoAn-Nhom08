@@ -188,5 +188,40 @@ namespace ServerUndercover.Controllers
                 return BadRequest(new { message = "Email không tồn tại trong hệ thống!" });
             }
         }
+
+        [HttpPost("google-sync")]
+        public async Task<IActionResult> GoogleSync([FromBody] GoogleSyncRequest request)
+        {
+            if (string.IsNullOrEmpty(request.Uid) || string.IsNullOrEmpty(request.Username))
+                return BadRequest(new { message = "Vui lòng cung cấp đủ Uid và Username!" });
+
+            try
+            {
+                DocumentReference docRef = _db.Collection("users").Document(request.Uid);
+                DocumentSnapshot snap = await docRef.GetSnapshotAsync();
+
+                if (!snap.Exists)
+                {
+                    await docRef.SetAsync(new
+                    {
+                        username = request.Username,
+                        totalGames = 0,
+                        civilianWins = 0,
+                        undercoverWins = 0,
+                        mrWhiteWins = 0,
+                        totalWins = 0,
+                        mostPlayedRole = "Tân binh",
+                        createdAt = Timestamp.GetCurrentTimestamp()
+                    });
+                    return Ok(new { message = "Khởi tạo hồ sơ thành công!" });
+                }
+                
+                return Ok(new { message = "Hồ sơ đã tồn tại!" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = "Có lỗi xảy ra khi tạo hồ sơ.", error = ex.Message });
+            }
+        }
     }
 }

@@ -4,6 +4,9 @@ import { useParams, useRouter } from "next/navigation";
 import * as signalR from "@microsoft/signalr";
 import { Users, LogOut, Play, Shield, ShieldAlert, Crown, CheckCircle2, XCircle } from "lucide-react";
 import { getSignalRConnection } from "@/lib/signalRConnection";
+import { ref, onValue } from "firebase/database";
+import { realtimeDb } from "@/lib/firebase";
+import FriendModal from "@/components/friends/FriendModal";
 
 export default function RoomPage() {
   const { roomId } = useParams();
@@ -12,13 +15,17 @@ export default function RoomPage() {
   const [roomState, setRoomState] = useState<any>(null);
   const [userId, setUserId] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [isFriendOpen, setIsFriendOpen] = useState(false);
+  const [token, setToken] = useState("");
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    const token = localStorage.getItem("token") || "";
+    const storedToken = localStorage.getItem("token") || "";
     const currentUserId = localStorage.getItem("userId") || "";
     setUserId(currentUserId);
+    setToken(storedToken);
 
-    const connection = getSignalRConnection(token);
+    const connection = getSignalRConnection(storedToken);
     setHubConnection(connection);
 
     // Xóa listener cũ
@@ -38,21 +45,40 @@ export default function RoomPage() {
     connection.on("RoomError", (message: string) => {
       setErrorMsg(message);
       setTimeout(() => setErrorMsg(""), 3000);
+      
+      // Nếu có lỗi ngay từ lúc join (roomState chưa có) thì kick ra ngoài
+      setRoomState((prev: any) => {
+        if (!prev) {
+          setTimeout(() => {
+            alert(message);
+            router.push("/menu");
+          }, 0);
+        }
+        return prev;
+      });
     });
 
     connection.on("KickedFromRoom", (message: string) => {
       alert(message);
-      router.push("/play-with-friends");
+      router.push("/menu");
     });
 
     if (connection.state === signalR.HubConnectionState.Disconnected) {
       connection.start()
         .then(() => {
-          connection.invoke("GetRoomState", roomId);
+          connection.invoke("JoinRoom", roomId);
         })
         .catch(err => console.log("SignalR Connection Info: ", err.toString()));
     } else if (connection.state === signalR.HubConnectionState.Connected) {
-      connection.invoke("GetRoomState", roomId);
+      connection.invoke("JoinRoom", roomId);
+    }
+
+    let unsubRequests: () => void = () => {};
+    if (currentUserId) {
+      const requestsRef = ref(realtimeDb, `friendRequests/${currentUserId}`);
+      unsubRequests = onValue(requestsRef, (snap) => {
+        setPendingCount(snap.exists() ? Object.keys(snap.val()).length : 0);
+      });
     }
 
     return () => {
@@ -61,6 +87,7 @@ export default function RoomPage() {
       connection.off("GameStarted");
       connection.off("RoomError");
       connection.off("KickedFromRoom");
+      unsubRequests();
     };
   }, [roomId, router]);
 
@@ -173,7 +200,13 @@ export default function RoomPage() {
             <div className="w-24 h-24 bg-gray-800/50 rounded-full flex items-center justify-center">
               <Users size={30} className="text-gray-600" />
             </div>
-            <span className="text-gray-500 font-medium">Trống</span>
+            <span className="text-gray-500 font-medium mb-1">Trống</span>
+            <button 
+              onClick={() => setIsFriendOpen(true)}
+              className="bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white px-4 py-1.5 rounded-full text-xs font-bold transition-all border border-indigo-600/50"
+            >
+              + Mời bạn
+            </button>
           </div>
         ))}
       </div>
@@ -205,6 +238,16 @@ export default function RoomPage() {
           </button>
         )}
       </div>
+
+      {/* FRIEND MODAL */}
+      {token && (
+        <FriendModal
+          isOpen={isFriendOpen}
+          onClose={() => setIsFriendOpen(false)}
+          token={token}
+          pendingCount={pendingCount}
+        />
+      )}
 
     </div>
   );

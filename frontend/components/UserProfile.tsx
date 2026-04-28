@@ -35,14 +35,14 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats }) => 
     <>
       {/* Nền mờ */}
       <div 
-        className={`fixed inset-0 bg-black/70 z-50 transition-opacity duration-300 ease-out
+        className={`fixed inset-0 bg-black/70 z-[60] transition-opacity duration-300 ease-out
           ${animate ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
       />
 
       {/* Cửa sổ trượt */}
       <div 
-        className={`fixed top-0 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg mt-10 p-6
+        className={`fixed top-0 left-1/2 -translate-x-1/2 z-[60] w-full max-w-lg mt-10 p-6
           bg-[#1a1c23] border-2 border-gray-700 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)]
           transition-all duration-500 ease-out transform
           ${animate ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}`}

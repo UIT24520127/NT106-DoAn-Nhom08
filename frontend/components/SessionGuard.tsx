@@ -4,11 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
 import { logout } from "@/lib/auth";
 import { usePathname } from "next/navigation";
+import { LogIn } from "lucide-react";
 
 export default function SessionGuard() {
   const pathname = usePathname();
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const [showPopup, setShowPopup] = useState(false);
+  const [invite, setInvite] = useState<{roomId: string, inviterName: string} | null>(null);
+  const [friendNotification, setFriendNotification] = useState<string | null>(null);
+  const router = require("next/navigation").useRouter();
 
   useEffect(() => {
     // Only monitor on pages other than login
@@ -46,8 +50,16 @@ export default function SessionGuard() {
         .build();
 
       connection.on("ForceLogout", () => {
-        // Thay vì dùng alert, ta kích hoạt popup đẹp
         setShowPopup(true);
+      });
+
+      connection.on("ReceiveFriendRequest", (data) => {
+        setFriendNotification("Bạn nhận được một lời mời kết bạn mới!");
+        setTimeout(() => setFriendNotification(null), 5000);
+      });
+
+      connection.on("ReceiveRoomInvite", (data: { roomId: string, inviterName: string }) => {
+        setInvite(data);
       });
 
       try {
@@ -76,9 +88,10 @@ export default function SessionGuard() {
     await logout(); // This will clear token and redirect to /login
   };
 
-  if (!showPopup) return null;
+  // Remove the early return so other modals can render
+  // if (!showPopup) return null;
 
-  return (
+  const forceLogoutPopup = (
     <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center backdrop-blur-sm animate-fade-in">
       <div className="bg-[#1a1c23] border border-red-500/50 rounded-2xl p-8 max-w-sm w-[90%] flex flex-col items-center text-center shadow-[0_0_50px_rgba(239,68,68,0.2)]">
         <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-5 border border-red-500/30">
@@ -98,5 +111,59 @@ export default function SessionGuard() {
         </button>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {showPopup && forceLogoutPopup}
+      
+      {/* Toast cho Friend Request */}
+      {friendNotification && (
+        <div className="fixed top-5 right-5 z-[9999] bg-gray-800 border-l-4 border-amber-500 text-white p-4 rounded shadow-xl animate-fade-in">
+          <p className="font-bold text-amber-500 mb-1">Thông báo hệ thống</p>
+          <p className="text-sm">{friendNotification}</p>
+        </div>
+      )}
+
+      {/* Popup Mời vào phòng */}
+      {invite && (
+        <div
+            className="fixed inset-0 bg-black/65 z-[9999] flex items-center justify-center"
+            onClick={() => setInvite(null)}
+        >
+            <div
+                className="bg-[#1a1c23] border border-gray-600 rounded-2xl p-6 w-72 text-center shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="w-12 h-12 rounded-full bg-indigo-950 flex items-center justify-center mx-auto mb-4">
+                    <LogIn size={22} color="#818cf8" strokeWidth={2.5} />
+                </div>
+                <h3 className="text-sm font-bold text-white mb-2">Lời mời vào phòng</h3>
+                <p className="text-xs text-gray-400 leading-relaxed mb-5">
+                    <span className="text-amber-400 font-bold">{invite.inviterName}</span>
+                    {" "}đã mời bạn vào phòng chơi.
+                    <br />Bạn có muốn tham gia không?
+                </p>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setInvite(null)}
+                        className="flex-1 py-2 rounded-xl bg-[#111317] text-gray-400 border border-gray-700 text-xs font-semibold hover:bg-gray-800 transition"
+                    >
+                        Từ chối
+                    </button>
+                    <button
+                        onClick={() => {
+                          setInvite(null);
+                          router.push(`/room/${invite.roomId}`);
+                        }}
+                        className="flex-1 py-2 rounded-xl bg-indigo-900 text-indigo-300 border border-indigo-800 text-xs font-semibold hover:bg-indigo-800 transition"
+                    >
+                        Tham gia
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+    </>
   );
 }
