@@ -84,6 +84,10 @@ string projectId = "game-undercover-d70dd";
 FirestoreDb firestoreDb = FirestoreDb.Create(projectId);
 builder.Services.AddSingleton(firestoreDb);
 
+// Thêm FriendService và Firebase Realtime Database
+builder.Services.AddScoped<ServerUndercover.Services.FriendService>();
+builder.Services.AddSingleton(new Firebase.Database.FirebaseClient("https://game-undercover-d70dd-default-rtdb.firebaseio.com/"));
+
 
 // 4. Cấu hình Firebase
 var config = new FirebaseAuthConfig
