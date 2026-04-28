@@ -189,7 +189,10 @@ export default function MainMenu() {
 
       {/* 3 NÚT GÓC TRÊN PHẢI */}
       <div className="absolute top-6 right-8 flex gap-3 z-20">
-        <button className="bg-[#1a1c23] p-3 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg">
+        <button 
+          onClick={() => router.push('/friends')}
+          className="bg-[#1a1c23] p-3 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg"
+        >
           <Users size={24} color="white" strokeWidth={2.5} />
         </button>
 

@@ -9,6 +9,9 @@ export default function SessionGuard() {
   const pathname = usePathname();
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const [showPopup, setShowPopup] = useState(false);
+  const [invite, setInvite] = useState<{roomId: string, inviterName: string} | null>(null);
+  const [friendNotification, setFriendNotification] = useState<string | null>(null);
+  const router = require("next/navigation").useRouter();
 
   useEffect(() => {
     // Only monitor on pages other than login
@@ -46,8 +49,16 @@ export default function SessionGuard() {
         .build();
 
       connection.on("ForceLogout", () => {
-        // Thay vì dùng alert, ta kích hoạt popup đẹp
         setShowPopup(true);
+      });
+
+      connection.on("ReceiveFriendRequest", (data) => {
+        setFriendNotification("Bạn nhận được một lời mời kết bạn mới!");
+        setTimeout(() => setFriendNotification(null), 5000);
+      });
+
+      connection.on("ReceiveRoomInvite", (data: { roomId: string, inviterName: string }) => {
+        setInvite(data);
       });
 
       try {
@@ -76,9 +87,10 @@ export default function SessionGuard() {
     await logout(); // This will clear token and redirect to /login
   };
 
-  if (!showPopup) return null;
+  // Remove the early return so other modals can render
+  // if (!showPopup) return null;
 
-  return (
+  const forceLogoutPopup = (
     <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center backdrop-blur-sm animate-fade-in">
       <div className="bg-[#1a1c23] border border-red-500/50 rounded-2xl p-8 max-w-sm w-[90%] flex flex-col items-center text-center shadow-[0_0_50px_rgba(239,68,68,0.2)]">
         <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-5 border border-red-500/30">
@@ -98,5 +110,53 @@ export default function SessionGuard() {
         </button>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {showPopup && forceLogoutPopup}
+      
+      {/* Toast cho Friend Request */}
+      {friendNotification && (
+        <div className="fixed top-5 right-5 z-[9999] bg-gray-800 border-l-4 border-amber-500 text-white p-4 rounded shadow-xl animate-fade-in">
+          <p className="font-bold text-amber-500 mb-1">Thông báo hệ thống</p>
+          <p className="text-sm">{friendNotification}</p>
+        </div>
+      )}
+
+      {/* Popup Mời vào phòng */}
+      {invite && (
+        <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#1a1c23] border border-indigo-500/50 rounded-2xl p-8 max-w-sm w-[90%] flex flex-col items-center text-center shadow-[0_0_50px_rgba(99,102,241,0.2)]">
+            <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mb-5 border border-indigo-500/30">
+              <svg className="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-black text-white mb-2">Lời mời tham gia</h3>
+            <p className="text-gray-300 mb-6 text-sm leading-relaxed">
+              <strong className="text-amber-500">{invite.inviterName}</strong> đang mời bạn vào phòng chơi.
+            </p>
+            <div className="flex w-full space-x-3">
+              <button
+                onClick={() => setInvite(null)}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all shadow-[0_4px_0_#4b5563] active:translate-y-[4px] active:shadow-none"
+              >
+                Từ chối
+              </button>
+              <button
+                onClick={() => {
+                  setInvite(null);
+                  router.push(`/room/${invite.roomId}`);
+                }}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all shadow-[0_4px_0_#4338ca] active:translate-y-[4px] active:shadow-none"
+              >
+                Tham gia
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
