@@ -5,7 +5,7 @@ import axios from "axios";
 import { realtimeDb } from "@/lib/firebase";
 import { ref, set } from "firebase/database";
 
-export default function FriendSearch({ token }: { token: string }) {
+export default function FriendSearch({ token, onAvatarClick }: { token: string; onAvatarClick?: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,7 +66,12 @@ export default function FriendSearch({ token }: { token: string }) {
         <ul className="mt-4 space-y-3">
           {results.map((user) => (
             <li key={user.id} className="flex justify-between items-center bg-gray-700 px-4 py-3 rounded-lg hover:bg-gray-600 transition-colors">
-              <span className="font-medium text-white">{user.username}</span>
+              <span 
+                className="font-medium text-white cursor-pointer hover:text-amber-400 hover:underline transition-colors"
+                onClick={() => onAvatarClick && onAvatarClick(user.id)}
+              >
+                {user.username}
+              </span>
               <button
                 onClick={() => sendRequest(user.id)}
                 className="bg-amber-600 hover:bg-amber-500 text-white px-3 py-1 rounded-md text-sm font-semibold transition"

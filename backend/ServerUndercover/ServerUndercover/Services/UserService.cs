@@ -1,6 +1,6 @@
 ﻿using Google.Cloud.Firestore;
 
-namespace ServerUndercover.Controllers
+namespace ServerUndercover.Services
 {
     public class UserService : IUserService
     {

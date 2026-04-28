@@ -54,6 +54,11 @@ export default function LoginPage() {
 
       if (res.ok) {
         saveToken(data.token);
+        localStorage.setItem("token", data.token);
+        // Đảm bảo không bị undefined: ưu tiên username -> email -> mặc định
+        const nameToSave = data.username || data.email || "Người chơi";
+        localStorage.setItem("username", nameToSave); 
+        console.log("Đã lưu username:", nameToSave);
         const idToSave = data.userId || data.uid || data.Id;
         if (idToSave) {
           localStorage.setItem("userId", idToSave);

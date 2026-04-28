@@ -1,13 +1,16 @@
 "use client";
 
-export default function FriendCard({ friend, presence, onUnfriend, onBlock, onInvite }: any) {
+export default function FriendCard({ friend, presence, onUnfriend, onBlock, onInvite, onAvatarClick }: any) {
   const isOnline = presence === "Online";
   const isInMatch = presence === "In-Match";
   
   return (
     <div className="flex justify-between items-center bg-gray-800 p-3 rounded-lg shadow border border-gray-700 hover:border-gray-500 transition-colors">
       <div className="flex items-center space-x-3">
-        <div className="relative">
+        <div 
+          className="relative cursor-pointer hover:scale-105 transition-transform hover:shadow-md"
+          onClick={(e) => { e.stopPropagation(); if (onAvatarClick) onAvatarClick(friend.id); }}
+        >
           <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center text-xl font-bold text-gray-900">
             {friend.username ? friend.username.charAt(0).toUpperCase() : "?"}
           </div>
@@ -26,7 +29,7 @@ export default function FriendCard({ friend, presence, onUnfriend, onBlock, onIn
       <div className="flex items-center space-x-2">
         {isOnline && (
           <button 
-            onClick={() => onInvite(friend.id)} 
+            onClick={() => onInvite(friend.id, friend.username)} 
             className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md text-xs font-medium shadow-sm transition"
           >
             Mời phòng

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
 import { logout } from "@/lib/auth";
 import { usePathname } from "next/navigation";
+import { LogIn } from "lucide-react";
 
 export default function SessionGuard() {
   const pathname = usePathname();
@@ -126,35 +127,41 @@ export default function SessionGuard() {
 
       {/* Popup Mời vào phòng */}
       {invite && (
-        <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#1a1c23] border border-indigo-500/50 rounded-2xl p-8 max-w-sm w-[90%] flex flex-col items-center text-center shadow-[0_0_50px_rgba(99,102,241,0.2)]">
-            <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mb-5 border border-indigo-500/30">
-              <svg className="w-8 h-8 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
+        <div
+            className="fixed inset-0 bg-black/65 z-[9999] flex items-center justify-center"
+            onClick={() => setInvite(null)}
+        >
+            <div
+                className="bg-[#1a1c23] border border-gray-600 rounded-2xl p-6 w-72 text-center shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="w-12 h-12 rounded-full bg-indigo-950 flex items-center justify-center mx-auto mb-4">
+                    <LogIn size={22} color="#818cf8" strokeWidth={2.5} />
+                </div>
+                <h3 className="text-sm font-bold text-white mb-2">Lời mời vào phòng</h3>
+                <p className="text-xs text-gray-400 leading-relaxed mb-5">
+                    <span className="text-amber-400 font-bold">{invite.inviterName}</span>
+                    {" "}đã mời bạn vào phòng chơi.
+                    <br />Bạn có muốn tham gia không?
+                </p>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setInvite(null)}
+                        className="flex-1 py-2 rounded-xl bg-[#111317] text-gray-400 border border-gray-700 text-xs font-semibold hover:bg-gray-800 transition"
+                    >
+                        Từ chối
+                    </button>
+                    <button
+                        onClick={() => {
+                          setInvite(null);
+                          router.push(`/room/${invite.roomId}`);
+                        }}
+                        className="flex-1 py-2 rounded-xl bg-indigo-900 text-indigo-300 border border-indigo-800 text-xs font-semibold hover:bg-indigo-800 transition"
+                    >
+                        Tham gia
+                    </button>
+                </div>
             </div>
-            <h3 className="text-xl font-black text-white mb-2">Lời mời tham gia</h3>
-            <p className="text-gray-300 mb-6 text-sm leading-relaxed">
-              <strong className="text-amber-500">{invite.inviterName}</strong> đang mời bạn vào phòng chơi.
-            </p>
-            <div className="flex w-full space-x-3">
-              <button
-                onClick={() => setInvite(null)}
-                className="flex-1 bg-gray-700 hover:bg-gray-600 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all shadow-[0_4px_0_#4b5563] active:translate-y-[4px] active:shadow-none"
-              >
-                Từ chối
-              </button>
-              <button
-                onClick={() => {
-                  setInvite(null);
-                  router.push(`/room/${invite.roomId}`);
-                }}
-                className="flex-1 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all shadow-[0_4px_0_#4338ca] active:translate-y-[4px] active:shadow-none"
-              >
-                Tham gia
-              </button>
-            </div>
-          </div>
         </div>
       )}
     </>
