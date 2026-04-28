@@ -12,8 +12,9 @@ export default function RoomPage() {
     
     const [connection, setConnection] = useState<HubConnection | null>(null);
     const [roomState, setRoomState] = useState<any>(null); 
+    // Thay đổi dòng này trong page.tsx
     const [currentUser, setCurrentUser] = useState<string>(
-        typeof window !== 'undefined' ? localStorage.getItem("username") || "Người chơi" : "Đang tải..."
+        typeof window !== 'undefined' ? (localStorage.getItem("username") || "Người chơi") : "Đang tải..."
     );
     const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -22,43 +23,46 @@ export default function RoomPage() {
     const isProcessing = useRef(false);
 
     useEffect(() => {
-        // Nếu đang trong quá trình kết nối thì bỏ qua các lần gọi sau
+        // 1. Kiểm tra Token ngay lập tức trước khi làm bất cứ việc gì khác
+        const token = typeof window !== 'undefined' ? localStorage.getItem("token") : null;
+        
+        if (!token) {
+            console.error("❌ Không tìm thấy Token!");
+            // Có thể dùng router.push('/') nếu muốn đá về trang chủ
+            return;
+        }
+    
         if (isProcessing.current) return;
         isProcessing.current = true;
-
-        const token = localStorage.getItem("token");
-        
+    
+        // 2. Khởi tạo kết nối với accessTokenFactory lấy token "tươi" từ localStorage
         const conn = new HubConnectionBuilder()
-            .withUrl("http://localhost:5120/gamehub", {
-                accessTokenFactory: () => token || ""
-            })
-            .withAutomaticReconnect()
-            .build();
+        .withUrl("http://localhost:5120/gamehub", {
+            // LUÔN lấy token mới nhất từ local storage khi kết nối lại
+            accessTokenFactory: () => localStorage.getItem("token") || "" 
+        })
+        .withAutomaticReconnect()
+        .build();
 
-            const startConnection = async () => {
-                try {
-                    if (conn.state === HubConnectionState.Disconnected) {
-                        await conn.start();
-                        console.log("🚀 Game Socket Connected!");
-                        // Tham gia phòng
-                        await conn.invoke("JoinRoom", roomId);
-                        
-                        // CHỦ ĐỘNG yêu cầu lấy dữ liệu phòng ngay lập tức
-                        await conn.invoke("GetRoomState", roomId); 
-                        if (isProcessing.current) {
-                            connectionRef.current = conn;
-                            setConnection(conn);
-                        }
-                        
+        const startConnection = async () => {
+            try {
+                if (conn.state === HubConnectionState.Disconnected) {
+                    await conn.start();
+                    // PHẢI gọi JoinRoom lại để Server biết bạn đã quay lại ván đấu
+                    await conn.invoke("JoinRoom", roomId);
+                    await conn.invoke("GetRoomState", roomId); 
+                    
+                    if (isProcessing.current) {
+                        connectionRef.current = conn;
+                        setConnection(conn);
                     }
-                } catch (err: any) {
-                if (!err.message.includes("negotiation")) {
-                    console.error("SignalR Game Error:", err);
                 }
-                isProcessing.current = false;
+            } catch (err: any) {
+                console.error("Lỗi kết nối lại:", err);
             }
         };
-
+    
+        // 4. Lắng nghe cập nhật từ Server
         conn.on("RoomUpdated", (room) => {
             setRoomState(room);
             const myId = localStorage.getItem("userId");
@@ -66,13 +70,12 @@ export default function RoomPage() {
             const me = players.find((p: any) => p.userId === myId) as any;
             
             if (me && me.displayName) {
-                setCurrentUser(me.displayName); // Cập nhật tên thật thay vì "Đang tải..."
+                setCurrentUser(me.displayName);
             }
         });
-
+    
         startConnection();
-
-        // Cleanup: Khi rời trang Game hoặc F5
+    
         return () => {
             isProcessing.current = false;
             if (connectionRef.current) {
