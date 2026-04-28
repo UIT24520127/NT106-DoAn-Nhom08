@@ -1,124 +1,152 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
-import ChatBox from '@/components/ChatBox'; // Đảm bảo đường dẫn này đúng với dự án của bạn
+import { HubConnection, HubConnectionBuilder, HubConnectionState } from '@microsoft/signalr';
+import { Fingerprint, Shield } from 'lucide-react'; 
+import ChatBox from '@/components/ChatBox';
 
 export default function RoomPage() {
     const params = useParams();
     const roomId = params.roomId as string;
     
     const [connection, setConnection] = useState<HubConnection | null>(null);
-    const [currentUser, setCurrentUser] = useState<string>("");
-    
-    // 1. Thêm State để quản lý việc đóng/mở
+    const [roomState, setRoomState] = useState<any>(null); 
+    const [currentUser, setCurrentUser] = useState<string>(
+        typeof window !== 'undefined' ? localStorage.getItem("username") || "Người chơi" : "Đang tải..."
+    );
     const [isChatOpen, setIsChatOpen] = useState(false);
 
-    const [userStats, setUserStats] = useState<any>(null);
+    // Dùng Ref để giữ kết nối xuyên suốt các lần render
+    const connectionRef = useRef<HubConnection | null>(null);
+    const isProcessing = useRef(false);
 
     useEffect(() => {
-        // Chỉ chạy khi đã ở trình duyệt (Client-side)
-        const savedName = localStorage.getItem("username");
-        
-        if (savedName) {
-            setCurrentUser(savedName);
-        } else {
-            // Nếu lỡ may chưa có (do xóa cache), thì mới dùng tên tạm
-            const tempName = "Player_" + Math.floor(Math.random() * 1000);
-            setCurrentUser(tempName);
-            localStorage.setItem("username", tempName);
-        }
-    
+        // Nếu đang trong quá trình kết nối thì bỏ qua các lần gọi sau
+        if (isProcessing.current) return;
+        isProcessing.current = true;
+
         const token = localStorage.getItem("token");
         
-        // Khởi tạo SignalR với token...
-        const newConnection = new HubConnectionBuilder()
+        const conn = new HubConnectionBuilder()
             .withUrl("http://localhost:5120/gamehub", {
                 accessTokenFactory: () => token || ""
             })
             .withAutomaticReconnect()
             .build();
 
-        // 3. ĐỂ MÌNH CŨNG THẤY TIN NHẮN: Lắng nghe sự kiện từ Server
-        // Khi Server phát "ReceiveMessage", log này sẽ báo cho bạn biết
-        newConnection.on("ReceiveMessage", (user, message) => {
-            console.log(`[Tin nhắn mới] ${user}: ${message}`);
-            // Logic hiển thị thực tế thường nằm trong ChatBox.tsx 
-            // thông qua việc lắng nghe connection.on
-        });
-
-        async function start() {
-            try {
-                await newConnection.start();
-                console.log("✅ Đã kết nối vào GameHub!");
-                await newConnection.invoke("JoinRoom", roomId);
-                setConnection(newConnection);
-            } catch (err) {
-                console.error("❌ Lỗi kết nối SignalR: ", err);
-            }
-        }
-
-        start();
-
-        // 4. HÀM GIẢI PHÓNG RAM: Quan trọng để tránh lỗi 10GB RAM
-        return () => {
-            if (newConnection) {
-                newConnection.off("ReceiveMessage"); // Gỡ lắng nghe
-                newConnection.stop(); // Ngắt kết nối
-                console.log("🧹 Đã dọn dẹp kết nối cũ");
+            const startConnection = async () => {
+                try {
+                    if (conn.state === HubConnectionState.Disconnected) {
+                        await conn.start();
+                        console.log("🚀 Game Socket Connected!");
+                        // Tham gia phòng
+                        await conn.invoke("JoinRoom", roomId);
+                        
+                        // CHỦ ĐỘNG yêu cầu lấy dữ liệu phòng ngay lập tức
+                        await conn.invoke("GetRoomState", roomId); 
+                        if (isProcessing.current) {
+                            connectionRef.current = conn;
+                            setConnection(conn);
+                        }
+                        
+                    }
+                } catch (err: any) {
+                if (!err.message.includes("negotiation")) {
+                    console.error("SignalR Game Error:", err);
+                }
+                isProcessing.current = false;
             }
         };
-    }, [roomId]); // Chỉ chạy lại khi roomId thay đổi
 
-    useEffect(() => {
-        if (connection) {
-            connection.start()
-                .then(() => {
-                    console.log("Đã kết nối vào GameHub thành công!");
-                    
-                    // 3. Tự động join vào Group dựa trên roomId từ URL
-                    // Lưu ý: Bạn nên thêm hàm JoinGroup ở Backend để đảm bảo người chơi vào đúng phòng khi truy cập trực tiếp link
-                    connection.invoke("JoinRoom", roomId); 
-                })
-                .catch(err => console.error("Lỗi kết nối SignalR: ", err));
-        }
-    }, [connection, roomId]);
+        conn.on("RoomUpdated", (room) => {
+            setRoomState(room);
+            const myId = localStorage.getItem("userId");
+            const players = Object.values(room.players || {});
+            const me = players.find((p: any) => p.userId === myId) as any;
+            
+            if (me && me.displayName) {
+                setCurrentUser(me.displayName); // Cập nhật tên thật thay vì "Đang tải..."
+            }
+        });
+
+        startConnection();
+
+        // Cleanup: Khi rời trang Game hoặc F5
+        return () => {
+            isProcessing.current = false;
+            if (connectionRef.current) {
+                connectionRef.current.stop();
+                connectionRef.current = null;
+            }
+        };
+    }, [roomId]);
+
+    if (!roomState) return (
+        <div className="h-screen w-screen bg-gray-950 flex items-center justify-center text-yellow-600 italic">
+            Đang tải dữ liệu trận đấu...
+        </div>
+    );
+
+    const players = Object.values(roomState.players || {}) as any[];
 
     return (
-        <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-4 relative">
-            <h1 className="text-2xl font-bold text-white mb-6">
-                Phòng: {roomId}
-            </h1>
+        <div className="min-h-screen bg-gray-950 flex flex-col items-center p-4 pt-20 relative">
             
-            {/* 2. Nút bấm nổi (Floating Button) */}
+            {/* TỪ KHÓA CỦA BẠN (Sẽ hiện khi ván đấu bắt đầu) */}
+            <div className="mb-10 text-center">
+                <p className="text-gray-500 text-xs uppercase tracking-[0.3em] mb-2">Mật danh hiện tại</p>
+                <div className="bg-black/50 border-2 border-yellow-600/30 px-8 py-2 rounded-full text-white font-black text-xl tracking-widest shadow-[0_0_15px_rgba(230,168,34,0.1)]">
+                    ********
+                </div>
+            </div>
+
+            {/* GRID NGƯỜI CHƠI (Đồng bộ với UI RoomId) */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-5xl">
+                {players.map((player) => (
+                    <div 
+                        key={player.userId} 
+                        className={`relative p-5 rounded-2xl border-2 transition-all shadow-lg overflow-hidden ${
+                            player.isEliminated 
+                            ? 'bg-black/40 border-red-900/20 grayscale opacity-60' 
+                            : 'bg-white/5 border-yellow-600/20 hover:border-yellow-500/50'
+                        }`}
+                    >
+                        {/* Hiển thị chủ phòng (Host) */}
+                        {player.userId === roomState.hostId && (
+                            <div className="absolute top-2 right-2 text-yellow-500">
+                                <Shield size={14} fill="currentColor" />
+                            </div>
+                        )}
+
+                        <div className="flex flex-col items-center gap-3">
+                            <div className={`p-3 rounded-full ${player.isEliminated ? 'bg-gray-800' : 'bg-yellow-600/10'}`}>
+                                <Fingerprint size={28} className={player.isEliminated ? "text-gray-600" : "text-yellow-500"} />
+                            </div>
+                            <h3 className="text-white font-bold text-center truncate w-full">
+                                {player.displayName}
+                                {player.userId === localStorage.getItem("userId") && (
+                                    <span className="block text-[10px] text-yellow-500 mt-1 uppercase tracking-tighter">(Bạn)</span>
+                                )}
+                            </h3>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            
+            {/* HỆ THỐNG CHAT */}
             <button 
                 onClick={() => setIsChatOpen(!isChatOpen)}
-                className="fixed bottom-6 right-6 z-50 bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-transform active:scale-90"
+                className="fixed bottom-6 right-6 z-50 bg-yellow-600 text-black w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95"
             >
                 {isChatOpen ? "✖" : "💬"}
             </button>
 
-            {/* 3. Khung Chat với cơ chế ẩn/hiện bằng CSS */}
             <div className={`fixed bottom-24 right-6 w-80 sm:w-96 transition-all duration-300 transform ${
-                isChatOpen 
-                ? "scale-100 opacity-100 translate-y-0" 
-                : "scale-95 opacity-0 translate-y-10 pointer-events-none"
+                isChatOpen ? "scale-100 opacity-100 translate-y-0" : "scale-95 opacity-0 translate-y-10 pointer-events-none"
             }`}>
-                {connection ? (
-                    <ChatBox 
-                        connection={connection} 
-                        roomId={roomId} 
-                        currentUser={currentUser} 
-                    />
-                ) : (
-                    <div className="text-white bg-gray-800 p-4 rounded shadow">Đang kết nối...</div>
-                )}
-            </div>
-
-            <div className="mt-4 text-gray-500 text-sm">
-                Đang chơi với tên: <span className="text-blue-400">{currentUser}</span>
+                {connection && <ChatBox connection={connection} roomId={roomId} currentUser={currentUser} />}
             </div>
         </div>
     );
-};
+}

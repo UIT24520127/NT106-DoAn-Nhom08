@@ -128,7 +128,6 @@ namespace ServerUndercover.Controllers
                 }
 
                 string uid = result.User.Info.Uid;
-                string username;
 
                 // Kiểm tra xem user đã có trong Firestore chưa (nếu đăng nhập lần đầu sau khi xác thực)
                 DocumentReference docRef = _db.Collection("users").Document(uid);
@@ -137,7 +136,7 @@ namespace ServerUndercover.Controllers
                 if (!snap.Exists)
                 {
                     // Lấy username từ hàng chờ
-                    username = "Tân binh";
+                    string username = "Tân binh";
                     if (_cache.TryGetValue(uid, out string cachedUsername))
                     {
                         username = cachedUsername;
@@ -158,18 +157,12 @@ namespace ServerUndercover.Controllers
                         createdAt = Timestamp.GetCurrentTimestamp()
                     });
                 }
-                else
-                {
-                    // CÁC LẦN ĐĂNG NHẬP SAU: Lấy username từ database Firestore
-                    username = snap.GetValue<string>("username");
-                }
 
                 return Ok(new
                 {
                     message = "Đăng nhập thành công!",
                     token = await result.User.GetIdTokenAsync(),
-                    uid = uid,
-                    username = username
+                    uid = uid
                 });
             }
             catch (Exception)
