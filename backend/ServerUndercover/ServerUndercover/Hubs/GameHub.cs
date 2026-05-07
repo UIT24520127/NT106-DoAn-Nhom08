@@ -309,5 +309,26 @@ namespace ServerUndercover.Hubs
                 Timestamp = DateTime.Now.ToString("HH:mm")
             });
         }
+
+        // File: GameHub.cs (Backend C#)
+        public async Task StartVoiceChat(string roomId)
+        {
+            // Thông báo cho những người khác trong phòng là bạn bắt đầu gọi
+            // 'ReceiveVoiceOffer' là sự kiện mà Frontend sẽ lắng nghe
+            await Clients.OthersInGroup(roomId).SendAsync("ReceiveVoiceOffer", Context.ConnectionId);
+        }
+
+        public async Task SendVoiceSignal(string targetUserId, string signal)
+        {
+            // Chuyển tiếp tín hiệu WebRTC từ người này sang người kia
+            // targetUserId ở đây chính là ConnectionId của người nhận
+            await Clients.Client(targetUserId).SendAsync("ReceiveSignal", Context.ConnectionId, signal);
+        }
+
+        public async Task ToggleMicStatus(string roomId, bool isMuted)
+        {
+            // (Tùy chọn) Thông báo trạng thái bật/tắt mic để hiện icon trên UI người khác
+            await Clients.Group(roomId).SendAsync("PlayerMutedStatus", Context.ConnectionId, isMuted);
+        }
     }
 }
