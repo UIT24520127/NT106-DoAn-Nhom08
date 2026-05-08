@@ -2,7 +2,11 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
-import {HubConnection, HubConnectionBuilder, HubConnectionState} from '@microsoft/signalr';
+import {
+    HubConnection,
+    HubConnectionBuilder,
+    HubConnectionState
+} from '@microsoft/signalr';
 import { Shield } from 'lucide-react';
 import ChatBox from '@/components/ChatBox';
 
@@ -23,7 +27,6 @@ interface RoomState {
 export default function RoomPage() {
     const params = useParams();
     const roomId = params.roomId as string;
-
     const [connection, setConnection] = useState<HubConnection | null>(null);
 
     // =========================
@@ -34,296 +37,122 @@ export default function RoomPage() {
     const [isJoinedVoice, setIsJoinedVoice] = useState(false);
 
     const userStream = useRef<MediaStream | null>(null);
-
     const peers = useRef<Record<string, PeerInstance>>({});
     const remoteAudios = useRef<Record<string, HTMLAudioElement>>({});
 
     // =========================
-    // Chat / Room States
+    // Room / Player States
     // =========================
     const [roomState, setRoomState] = useState<RoomState | null>(null);
-
-    const [currentUser, setCurrentUser] = useState<string>(
-        typeof window !== 'undefined'
-            ? (localStorage.getItem("username") || "Người chơi")
-            : "Đang tải..."
-    );
-
+    const [currentUser, setCurrentUser] = useState<string>("")
     const [isChatOpen, setIsChatOpen] = useState(false);
 
-    const roomStateRef = useRef<RoomState | null>(null);
-    const speakerStateRef = useRef<boolean>(true);
-
-    const connectionRef = useRef<HubConnection | null>(null);
-    const isProcessing = useRef(false);
-    const initializedRef = useRef(false);
-
-    useEffect(() => {
-        roomStateRef.current = roomState;
-    }, [roomState]);
-
-    useEffect(() => {
-        speakerStateRef.current = isSpeakerOn;
-
-        Object.values(remoteAudios.current).forEach(audio => {
-            audio.muted = !isSpeakerOn;
-        });
-    }, [isSpeakerOn]);
-
     // =========================
-    // Peer Helpers
+    // 1. Hàm khởi tạo Peer (WebRTC)
     // =========================
-    const cleanupPeer = (id: string) => {
-        try {
-            peers.current[id]?.destroy();
-        } catch {}
-
-        delete peers.current[id];
-
-        const audio = remoteAudios.current[id];
-
-        if (audio) {
-            audio.pause();
-            audio.srcObject = null;
-            audio.remove();
-            delete remoteAudios.current[id];
-        }
-    };
-
-    const cleanupAllPeers = () => {
-        Object.keys(peers.current).forEach(id => {
-            cleanupPeer(id);
-        });
-    };
-
-    const stopLocalStream = () => {
-        if (userStream.current) {
-            userStream.current.getAudioTracks().forEach(track => {
-                track.enabled = false;
-            });
-        }
-    };
-
-    // =========================
-    // Create Peer
-    // =========================
-    const createPeer = async (
-        targetConnectionId: string,
-        hubConn: HubConnection,
-        initiator: boolean
-    ) => {
+    const createPeer = async (targetId: string, conn: HubConnection, initiator: boolean) => {
         const Peer = (await import('simple-peer')).default;
-
+        
         const peer = new Peer({
-            initiator,
+            initiator: initiator,
             trickle: false,
-            stream: userStream.current!
+            stream: userStream.current || undefined,
         });
 
         peer.on('signal', async (data: any) => {
-            try {
-                console.log('📡 Đã tạo tín hiệu kết nối:', data.type);
+            await conn.invoke('SendVoiceSignal', targetId, JSON.stringify(data));
+        });
 
-                await hubConn.invoke(
-                    'SendVoiceSignal',
-                    targetConnectionId,
-                    JSON.stringify(data)
-                );
-            } catch (err) {
-                console.error('Signal send failed:', err);
+        peer.on('stream', (stream: MediaStream) => {
+            let audio = document.getElementById(`audio-${targetId}`) as HTMLAudioElement;
+            if (!audio) {
+                audio = document.createElement('audio');
+                audio.id = `audio-${targetId}`;
+                audio.autoplay = true;
+                document.body.appendChild(audio);
+                remoteAudios.current[targetId] = audio;
             }
+            audio.srcObject = stream;
+            audio.muted = !isSpeakerOn;
         });
 
-        peer.on('connect', () => {
-            const targetPlayer = Object.values(
-                roomStateRef.current?.players || {}
-            ).find(
-                (p: any) => p.connectionId === targetConnectionId
-            ) as any;
-
-            const targetName = targetPlayer
-                ? targetPlayer.displayName
-                : targetConnectionId;
-
-            console.log(`✅ KẾT NỐI P2P THÀNH CÔNG tới: ${targetName}`);
-        });
-
-        peer.on('stream', (remoteStream: MediaStream) => {
-            if (remoteAudios.current[targetConnectionId]) {
-                return;
-            }
-
-            const audio = document.createElement('audio');
-
-            audio.srcObject = remoteStream;
-            audio.autoplay = true;
-            audio.muted = !speakerStateRef.current;
-
-            document.body.appendChild(audio);
-
-            remoteAudios.current[targetConnectionId] = audio;
-        });
-
-        peer.on('close', () => {
-            cleanupPeer(targetConnectionId);
-        });
-
+        peer.on('connect', () => console.log(`✅ Kết nối P2P thành công tới: ${targetId}`));
+        
         peer.on('error', (err: any) => {
             console.error('Peer error:', err);
-            cleanupPeer(targetConnectionId);
+            cleanupPeer(targetId);
         });
+
+        peer.on('close', () => cleanupPeer(targetId));
 
         return peer;
     };
 
+    const cleanupPeer = (id: string) => {
+        if (peers.current[id]) {
+            peers.current[id].destroy();
+            delete peers.current[id];
+        }
+        if (remoteAudios.current[id]) {
+            remoteAudios.current[id].remove();
+            delete remoteAudios.current[id];
+        }
+    };
+
     // =========================
-    // Join Voice
+    // 2. Hàm Join Voice (Tự động)
     // =========================
-    const joinVoiceChat = async () => {
-        if (isJoinedVoice || !connection) return;
-    
+    const joinVoiceChat = async (activeConn: HubConnection) => {
         try {
-            // Luôn đảm bảo có stream trước khi tạo Peer
             if (!userStream.current) {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 stream.getAudioTracks().forEach(t => t.enabled = false);
                 userStream.current = stream;
             }
-    
-            setIsJoinedVoice(true); // Set trước để chặn click liên tục
-            await connection.invoke('StartVoiceChat', roomId);
-    
-            const players = Object.values(roomStateRef.current?.players || {});
-            const myConnectionId = connection.connectionId; // Dùng connectionId của SignalR cho chuẩn
-    
-            players.forEach(async (player: any) => {
-                if (player.connectionId === myConnectionId || !player.connectionId) return;
-                if (peers.current[player.connectionId]) return;
-    
-                const peer = await createPeer(player.connectionId, connection, true);
-                peers.current[player.connectionId] = peer;
-            });
+
+            await activeConn.invoke("StartVoiceChat", roomId);
+            setIsJoinedVoice(true);
+            console.log("🚀 Auto-joined Voice Chat");
         } catch (err) {
-            setIsJoinedVoice(false);
-            console.error("Lỗi Join Voice:", err);
+            console.error("❌ Mic access denied:", err);
         }
     };
 
     // =========================
-    // Leave Voice
-    // =========================
-    const leaveVoiceChat = () => {
-        cleanupAllPeers();
-
-        if (userStream.current) {
-            userStream.current.getAudioTracks().forEach(track => {
-                track.enabled = false;
-            });
-        }
-
-        setIsJoinedVoice(false);
-        setIsMicOn(false);
-        setIsSpeakerOn(false);
-
-        console.log('🔌 Đã ngắt kết nối Voice hoàn toàn và dọn dẹp tài nguyên.');
-    };
-
-    // =========================
-    // Toggle Mic
-    // =========================
-    const toggleMic = () => {
-        const nextStatus = !isMicOn;
-
-        setIsMicOn(nextStatus);
-
-        if (userStream.current) {
-            userStream.current.getAudioTracks().forEach(track => {
-                track.enabled = nextStatus;
-            });
-        }
-    };
-
-    // =========================
-    // Toggle Speaker
-    // =========================
-    const toggleSpeaker = () => {
-        setIsSpeakerOn(prev => !prev);
-    };
-
-    // =========================
-    // SignalR Init
+    // 3. Khởi tạo SignalR & Events
     // =========================
     useEffect(() => {
+        const token = localStorage.getItem('token');
+        if (!token) return;
 
-        if (initializedRef.current) return;
-        initializedRef.current = true;
-    
-        let isMounted = true;
-
-    
-        const token = typeof window !== 'undefined'
-            ? localStorage.getItem('token')
-            : null;
-    
-        if (!token) {
-            console.error('Không tìm thấy Token!');
-            return;
-        }
-    
-        if (isProcessing.current) return;
-        isProcessing.current = true;
-    
-        let conn = new HubConnectionBuilder()
-            .withUrl('http://localhost:5120/gamehub', {
-                accessTokenFactory: () => localStorage.getItem('token') || ''
+        const newConn = new HubConnectionBuilder()
+            .withUrl("http://localhost:5120/gamehub", {
+                accessTokenFactory: () => token
             })
             .withAutomaticReconnect()
             .build();
-    
-        connectionRef.current = conn;
-    
-        const startConnection = async () => {
-            try {
-    
-                if (!isMounted) return;
-    
-                if (conn.state !== HubConnectionState.Disconnected) {
-                    return;
-                }
-    
-                await conn.start();
-    
-                // component đã bị destroy trong lúc start()
-                if (!isMounted) {
-                    await conn.stop();
-                    return;
-                }
-    
-                await conn.invoke('JoinRoom', roomId);
-                await conn.invoke('GetRoomState', roomId);
-    
-                setConnection(conn);
-    
-                console.log('✅ SignalR Connected');
-    
-            } catch (err: any) {
-    
-                // ignore abort do React StrictMode
-                if (
-                    err?.message?.includes('stopped during negotiation')
-                ) {
-                    console.warn('⚠️ SignalR negotiation aborted');
-                    return;
-                }
-    
-                console.error('Lỗi kết nối lại:', err);
+
+        // Sự kiện: Người cũ nhận tin có người mới vào
+        newConn.on('UserJoinedVoice', async (newcomerId: string) => {
+            if (!peers.current[newcomerId]) {
+                const peer = await createPeer(newcomerId, newConn, true);
+                peers.current[newcomerId] = peer;
             }
-        };
-    
-        // =========================
-        // Room Update
-        // =========================
-        conn.on('RoomUpdated', (room: RoomState) => {
+        });
+
+        // Sự kiện: Nhận signal để bắt tay P2P
+        newConn.on('ReceiveSignal', async (senderId: string, signal: string) => {
+            let peer = peers.current[senderId];
+            if (!peer) {
+                peer = await createPeer(senderId, newConn, false);
+                peers.current[senderId] = peer;
+            }
+            peer.signal(JSON.parse(signal));
+        });
+
+        newConn.on('PlayerDisconnected', (id: string) => cleanupPeer(id));
+
+        newConn.on('RoomUpdated', (room: RoomState) => {
             setRoomState(room);
     
             const myId = localStorage.getItem('userId');
@@ -338,89 +167,62 @@ export default function RoomPage() {
                 setCurrentUser(me.displayName);
             }
         });
-    
-        // =========================
-        // Receive WebRTC Signal
-        // =========================
-        conn.on(
-            'ReceiveSignal',
-            async (senderId: string, signal: string) => {
+
+        const start = async () => {
+            // Chỉ chạy nếu đang ở trạng thái Disconnected
+            if (newConn.state === HubConnectionState.Disconnected) {
                 try {
-    
-                    if (!userStream.current) {
-                        console.warn('Stream chưa sẵn sàng');
-                        return;
-                    }
-    
-                    let peer = peers.current[senderId];
-    
-                    if (!peer) {
-                        peer = await createPeer(senderId, conn, false);
-                        peers.current[senderId] = peer;
-                    }
-    
-                    if (peer.destroyed) return;
-    
-                    peer.signal(JSON.parse(signal));
-    
+                    await newConn.start();
+                    setConnection(newConn);
+                    
+                    // QUAN TRỌNG: Phải JoinRoom XONG mới được làm những việc khác
+                    await newConn.invoke("JoinRoom", roomId);
+                    console.log("✅ Đã vào phòng thành công");
+
+                    await newConn.invoke("GetRoomState", roomId); 
+                    console.log("✅ Đã yêu cầu GetRoomState");
+        
+                    // Đợi 1 chút ngắn (500ms) để SignalR ổn định group trước khi bật Voice
+                    setTimeout(async () => {
+                        await joinVoiceChat(newConn);
+                    }, 500);
+        
                 } catch (err) {
-                    console.warn(
-                        'Bỏ qua tín hiệu WebRTC lỗi:',
-                        senderId
-                    );
+                    console.error("❌ SignalR Connection Error:", err);
                 }
             }
-        );
-    
-        conn.on('ReceiveVoiceOffer', async (senderId: string) => {
-            console.log('📞 Nhận được lời mời Voice Chat từ:', senderId);
-        });
-    
-        conn.on('PlayerDisconnected', (id: string) => {
-            cleanupPeer(id);
-        });
-    
-        conn.onclose(() => {
-            leaveVoiceChat();
-        });
-    
-        startConnection();
-    
-        return () => {
-
-            isMounted = false;
-        
-            leaveVoiceChat();
-        
-            conn.stop().catch(() => {});
         };
-    
+
+        start();
+
+        return () => {
+            newConn.stop();
+            userStream.current?.getTracks().forEach(t => t.stop());
+        };
     }, [roomId]);
 
     // =========================
-    // Cleanup Tab Close
+    // 4. Các hàm điều khiển
     // =========================
-    useEffect(() => {
-        const cleanup = () => {
-            leaveVoiceChat();
-        };
+    const toggleMic = () => {
+        if (userStream.current) {
+            const newState = !isMicOn;
+            userStream.current.getAudioTracks().forEach(t => t.enabled = newState);
+            setIsMicOn(newState);
+        }
+    };
 
-        window.addEventListener('beforeunload', cleanup);
+    const toggleSpeaker = () => {
+        const newState = !isSpeakerOn;
+        setIsSpeakerOn(newState);
+        Object.values(remoteAudios.current).forEach(audio => audio.muted = !newState);
+    };
 
-        return () => {
-            window.removeEventListener('beforeunload', cleanup);
-        };
-    }, []);
-
-    if (!roomState) {
-        return (
-            <div className="h-screen w-screen bg-gray-950 flex items-center justify-center text-yellow-600 italic">
-                Đang tải dữ liệu trận đấu...
-            </div>
-        );
-    }
-
-    const players = Object.values(roomState.players || {}) as any[];
+    // =========================
+    // RENDER UI
+    // =========================
+    const players = roomState ? Object.values(roomState.players) : [];
+    const currentPlayerCount = players.length; // Thêm dòng này ở đây
 
     return (
         <div className="min-h-screen bg-gray-950 flex flex-col items-center p-4 pt-20 relative">
@@ -447,7 +249,7 @@ export default function RoomPage() {
                                 : 'bg-white/5 border-yellow-600/20 hover:border-yellow-500/50'
                         }`}
                     >
-                        {player.userId === roomState.hostId && (
+                        {player.userId === roomState?.hostId && (
                             <div className="absolute top-2 right-2 text-yellow-500">
                                 <Shield size={14} fill="currentColor" />
                             </div>
@@ -466,77 +268,42 @@ export default function RoomPage() {
                 ))}
             </div>
 
-            {/* VOICE + CHAT CONTROLS */}
-            <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3">
-
-                <div className="flex gap-3 items-center mr-2">
-                    {!isJoinedVoice ? (
-                        <button
-                            onClick={joinVoiceChat}
-                            className="bg-green-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:bg-green-700 transition-all active:scale-95 flex items-center gap-2"
-                        >
-                            <span className="text-lg">📞</span>
-                            Kết nối Voice
-                        </button>
-                    ) : (
-                        <>
-                            <button
-                                onClick={toggleSpeaker}
-                                className={`w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all ${
-                                    isSpeakerOn
-                                        ? 'bg-green-600'
-                                        : 'bg-gray-600'
-                                } text-white`}
-                                title={isSpeakerOn ? 'Tắt Loa' : 'Bật Loa'}
-                            >
+            {/* THANH ĐIỀU KHIỂN - ĐÃ ĐƯA VỀ GÓC PHẢI */}
+            {isJoinedVoice?(
+                    <div className="fixed bottom-6 right-6 flex items-center gap-4 z-50">
+                        {/* Cụm nút Mic/Loa */}
+                        <div className="flex items-center gap-3 bg-black/40 backdrop-blur-md p-3 rounded-full border border-white/10 shadow-xl">
+                            <button onClick={toggleSpeaker} className={`w-12 h-12 rounded-full flex items-center justify-center ${isSpeakerOn ? 'bg-green-600' : 'bg-gray-600'} text-white text-xl`}>
                                 {isSpeakerOn ? '🔊' : '🔇'}
                             </button>
-
-                            <button
-                                onClick={toggleMic}
-                                className={`w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all ${
-                                    isMicOn
-                                        ? 'bg-blue-600'
-                                        : 'bg-red-600'
-                                } text-white`}
-                                title={isMicOn ? 'Mute Mic' : 'Unmute Mic'}
-                            >
+                            <button onClick={toggleMic} className={`w-12 h-12 rounded-full flex items-center justify-center ${isMicOn ? 'bg-blue-600' : 'bg-red-600'} text-white text-xl`}>
                                 {isMicOn ? '🎙️' : '🚫'}
                             </button>
+                        </div>
 
-                            <button
-                                onClick={leaveVoiceChat}
-                                className="w-12 h-12 rounded-full bg-black/60 border border-white/20 text-white hover:bg-red-900 transition-all"
-                                title="Ngắt kết nối Voice"
-                            >
-                                ✖
-                            </button>
-                        </>
-                    )}
-                </div>
-
-                {/* CHAT BUTTON */}
-                <button
-                    onClick={() => setIsChatOpen(!isChatOpen)}
-                    className="bg-yellow-600 text-black w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-50"
-                >
-                    {isChatOpen ? '✖' : '💬'}
-                </button>
-            </div>
-
-            {/* CHAT BOX */}
-            <div
-                className={`fixed bottom-24 right-6 z-50 w-80 sm:w-96 transition-all duration-300 transform ${
-                    isChatOpen
-                        ? 'scale-100 opacity-100 translate-y-0'
-                        : 'scale-95 opacity-0 translate-y-10 pointer-events-none'
-                }`}
-            >
+                        {/* Nút mở Chat */}
+                        <button 
+                            onClick={() => setIsChatOpen(!isChatOpen)} 
+                            className="bg-yellow-600 text-black w-16 h-16 rounded-full shadow-2xl flex items-center justify-center text-2xl hover:scale-110 transition-all z-50"
+                        >
+                            {isChatOpen ? '✖' : '💬'}
+                        </button>
+                    </div>
+                ):(
+                    <div className="text-xs text-gray-500 animate-pulse bg-black/20 p-3 rounded-full">
+                        🎤 Đang kết nối voice...
+                    </div>
+                )}
+            
+            {/* CHAT BOX - Sửa lại cách hiển thị để không mất lịch sử */}
+            <div className={`fixed bottom-28 right-6 w-80 sm:w-96 h-[500px] z-50 ${isChatOpen ? 'block' : 'hidden'}`}>
                 {connection && (
-                    <ChatBox
-                        connection={connection}
-                        roomId={roomId}
-                        currentUser={currentUser}
+                    <ChatBox 
+                        connection={connection} 
+                        roomId={roomId} 
+                        // Truyền userId thay vì displayName để ChatBox phân biệt Ta/Người
+                        currentUser={ currentUser || localStorage.getItem("username") || "Người chơi" }
+                        playerCount={currentPlayerCount}
                     />
                 )}
             </div>

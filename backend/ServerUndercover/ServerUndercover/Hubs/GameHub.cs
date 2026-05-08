@@ -122,6 +122,7 @@ namespace ServerUndercover.Hubs
             }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, room.RoomId);
+            //await Groups.AddToGroupAsync(Context.ConnectionId, $"voice-{room.RoomId}");
             await Clients.Group(room.RoomId).SendAsync("RoomUpdated", room);
             await Clients.Caller.SendAsync("RoomJoined", room);
             
@@ -310,25 +311,33 @@ namespace ServerUndercover.Hubs
             });
         }
 
-        // File: GameHub.cs (Backend C#)
+        // =========================
+        // Voice Chat
+        // =========================
+
         public async Task StartVoiceChat(string roomId)
         {
-            // Thông báo cho những người khác trong phòng là bạn bắt đầu gọi
-            // 'ReceiveVoiceOffer' là sự kiện mà Frontend sẽ lắng nghe
-            await Clients.OthersInGroup(roomId).SendAsync("ReceiveVoiceOffer", Context.ConnectionId);
+            // join group voice riêng
+            await Groups.AddToGroupAsync(Context.ConnectionId,$"voice-{roomId}");
+
+            // báo cho người cũ biết có user mới vào voice
+            await Clients.OthersInGroup($"voice-{roomId}").SendAsync("UserJoinedVoice",Context.ConnectionId);
         }
 
-        public async Task SendVoiceSignal(string targetUserId, string signal)
+        public async Task LeaveVoiceChat(string roomId)
         {
-            // Chuyển tiếp tín hiệu WebRTC từ người này sang người kia
-            // targetUserId ở đây chính là ConnectionId của người nhận
-            await Clients.Client(targetUserId).SendAsync("ReceiveSignal", Context.ConnectionId, signal);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId,$"voice-{roomId}");
+            await Clients.Group($"voice-{roomId}").SendAsync("PlayerDisconnected",Context.ConnectionId);
         }
 
-        public async Task ToggleMicStatus(string roomId, bool isMuted)
+        public async Task SendVoiceSignal(string targetConnectionId,string signal)
         {
-            // (Tùy chọn) Thông báo trạng thái bật/tắt mic để hiện icon trên UI người khác
-            await Clients.Group(roomId).SendAsync("PlayerMutedStatus", Context.ConnectionId, isMuted);
+            await Clients.Client(targetConnectionId).SendAsync("ReceiveSignal",Context.ConnectionId,signal);
+        }
+
+        public async Task ToggleMicStatus(string roomId,bool isMuted)
+        {
+            await Clients.Group($"voice-{roomId}").SendAsync("PlayerMutedStatus",Context.ConnectionId,isMuted);
         }
     }
 }

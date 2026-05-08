@@ -11,9 +11,10 @@ interface ChatBoxProps {
   connection: any; // SignalR Connection
   roomId: string;
   currentUser: string;
+  playerCount: number;
 }
 
-const ChatBox = ({ connection, roomId, currentUser }: ChatBoxProps) => {
+const ChatBox = ({ connection, roomId, currentUser, playerCount }: ChatBoxProps) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -66,7 +67,7 @@ const ChatBox = ({ connection, roomId, currentUser }: ChatBoxProps) => {
         </div>
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-          <span className="text-xs text-gray-400">5 Online</span>
+          <span className="text-xs text-gray-400"> {playerCount} Online</span>
         </div>
       </div>
       
