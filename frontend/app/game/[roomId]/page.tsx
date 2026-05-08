@@ -122,6 +122,8 @@ export default function RoomPage() {
     // 3. Khởi tạo SignalR & Events
     // =========================
     useEffect(() => {
+        let isMounted = true;
+
         // 1. Khởi tạo kết nối với Factory Token động
         const newConn = new HubConnectionBuilder()
             .withUrl("http://localhost:5120/gamehub", {
@@ -181,22 +183,30 @@ export default function RoomPage() {
             if (newConn.state === HubConnectionState.Disconnected) {
                 try {
                     await newConn.start();
-                    setConnection(newConn);
-                    
-                    // QUAN TRỌNG: Phải JoinRoom XONG mới được làm những việc khác
-                    await newConn.invoke("JoinRoom", roomId);
-                    console.log("✅ Đã vào phòng thành công");
+                    if (isMounted) {
+                        setConnection(newConn);
+                        
+                        // QUAN TRỌNG: Phải JoinRoom XONG mới được làm những việc khác
+                        await newConn.invoke("JoinRoom", roomId);
+                        console.log("✅ Đã vào phòng thành công");
 
-                    await newConn.invoke("GetRoomState", roomId); 
-                    console.log("✅ Đã yêu cầu GetRoomState");
+                        await newConn.invoke("GetRoomState", roomId); 
+                        console.log("✅ Đã yêu cầu GetRoomState");
+            
+                        // Đợi 1 chút ngắn (500ms) để SignalR ổn định group trước khi bật Voice
+                        setTimeout(async () => {
+                            await joinVoiceChat(newConn);
+                        }, 500);
+                    }
         
-                    // Đợi 1 chút ngắn (500ms) để SignalR ổn định group trước khi bật Voice
-                    setTimeout(async () => {
-                        await joinVoiceChat(newConn);
-                    }, 500);
-        
-                } catch (err) {
-                    console.error("❌ SignalR Connection Error:", err);
+                } catch (err: any) {
+                    // KIỂM TRA LỖI Ở ĐÂY
+                    if (err.name === 'AbortError' || err.message.includes("stopped during negotiation")) {
+                        // Đây là lỗi do React Strict Mode hoặc F5 nhanh, có thể bỏ qua
+                        console.warn("⚠️ SignalR: Kết nối bị hủy trong lúc khởi tạo (Abort), đang thử lại...");
+                    } else if (isMounted) {
+                        console.error("❌ SignalR Connection Error thực sự:", err);
+                    }
                 }
             }
         };
@@ -204,7 +214,10 @@ export default function RoomPage() {
         start();
 
         return () => {
-            newConn.stop();
+            isMounted = false;
+            if (newConn.state === HubConnectionState.Connected) {
+                newConn.stop(); // Dừng kết nối cũ để không bị tốn tài nguyên
+            }
             userStream.current?.getTracks().forEach(t => t.stop());
         };
     }, [roomId]);

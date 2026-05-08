@@ -125,7 +125,8 @@ namespace ServerUndercover.Hubs
             //await Groups.AddToGroupAsync(Context.ConnectionId, $"voice-{room.RoomId}");
             await Clients.Group(room.RoomId).SendAsync("RoomUpdated", room);
             await Clients.Caller.SendAsync("RoomJoined", room);
-            
+            await Clients.Caller.SendAsync("RoomUpdated", room);
+
             if (room.IsPublic)
             {
                 await BroadcastPublicRooms();
