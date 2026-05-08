@@ -122,17 +122,24 @@ export default function RoomPage() {
     // 3. Khởi tạo SignalR & Events
     // =========================
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        if (!token) return;
-
+        // 1. Khởi tạo kết nối với Factory Token động
         const newConn = new HubConnectionBuilder()
             .withUrl("http://localhost:5120/gamehub", {
-                accessTokenFactory: () => token
+                // Luôn lấy token mới nhất từ localStorage mỗi khi kết nối hoặc reconnect
+                accessTokenFactory: () => localStorage.getItem('token') || ""
             })
             .withAutomaticReconnect()
             .build();
 
-        // Sự kiện: Người cũ nhận tin có người mới vào
+        // 2. ĐĂNG KÝ SỰ KIỆN TRƯỚC KHI START
+        // Lắng nghe xác nhận đã vào phòng thành công
+        newConn.on("RoomJoined", (room: RoomState) => {
+            console.log("✅ Đã xác nhận vào phòng:", room);
+            setRoomState(room);
+            // Sau khi xác nhận đã ở trong Group, ép lấy lại state một lần nữa cho chắc
+            newConn.invoke("GetRoomState", roomId).catch(console.error);
+        });
+
         newConn.on('UserJoinedVoice', async (newcomerId: string) => {
             if (!peers.current[newcomerId]) {
                 const peer = await createPeer(newcomerId, newConn, true);
@@ -153,6 +160,7 @@ export default function RoomPage() {
         newConn.on('PlayerDisconnected', (id: string) => cleanupPeer(id));
 
         newConn.on('RoomUpdated', (room: RoomState) => {
+            console.log("Dữ liệu phòng đã cập nhật:", room.players);
             setRoomState(room);
     
             const myId = localStorage.getItem('userId');
