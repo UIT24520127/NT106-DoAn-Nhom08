@@ -122,9 +122,11 @@ namespace ServerUndercover.Hubs
             }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, room.RoomId);
+            //await Groups.AddToGroupAsync(Context.ConnectionId, $"voice-{room.RoomId}");
             await Clients.Group(room.RoomId).SendAsync("RoomUpdated", room);
             await Clients.Caller.SendAsync("RoomJoined", room);
-            
+            await Clients.Caller.SendAsync("RoomUpdated", room);
+
             if (room.IsPublic)
             {
                 await BroadcastPublicRooms();
@@ -308,6 +310,35 @@ namespace ServerUndercover.Hubs
                 Content = message,
                 Timestamp = DateTime.Now.ToString("HH:mm")
             });
+        }
+
+        // =========================
+        // Voice Chat
+        // =========================
+
+        public async Task StartVoiceChat(string roomId)
+        {
+            // join group voice riêng
+            await Groups.AddToGroupAsync(Context.ConnectionId,$"voice-{roomId}");
+
+            // báo cho người cũ biết có user mới vào voice
+            await Clients.OthersInGroup($"voice-{roomId}").SendAsync("UserJoinedVoice",Context.ConnectionId);
+        }
+
+        public async Task LeaveVoiceChat(string roomId)
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId,$"voice-{roomId}");
+            await Clients.Group($"voice-{roomId}").SendAsync("PlayerDisconnected",Context.ConnectionId);
+        }
+
+        public async Task SendVoiceSignal(string targetConnectionId,string signal)
+        {
+            await Clients.Client(targetConnectionId).SendAsync("ReceiveSignal",Context.ConnectionId,signal);
+        }
+
+        public async Task ToggleMicStatus(string roomId,bool isMuted)
+        {
+            await Clients.Group($"voice-{roomId}").SendAsync("PlayerMutedStatus",Context.ConnectionId,isMuted);
         }
     }
 }
