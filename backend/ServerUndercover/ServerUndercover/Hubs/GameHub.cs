@@ -144,7 +144,7 @@ namespace ServerUndercover.Hubs
         public async Task LeaveRoom()
         {
             string userId = GetUserId();
-            LeaveRoomInternal(userId);
+            await LeaveRoomInternal(userId);
         }
 
         private async Task LeaveRoomInternal(string userId)

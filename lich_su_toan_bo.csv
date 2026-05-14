@@ -1,0 +1,32 @@
+2026-03-18,Lâm Quang Minh,Initial commit: backend + frontend
+2026-03-19,Lâm Quang Minh,feat: add new frontend
+2026-03-19,Lâm Quang Minh,fix: replace frontend with working version
+2026-03-19,Lâm Quang Minh,fix: replace frontend with working version
+2026-03-19,Lâm Quang Minh,fix: convert frontend from submodule to normal folder
+2026-03-19,toilathanhluan,change position
+2026-04-01,toilathanhluan,feat : thêm tính năng đăng xuất
+2026-04-01,toilathanhluan,feat : thêm tính năng đăng xuất
+2026-04-01,toilathanhluan,feat: thêm tính năng đăng xuất
+2026-04-01,toilathanhluan,feat: thêm tính năng đăng xuất
+2026-04-01,Lâm Quang Minh,update: restructure backend + frontend
+2026-04-01,Lâm Quang Minh,update: gitignore
+2026-04-02,Lâm Quang Minh,save local changes
+2026-04-02,Lâm Quang Minh,apply gitignore (remove .vs and junk files)
+2026-04-02,Lâm Quang Minh,save local changes
+2026-04-02,Lâm Quang Minh,apply gitignore (remove .vs and junk files)
+2026-04-02,Lâm Quang Minh,remove APILogin
+2026-04-03,24520127-TongKhiDucAnh,Thêm chức năng xem profile
+2026-04-03,24520127-TongKhiDucAnh,Xóa rác + không cho up json
+2026-04-13,24520127-TongKhiDucAnh,Chỉnh thông tin hiện
+2026-04-14,Lâm Quang Minh,test-match
+2026-04-14,Lâm Quang Minh,Fix bug
+2026-04-14,Lâm Quang Minh,resolve conflict merge profile-popup into dev
+2026-04-14,Lâm Quang Minh,add choi ngay v2
+2026-04-14,Lâm Quang Minh,Merge test-match into dev
+2026-04-22,toilathanhluan,feat : add check login same account on two devices
+2026-04-22,toilathanhluan,Merge pull request #2 from UIT24520127/dev
+2026-04-22,toilathanhluan,feat : add backend for checking same account on 2 device
+2026-04-22,Lâm Quang Minh,save current work
+2026-04-22,Lâm Quang Minh,Merge origin/dev
+2026-04-22,Lâm Quang Minh,update play-with-friends
+2026-04-22,Lâm Quang Minh,fix bug play with friend

@@ -121,5 +121,11 @@ app.MapControllers();
 app.MapHub<ServerUndercover.Hubs.GameHub>("/gamehub");
 app.MapHub<ServerUndercover.Hubs.SessionHub>("/sessionhub");
 
+// API dùng để Debug (Xem các phòng đang lưu trong RAM)
+app.MapGet("/api/debug/rooms", (ServerUndercover.Services.RoomManagerService roomManager) => 
+{
+    return Results.Ok(roomManager.GetAllStateDebug());
+});
+
 // Chạy Server (Chỉ có 1 lệnh Run duy nhất ở cuối file)
 app.Run();

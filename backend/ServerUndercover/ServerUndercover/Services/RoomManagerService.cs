@@ -230,5 +230,21 @@ namespace ServerUndercover.Services
         }
 
         #endregion
+
+        #region Debug Utilities
+
+        // Dùng để xem trực tiếp data đang lưu trong RAM thông qua API
+        public object GetAllStateDebug()
+        {
+            return new
+            {
+                TotalRooms = _rooms.Count,
+                Rooms = _rooms.Values,
+                UserRoomsMap = _userRooms,
+                Connections = _userConnections
+            };
+        }
+
+        #endregion
     }
 }
