@@ -30,6 +30,12 @@ export default function RoomPage() {
     const [connection, setConnection] = useState<HubConnection | null>(null);
 
     // =========================
+    // Trạng thái ván đấu & Mật danh
+    // =========================
+    const [mySecret, setMySecret] = useState<{ role: string; word: string } | null>(null);
+    const [isWordVisible, setIsWordVisible] = useState<boolean>(false); // Ẩn/Hiện từ tránh nhìn trộm
+
+    // =========================
     // Voice Chat States
     // =========================
     const [isMicOn, setIsMicOn] = useState(false);
@@ -178,6 +184,18 @@ export default function RoomPage() {
             }
         });
 
+        // Sự kiện: Nhận từ khóa mật danh riêng tư từ Server
+        newConn.on("ReceiveSecretWord", (data: { role: string; word: string }) => {
+            setMySecret(data);
+            setIsWordVisible(false); // Mặc định ẩn đi khi sang ván mới để an toàn
+        });
+
+        // Sự kiện: Cả phòng bắt đầu ván mới công khai
+        newConn.on("RoundStarted", (room: RoomState) => {
+            console.log("🎮 Ván đấu mới bắt đầu!");
+            setRoomState(room);
+        });
+
         const start = async () => {
             // Chỉ chạy nếu đang ở trạng thái Disconnected
             if (newConn.state === HubConnectionState.Disconnected) {
@@ -248,15 +266,46 @@ export default function RoomPage() {
     return (
         <div className="min-h-screen bg-gray-950 flex flex-col items-center p-4 pt-20 relative">
 
-            {/* TỪ KHÓA */}
-            <div className="mb-10 text-center">
-                <p className="text-gray-500 text-xs uppercase tracking-[0.3em] mb-2">
-                    Mật danh hiện tại
+            {/* TỪ KHÓA & ĐIỀU KHIỂN TRẬN ĐẤU */}
+            <div className="mb-10 text-center flex flex-col items-center gap-4">
+                <p className="text-gray-500 text-xs uppercase tracking-[0.3em]">
+                    Mật danh của bạn
                 </p>
 
-                <div className="bg-black/50 border-2 border-yellow-600/30 px-8 py-2 rounded-full text-white font-black text-xl tracking-widest shadow-[0_0_15px_rgba(230,168,34,0.1)]">
-                    ********
+                {/* Ô hiển thị mật danh - Click để Ẩn/Hiện */}
+                <div 
+                    onClick={() => mySecret && setIsWordVisible(!isWordVisible)}
+                    className="bg-black/50 border-2 border-yellow-600/30 px-8 py-3 rounded-full text-white font-black text-xl tracking-widest shadow-[0_0_15px_rgba(230,168,34,0.1)] cursor-pointer select-none min-w-[200px] transition-all hover:bg-black/70"
+                >
+                    {mySecret ? (
+                        isWordVisible ? (
+                            <span className="text-yellow-400 text-2xl tracking-normal animate-pulse">
+                                {mySecret.word}
+                            </span>
+                        ) : (
+                            <span className="text-gray-600 blur-sm">•••••••• (Bấm xem)</span>
+                        )
+                    ) : (
+                        <span className="text-gray-500 italic text-base tracking-normal">Chờ chủ phòng bắt đầu...</span>
+                    )}
                 </div>
+
+                {/* NÚT BẮT ĐẦU VÁN MỚI (Chỉ hiển thị cho Host của phòng) */}
+                {roomState?.hostId === localStorage.getItem('userId') && connection && (
+                    <button
+                        onClick={async () => {
+                            try {
+                                await connection.invoke("StartGame");
+                                console.log("Đã phát lệnh khởi chạy ván đấu mới");
+                            } catch (err) {
+                                console.error("Lỗi khi bắt đầu ván đấu:", err);
+                            }
+                        }}
+                        className="mt-2 bg-yellow-600 hover:bg-yellow-500 active:scale-95 text-black font-bold px-6 py-2 rounded-xl text-sm transition-all shadow-lg uppercase tracking-wider"
+                    >
+                        {mySecret ? "🔄 Ván tiếp theo" : "🚀 Bắt đầu ván đầu"}
+                    </button>
+                )}
             </div>
 
             {/* GRID NGƯỜI CHƠI */}

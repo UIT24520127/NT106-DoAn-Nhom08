@@ -283,9 +283,59 @@ namespace ServerUndercover.Hubs
                 return;
             }
 
-            room.State = RoomState.Playing;
-            await Clients.Group(roomId).SendAsync("GameStarted", room);
-            await BroadcastPublicRooms(); // Cập nhật để phòng này biến mất khỏi danh sách public
+            try
+            {
+                // 1. Gọi hàm bốc từ ngẫu nhiên và tự động dọn dẹp Firebase
+                var selectedWords = await _roomManager.GetAndRemoveWordPairAsync();
+
+                // 2. Logic chia vai trò (Xáo trộn và random ngẫu nhiên 1 người làm Undercover)
+                var playerList = room.Players.Values.ToList();
+                var random = new Random();
+                int undercoverIndex = random.Next(playerList.Count);
+
+                for (int i = 0; i < playerList.Count; i++)
+                {
+                    var player = playerList[i];
+
+                    // QUAN TRỌNG: Reset lại trạng thái sống sót cho ván mới (bắt buộc phải có để chơi nhiều ván)
+                    player.IsEliminated = false;
+
+                    if (i == undercoverIndex)
+                    {
+                        // LƯU TRẠNG THÁI VÀO OBJECT QUẢN LÝ CỦA SERVER
+                        player.Word = selectedWords.Undercover;
+                        player.Role = "Undercover";
+                    }
+                    else
+                    {
+                        // LƯU TRẠNG THÁI VÀO OBJECT QUẢN LÝ CỦA SERVER
+                        player.Word = selectedWords.Civilian;
+                        player.Role = "Civilian";
+                    }
+
+                    // 3. Gửi từ khóa bí mật trực tiếp đến ConnectionId của người chơi đó (Tuyệt đối bảo mật)
+                    if (!string.IsNullOrEmpty(player.ConnectionId))
+                    {
+                        await Clients.Client(player.ConnectionId).SendAsync("ReceiveSecretWord", new
+                        {
+                            role = player.Role,
+                            word = player.Word
+                        });
+                    }
+                }
+
+                // 4. Đồng bộ trạng thái phòng công khai cho cả nhóm
+                room.State = RoomState.Playing;
+                await Clients.Group(roomId).SendAsync("GameStarted", room);
+                await BroadcastPublicRooms(); // Cập nhật để phòng này biến mất khỏi danh sách public
+
+                Console.WriteLine($"[GAME LOG] Phòng {roomId} đã khởi chạy ván đấu mới thành công.");
+            }
+            catch (Exception ex)
+            {
+                // Trả lỗi về màn hình nếu kho từ trên Firebase bị cạn kiệt hoặc lỗi kết nối mạng
+                await Clients.Caller.SendAsync("RoomError", $"Lỗi hệ thống khi bốc từ khóa: {ex.Message}");
+            }
         }
 
         public async Task GetRoomState(string roomId)
