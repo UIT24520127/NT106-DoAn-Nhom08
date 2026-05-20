@@ -304,9 +304,9 @@ namespace ServerUndercover.Services
             }
         }
 
-        /// <summary>
-        /// Hàm Bốc & Xóa: Lấy 1 cặp từ ngẫu nhiên, tự động kích hoạt API khi kho từ dưới 5
-        /// </summary>
+        // Thêm 1 biến cờ ở đầu class RoomManagerService
+        private bool _isRefilling = false;
+
         public async Task<WordPair> GetAndRemoveWordPairAsync()
         {
             WordPair selectedPair;
@@ -322,42 +322,34 @@ namespace ServerUndercover.Services
 
                 int randomIndex = new Random().Next(_localWordPool.Count);
                 selectedPair = _localWordPool[randomIndex];
-
-                // Xóa khỏi RAM ngay lập tức
                 _localWordPool.RemoveAt(randomIndex);
-                Console.WriteLine($"[WORD] Đã bốc từ: {selectedPair.Civilian}/{selectedPair.Undercover}. RAM còn lại: {_localWordPool.Count}");
 
-                // SỬA ĐỔI: Game Undercover phát hiện kho xuống dưới 5 từ thì bật cờ gọi API nạp thêm
-                if (_localWordPool.Count < 5)
+                // TỐI ƯU: Nếu kho từ dưới 20 từ VÀ hệ thống chưa đi xin Google, thì mới bật cờ đi xin
+                if (_localWordPool.Count < 20 && !_isRefilling)
                 {
                     needRefill = true;
+                    _isRefilling = true; // Khóa lại ngay lập tức, phòng khác không được gọi trùng
                 }
             }
 
-            try
+            // Thực hiện gọi API ngầm không giữ chân luồng (Không dùng await ở đây)
+            if (needRefill)
             {
-                if (needRefill)
-                {
-                    Console.WriteLine("[WORD] Kho từ xuống mức thấp (< 5). Đang tự động nạp thêm từ mới từ Google API...");
-                    await RefillFirebaseFromSampleWordsAsync();
-                }
-                else
-                {
-                    // Nếu chưa cần nạp, chỉ cần làm sạch node cũ và đồng bộ danh sách đã bớt từ lên Firebase
-                    await _firebaseClient.Child("WordBank/AvailableWords").DeleteAsync();
-
-                    lock (_localWordPool)
+                _ = Task.Run(async () => {
+                    try
                     {
-                        if (_localWordPool.Any())
-                        {
-                            _ = _firebaseClient.Child("WordBank/AvailableWords").PutAsync(_localWordPool);
-                        }
+                        await RefillFirebaseFromSampleWordsAsync();
                     }
-                }
+                    finally
+                    {
+                        _isRefilling = false; // Xử lý xong (Thành công hoặc Thất bại) thì mở khóa cờ
+                    }
+                });
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine($"[WORD-ERROR] Không thể đồng bộ dọn dẹp lên Firebase: {ex.Message}");
+                // Đồng bộ danh sách bớt từ lên Firebase bình thường
+                _ = _firebaseClient.Child("WordBank/AvailableWords").PutAsync(_localWordPool);
             }
 
             return selectedPair;
