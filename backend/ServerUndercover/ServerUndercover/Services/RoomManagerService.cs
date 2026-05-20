@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using ServerUndercover.Models.State;
+using Firebase.Database;
+using Firebase.Database.Query;
 
 namespace ServerUndercover.Services
 {
@@ -13,6 +15,19 @@ namespace ServerUndercover.Services
 
         // Theo dõi Session của User (UserId -> ConnectionId)
         private readonly ConcurrentDictionary<string, string> _userConnections = new();
+
+        //Cấp từ khi bắt đầu ván mới, xóa khi ván kết thúc
+        private readonly List<WordPair> _localWordPool = new(); // Kho từ tạm thời trên RAM
+        private readonly FirebaseClient _firebaseClient;
+
+        // Constructor của Service nhận FirebaseClient được inject từ hệ thống DI
+        public RoomManagerService(Firebase.Database.FirebaseClient firebaseClient)
+        {
+            _firebaseClient = firebaseClient;
+
+            // Kích hoạt nạp từ khóa từ Firebase lên RAM ngầm ngay khi Server khởi động (dotnet run)
+            _ = InitializeWordPoolAsync();
+        }
 
         #region Connection Management
 
@@ -237,6 +252,236 @@ namespace ServerUndercover.Services
 
             // Nếu không có, chọn phòng đông nhất hiện có
             return availableRooms.OrderByDescending(r => r.CurrentPlayerCount).First().RoomId;
+        }
+
+        #endregion
+
+        #region Word Pair Management
+
+        private readonly IHttpClientFactory _httpClientFactory;
+
+        // CỦA BẠN: Cập nhật Constructor để hệ thống tự động Inject IHttpClientFactory vào
+        public RoomManagerService(Firebase.Database.FirebaseClient firebaseClient, IHttpClientFactory httpClientFactory)
+        {
+            _firebaseClient = firebaseClient;
+            _httpClientFactory = httpClientFactory; // Lưu lại factory để tái sử dụng socket
+
+            // Kích hoạt nạp từ khóa từ Firebase lên RAM ngầm ngay khi Server khởi động (dotnet run)
+            _ = InitializeWordPoolAsync();
+        }
+
+        /// <summary>
+        /// Hàm khởi tạo: Tải chính xác mảng từ đang lưu trên Firebase Realtime Database về RAM
+        /// </summary>
+        private async Task InitializeWordPoolAsync()
+        {
+            try
+            {
+                var wordsArray = await _firebaseClient
+                    .Child("WordBank/AvailableWords")
+                    .OnceSingleAsync<List<WordPair>>();
+
+                if (wordsArray != null && wordsArray.Any())
+                {
+                    lock (_localWordPool)
+                    {
+                        _localWordPool.Clear();
+                        _localWordPool.AddRange(wordsArray.Where(w => w != null));
+                    }
+                    Console.WriteLine($"[WORD-INIT] 🎉 THÀNH CÔNG: RAM đã nạp đầy {_localWordPool.Count} cặp từ khóa từ Firebase!");
+                }
+                else
+                {
+                    Console.WriteLine("[WORD-INIT] Kho từ trên Firebase trống hoặc lỗi. Tiến hành sạc kho qua API...");
+                    await RefillFirebaseFromSampleWordsAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WORD-ERROR] Lỗi khởi tạo kho từ từ Firebase: {ex.Message}");
+                Console.WriteLine("[WORD-ERROR] Tự động kích hoạt sạc lại từ API để cứu vãn...");
+                await RefillFirebaseFromSampleWordsAsync();
+            }
+        }
+
+        // Thêm 1 biến cờ ở đầu class RoomManagerService
+        private bool _isRefilling = false;
+
+        public async Task<WordPair> GetAndRemoveWordPairAsync()
+        {
+            WordPair selectedPair;
+            bool needRefill = false;
+
+            lock (_localWordPool)
+            {
+                if (!_localWordPool.Any())
+                {
+                    Console.WriteLine("[WORD-WARNING] Kho từ trống rỗng trên RAM! Trả về từ khẩn cấp.");
+                    return new WordPair { Civilian = "Quả táo", Undercover = "Quả lê" };
+                }
+
+                int randomIndex = new Random().Next(_localWordPool.Count);
+                selectedPair = _localWordPool[randomIndex];
+                _localWordPool.RemoveAt(randomIndex);
+
+                // TỐI ƯU: Nếu kho từ dưới 20 từ VÀ hệ thống chưa đi xin Google, thì mới bật cờ đi xin
+                if (_localWordPool.Count < 20 && !_isRefilling)
+                {
+                    needRefill = true;
+                    _isRefilling = true; // Khóa lại ngay lập tức, phòng khác không được gọi trùng
+                }
+            }
+
+            // Thực hiện gọi API ngầm không giữ chân luồng (Không dùng await ở đây)
+            if (needRefill)
+            {
+                _ = Task.Run(async () => {
+                    try
+                    {
+                        await RefillFirebaseFromSampleWordsAsync();
+                    }
+                    finally
+                    {
+                        _isRefilling = false; // Xử lý xong (Thành công hoặc Thất bại) thì mở khóa cờ
+                    }
+                });
+            }
+            else
+            {
+                // Đồng bộ danh sách bớt từ lên Firebase bình thường
+                _ = _firebaseClient.Child("WordBank/AvailableWords").PutAsync(_localWordPool);
+            }
+
+            return selectedPair;
+        }
+
+        /// <summary>
+        /// SỬA ĐỔI: Hàm sạc từ bằng cách gọi Google API (Google Cloud Function) trả về JSON
+        /// </summary>
+        private async Task RefillFirebaseFromSampleWordsAsync()
+        {
+            try
+            {
+                var httpClient = _httpClientFactory.CreateClient();
+
+                string apiKey = "AIzaSyAeqcYI6kzgkSidDLWfLcEXyb9rSGCbcm4";
+                string geminiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}";
+
+                var requestBody = new
+                {
+                    contents = new[]
+                    {
+                new { parts = new[] { new { 
+                    text = @"Bạn là một chuyên gia thiết kế câu đố cho game Undercover (Kẻ ẩn danh). 
+                    Hãy tạo ra 30 cặp từ khóa tiếng Việt độc đáo, ngẫu nhiên và đa dạng chủ đề.
+
+                    ⚠️ QUY TẮC TẠO TỪ KHÓA BẮT BUỘC (QUYẾT ĐỊNH SỰ SỐNG CÒN CỦA GAME):
+                    1. 'civilian' (Dân thường) và 'undercover' (Kẻ ẩn danh) phải là HAI THỰC THỂ CÙNG CẤP, thuộc cùng một nhóm phân loại lớn nhưng KHÔNG ĐƯỢC bao hàm nhau.
+                    2. TUYỆT ĐỐI KHÔNG được chọn từ khóa theo kiểu 'Từ cha - Từ con' (Ví dụ SAI: Trái cây - Quả táo, Động vật - Con chó, Nước uống - Cà phê).
+                    3. Ví dụ ĐÚNG về cặp từ cùng cấp: 
+                       - [""civilian"": ""Quả Táo"", ""undercover"": ""Quả Lê""] (Cùng là trái cây dạng quả tròn)
+                       - [""civilian"": ""Xe máy"", ""undercover"": ""Xe đạp""] (Cùng là phương tiện 2 bánh)
+                       - [""civilian"": ""Trà sữa"", ""undercover"": ""Cà phê""] (Cùng là đồ uống phổ biến của giới trẻ)
+                       - [""civilian"": ""Hà Nội"", ""undercover"": ""TP. Hồ Chí Minh""] (Cùng là thành phố lớn)
+
+                    Định dạng trả về bắt buộc phải là một mảng JSON thô thuần túy, không nằm trong khối nháy markdown (không kèm ```json), không giải thích hay chào hỏi gì thêm. 
+                    Cấu trúc mảng chuẩn: [{""civilian"":""Từ_Dân_Thường"",""undercover"":""Từ_Kẻ_Ẩn_Danh""}]"                } } }
+            }
+                };
+
+                var jsonPayload = System.Text.Json.JsonSerializer.Serialize(requestBody);
+                var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+
+                var response = await httpClient.PostAsync(geminiUrl, content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseJson = await response.Content.ReadAsStringAsync();
+
+                    using (var doc = System.Text.Json.JsonDocument.Parse(responseJson))
+                    {
+                        var aiResponseText = doc.RootElement
+                            .GetProperty("candidates")[0]
+                            .GetProperty("content")
+                            .GetProperty("parts")[0]
+                            .GetProperty("text")
+                            .GetString()?.Trim() ?? string.Empty;
+
+                        if (aiResponseText.StartsWith("```"))
+                        {
+                            aiResponseText = aiResponseText.Replace("```json", "").Replace("```", "").Trim();
+                        }
+
+                        var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                        var apiWords = System.Text.Json.JsonSerializer.Deserialize<List<WordPair>>(aiResponseText, options);
+
+                        if (apiWords != null && apiWords.Any())
+                        {
+                            int addedCount = 0;
+
+                            lock (_localWordPool)
+                            {
+                                foreach (var word in apiWords.Where(w => w != null))
+                                {
+                                    // LỌC TRÙNG: Kiểm tra xem cặp từ này (hoặc từ hoán đổi vị trí) đã tồn tại trong kho RAM chưa
+                                    bool isDuplicate = _localWordPool.Any(w =>
+                                        w.Civilian.Trim().Equals(word.Civilian.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                                        w.Undercover.Trim().Equals(word.Undercover.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                                        w.Civilian.Trim().Equals(word.Undercover.Trim(), StringComparison.OrdinalIgnoreCase));
+
+                                    if (!isDuplicate)
+                                    {
+                                        _localWordPool.Add(word);
+                                        addedCount++;
+                                    }
+                                }
+                            }
+
+                            // Đồng bộ sạch mảng mới gộp lên Firebase
+                            await _firebaseClient.Child("WordBank/AvailableWords").DeleteAsync();
+                            await _firebaseClient.Child("WordBank/AvailableWords").PutAsync(_localWordPool);
+
+                            lock (_localWordPool)
+                            {
+                                Console.WriteLine($"[GEMINI-AI] 🤖 AI sinh 20 từ. Đã lọc và nạp thêm {addedCount} từ mới. Tổng kho trên RAM: {_localWordPool.Count}");
+                            }
+                            return;
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[GEMINI-ERROR] Google API báo lỗi HTTP: {response.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[GEMINI-ERROR] Thất bại khi xử lý sinh từ: {ex.Message}");
+            }
+
+            LoadFallbackSampleWords();
+        }
+
+        /// <summary>
+        /// Kho từ dự phòng khẩn cấp khi Google API hoặc kết nối internet gặp sự cố
+        /// </summary>
+        private void LoadFallbackSampleWords()
+        {
+            Console.WriteLine("[WORD-REFILL] Đang kích hoạt kho từ dự phòng (Fallback)...");
+            var fallbackWords = new List<WordPair>
+            {
+                new WordPair { Civilian = "Mặt trời", Undercover = "Mặt trăng" },
+                new WordPair { Civilian = "Xe máy", Undercover = "Xe đạp" },
+                new WordPair { Civilian = "Máy tính", Undercover = "Điện thoại" },
+                new WordPair { Civilian = "Con mèo", Undercover = "Con chó" },
+                new WordPair { Civilian = "Trà sữa", Undercover = "Cà phê" }
+            };
+
+            lock (_localWordPool)
+            {
+                _localWordPool.AddRange(fallbackWords);
+            }
+            _ = _firebaseClient.Child("WordBank/AvailableWords").PutAsync(_localWordPool);
         }
 
         #endregion

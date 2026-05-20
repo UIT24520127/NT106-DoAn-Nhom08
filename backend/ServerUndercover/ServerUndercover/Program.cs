@@ -97,6 +97,7 @@ var config = new FirebaseAuthConfig
 };
 var authClient = new FirebaseAuthClient(config);
 builder.Services.AddSingleton<FirebaseAuthClient>(authClient);
+builder.Services.AddHttpClient();// Thêm HttpClient để UserService có thể gọi FirebaseAuthClient
 
 
 // ============ GIAI ĐOẠN 2: KHỞI TẠO ỨNG DỤNG ============
