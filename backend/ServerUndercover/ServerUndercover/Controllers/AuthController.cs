@@ -15,12 +15,14 @@ namespace ServerUndercover.Controllers
         private readonly FirebaseAuthClient _client;
         private readonly FirestoreDb _db;
         private readonly IMemoryCache _cache;
+        private readonly IConfiguration _config;
 
-        public AuthController(FirebaseAuthClient client, FirestoreDb db, IMemoryCache cache)
+        public AuthController(FirebaseAuthClient client, FirestoreDb db, IMemoryCache cache, IConfiguration config)
         {
             _client = client;
             _db = db;
             _cache = cache;
+            _config = config;
         }
 
         [HttpPost("register")]
@@ -82,14 +84,21 @@ namespace ServerUndercover.Controllers
                     </div>
                 ";
 
-                using (var smtp = new SmtpClient("smtp.gmail.com", 587))
+                // Đọc SMTP config từ appsettings.json
+                var smtpHost = _config["SmtpSettings:Host"] ?? "smtp.gmail.com";
+                var smtpPort = int.Parse(_config["SmtpSettings:Port"] ?? "587");
+                var senderEmail = _config["SmtpSettings:SenderEmail"] ?? "undercovern8@gmail.com";
+                var senderName = _config["SmtpSettings:SenderName"] ?? "Undercover Game";
+                var appPassword = _config["SmtpSettings:AppPassword"] ?? "";
+
+                using (var smtp = new SmtpClient(smtpHost, smtpPort))
                 {
                     smtp.EnableSsl = true;
-                    smtp.Credentials = new NetworkCredential("undercovern8@gmail.com", "ycdyzzwlplzj qmlv");
+                    smtp.Credentials = new NetworkCredential(senderEmail, appPassword);
 
                     var mailMessage = new MailMessage
                     {
-                        From = new MailAddress("undercovern8@gmail.com", "Undercover Game"),
+                        From = new MailAddress(senderEmail, senderName),
                         Subject = "Xác thực tài khoản Undercover",
                         Body = emailBody,
                         IsBodyHtml = true,
@@ -158,11 +167,14 @@ namespace ServerUndercover.Controllers
                     });
                 }
 
+                // Lấy token và trả về cả userId để frontend lưu localStorage
+                string idToken = await result.User.GetIdTokenAsync();
                 return Ok(new
                 {
                     message = "Đăng nhập thành công!",
-                    token = await result.User.GetIdTokenAsync(),
-                    uid = uid
+                    token = idToken,
+                    userId = uid,   // frontend đọc data.userId
+                    uid = uid        // giữ lại để backward compatible
                 });
             }
             catch (Exception)

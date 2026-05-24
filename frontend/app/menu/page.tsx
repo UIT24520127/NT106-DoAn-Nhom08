@@ -3,11 +3,11 @@ import { useState, useEffect, useRef } from "react";
 import { Users, Settings, LogOut, X, User } from "lucide-react";
 import { logout } from "@/lib/auth";
 import UserProfile from "@/components/UserProfile";
-import FriendModal from "@/components/friends/FriendModal"; // 👈 THÊM MỚI
+import FriendModal from "@/components/friends/FriendModal"; 
 import * as signalR from "@microsoft/signalr";
 import { getSignalRConnection } from "@/lib/signalRConnection";
-import { ref, onValue } from "firebase/database";       // 👈 THÊM MỚI
-import { realtimeDb } from "@/lib/firebase";             // 👈 THÊM MỚI
+import { ref, onValue } from "firebase/database";      
+import { realtimeDb } from "@/lib/firebase";            
 import { useRouter } from "next/navigation";
 
 export default function MainMenu() {
@@ -17,9 +17,9 @@ export default function MainMenu() {
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isFriendOpen, setIsFriendOpen] = useState(false);  // 👈 THÊM MỚI
-  const [token, setToken] = useState("");                    // 👈 THÊM MỚI
-  const [pendingCount, setPendingCount] = useState(0);       // 👈 THÊM MỚI
+  const [isFriendOpen, setIsFriendOpen] = useState(false);  
+  const [token, setToken] = useState("");                    
+  const [pendingCount, setPendingCount] = useState(0);       
   const [playerStats, setPlayerStats] = useState({
     username: "Đang tải...",
     totalGames: 0,

@@ -10,8 +10,9 @@ import { auth, googleProvider } from "@/lib/firebase";
 export default function LoginPage() {
   const router = useRouter();
 
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isGoogleLoggingIn, setIsGoogleLoggingIn] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
@@ -44,6 +45,8 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/auth/login`, {
         method: "POST",
@@ -55,24 +58,24 @@ export default function LoginPage() {
       if (res.ok) {
         saveToken(data.token);
         localStorage.setItem("token", data.token);
-        // Đảm bảo không bị undefined: ưu tiên username -> email -> mặc định
+        // fix: backend trả 'userId' và 'uid' — đọc cả hai để chắc chắn
         const nameToSave = data.username || data.email || "Người chơi";
-        localStorage.setItem("username", nameToSave); 
-        console.log("Đã lưu username:", nameToSave);
+        localStorage.setItem("username", nameToSave);
         const idToSave = data.userId || data.uid || data.Id;
         if (idToSave) {
           localStorage.setItem("userId", idToSave);
-          console.log("Đã lưu userId mới:", idToSave);
+          console.log("Đã lưu userId:", idToSave);
         } else {
-          console.warn("Cảnh báo: Backend không trả về userId trong phản hồi login!");
+          console.warn("Cảnh báo: Backend không trả về userId!");
         }
         showPopup("Thành công!", data.message, true, true);
-      }
-      else {
+      } else {
         showPopup("Thất bại", data.message, false);
       }
     } catch (err) {
       showPopup("Lỗi kết nối", "Không thể kết nối đến Server C#.", false);
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -225,9 +228,14 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                className="w-full bg-[#9b111e] hover:bg-[#7a0000] text-white font-bold py-3 rounded shadow-lg mt-2 transition-transform duration-150 active:scale-95"
+                disabled={isLoggingIn}
+                className={`w-full font-bold py-3 rounded shadow-lg mt-2 transition-transform duration-150 active:scale-95
+                  ${isLoggingIn
+                    ? 'bg-gray-500 cursor-not-allowed text-white'
+                    : 'bg-[#9b111e] hover:bg-[#7a0000] text-white'
+                  }`}
               >
-                VÀO TRÒ CHƠI
+                {isLoggingIn ? 'ĐANG KẾT NỐI...' : 'VÀO TRÒ CHƠI'}
               </button>
 
               <div className="relative flex items-center py-2">

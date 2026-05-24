@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { X, Users, Search, Mail, UserMinus } from "lucide-react";
 import FriendList from "@/components/friends/FriendList";
 import FriendSearch from "@/components/friends/FriendSearch";
@@ -66,6 +66,18 @@ export default function FriendModal({ isOpen, onClose, token, pendingCount }: Fr
         }
     }, [isOpen]);
 
+    // Khóa scroll của trang nền khi modal mở (tránh scroll loop)
+    useEffect(() => {
+        if (isOpen) {
+            document.body.style.overflow = "hidden";
+        } else {
+            document.body.style.overflow = "";
+        }
+        return () => {
+            document.body.style.overflow = "";
+        };
+    }, [isOpen]);
+
     // Đóng khi bấm Escape
     useEffect(() => {
         const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -79,17 +91,17 @@ export default function FriendModal({ isOpen, onClose, token, pendingCount }: Fr
         <>
             {/* Overlay */}
             <div
-                className={`fixed inset-0 bg-black/70 z-50 transition-opacity duration-300 ease-out
+                className={`fixed inset-0 bg-black/40 z-50 transition-opacity duration-300 ease-out
           ${animate ? "opacity-100" : "opacity-0"}`}
                 onClick={onClose}
             />
 
-            {/* Modal */}
+            {/* Modal - góc phải trên */}
             <div
-                className={`fixed top-0 left-1/2 -translate-x-1/2 z-50 w-full max-w-lg mt-10 p-6
-          bg-[#1a1c23] border-2 border-gray-700 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5)]
-          transition-all duration-500 ease-out transform
-          ${animate ? "translate-y-0 opacity-100" : "-translate-y-full opacity-0"}`}
+                className={`fixed top-4 right-4 z-50 w-full max-w-sm p-5
+          bg-[#1a1c23] border-2 border-gray-700 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.7)]
+          transition-all duration-400 ease-out transform
+          ${animate ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"}`}
             >
                 {/* Nút đóng */}
                 <button
@@ -140,7 +152,10 @@ export default function FriendModal({ isOpen, onClose, token, pendingCount }: Fr
                 </div>
 
                 {/* Content */}
-                <div className="max-h-[420px] overflow-y-auto pr-1 custom-scroll">
+                <div
+                    className="max-h-[380px] overflow-y-auto pr-1 custom-scroll"
+                    onWheel={(e) => e.stopPropagation()}
+                >
                     {activeTab === "list" && <FriendList token={token} onAvatarClick={handleUserClick} />}
                     {activeTab === "search" && <FriendSearch token={token} onAvatarClick={handleUserClick} />}
                     {activeTab === "requests" && <FriendRequests token={token} pendingCount={pendingCount} onAvatarClick={handleUserClick} />}
