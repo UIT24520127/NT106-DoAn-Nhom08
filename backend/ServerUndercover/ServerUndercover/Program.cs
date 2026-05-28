@@ -10,7 +10,19 @@ using Microsoft.IdentityModel.Tokens;
 using FirebaseAdmin;
 using Google.Apis.Auth.OAuth2;
 
-Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", "game-undercover-d70dd-firebase-adminsdk-fbsvc-a08a981514.json");
+var credentialsFileName = "game-undercover-d70dd-firebase-adminsdk-fbsvc-a08a981514.json";
+var credentialsPath = Path.Combine(AppContext.BaseDirectory, credentialsFileName);
+// Fallback: tìm từ thư mục project nếu chạy từ dotnet run
+if (!File.Exists(credentialsPath))
+{
+    credentialsPath = Path.Combine(Directory.GetCurrentDirectory(), credentialsFileName);
+}
+// Diagnostic output to help debug credential file resolution
+Console.WriteLine("[DEBUG] AppContext.BaseDirectory: " + AppContext.BaseDirectory);
+Console.WriteLine("[DEBUG] CurrentDirectory: " + Directory.GetCurrentDirectory());
+Console.WriteLine("[DEBUG] Resolved credentialsPath: " + credentialsPath);
+Console.WriteLine("[DEBUG] credentials file exists: " + File.Exists(credentialsPath));
+Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", credentialsPath);
 
 FirebaseApp.Create(new AppOptions()
 {

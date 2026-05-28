@@ -16,13 +16,20 @@ namespace ServerUndercover.Controllers
         private readonly FirestoreDb _db;
         private readonly IMemoryCache _cache;
         private readonly IConfiguration _config;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(FirebaseAuthClient client, FirestoreDb db, IMemoryCache cache, IConfiguration config)
+        public AuthController(
+            FirebaseAuthClient client,
+            FirestoreDb db,
+            IMemoryCache cache,
+            IConfiguration config,
+            ILogger<AuthController> logger)
         {
             _client = client;
             _db = db;
             _cache = cache;
             _config = config;
+            _logger = logger;
         }
 
         [HttpPost("register")]
@@ -112,10 +119,15 @@ namespace ServerUndercover.Controllers
             }
             catch (Exception ex)
             {
-                if (ex.Message.Contains("EMAIL_EXISTS"))
-                {
-                    return BadRequest(new { message = "Email này đã được đăng ký! Vui lòng sử dụng email khác." });
-                }
+                var msg = ex.Message ?? "";
+                if (msg.Contains("EMAIL_EXISTS"))
+                    return BadRequest(new { message = "Email này đã được đăng ký! Vui lòng sử dụng email khác hoặc đăng nhập." });
+                if (msg.Contains("WEAK_PASSWORD"))
+                    return BadRequest(new { message = "Mật khẩu quá yếu! Vui lòng dùng ít nhất 6 ký tự." });
+                if (msg.Contains("INVALID_EMAIL"))
+                    return BadRequest(new { message = "Định dạng Email không hợp lệ!" });
+                if (msg.Contains("TOO_MANY_ATTEMPTS_TRY_LATER"))
+                    return BadRequest(new { message = "Quá nhiều yêu cầu. Vui lòng thử lại sau vài phút!" });
                 return BadRequest(new { message = "Có lỗi xảy ra khi tạo tài khoản.", error = ex.Message });
             }
         }
@@ -177,9 +189,34 @@ namespace ServerUndercover.Controllers
                     uid = uid        // giữ lại để backward compatible
                 });
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                return BadRequest(new { message = "Sai Email hoặc Mật khẩu!" });
+                // Log full exception for easier debugging (includes stack trace and inner exceptions)
+                _logger.LogError(ex, "Login failed for {Email}", request.Email);
+
+                var msg = ex.Message ?? "";
+                var isInvalidCredentials =
+                    msg.Contains("INVALID_LOGIN_CREDENTIALS") ||
+                    msg.Contains("INVALID_PASSWORD") ||
+                    msg.Contains("WRONG_PASSWORD") ||
+                    msg.Contains("EMAIL_NOT_FOUND") ||
+                    msg.Contains("USER_NOT_FOUND");
+
+                if (isInvalidCredentials)
+                {
+                    return BadRequest(new { message = "Sai Email ho\u1eb7c M\u1eadt kh\u1ea9u!" });
+                }
+
+                if (msg.Contains("TOO_MANY_ATTEMPTS_TRY_LATER") || msg.Contains("QUOTA_EXCEEDED"))
+                    return BadRequest(new { message = "Tài khoản bị tạm khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau vài phút!" });
+                if (msg.Contains("USER_DISABLED"))
+                    return BadRequest(new { message = "Tài khoản này đã bị vô hiệu hóa. Vui lòng liên hệ hỗ trợ!" });
+                if (msg.Contains("NETWORK_REQUEST_FAILED"))
+                    return StatusCode(503, new { message = "Không thể kết nối đến Firebase. Vui lòng thử lại!" });
+                if (msg.Contains("invalid_grant", StringComparison.OrdinalIgnoreCase) ||
+                    msg.Contains("Invalid JWT", StringComparison.OrdinalIgnoreCase))
+                    return StatusCode(503, new { message = "Lỗi Firebase Admin credential hoặc giờ hệ thống. Hãy đồng bộ lại giờ máy và kiểm tra service account key." });
+                return BadRequest(new { message = "Sai Email ho\u1eb7c M\u1eadt kh\u1ea9u!" });
             }
         }
 

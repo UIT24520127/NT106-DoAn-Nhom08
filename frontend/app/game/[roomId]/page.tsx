@@ -148,6 +148,14 @@ export default function RoomPage() {
             newConn.invoke("GetRoomState", roomId).catch(console.error);
         });
 
+        newConn.on("RoomError", (message: string) => {
+            console.error("RoomError:", message);
+            if (!roomState) {
+                alert(message);
+                window.location.href = "/menu";
+            }
+        });
+
         newConn.on('UserJoinedVoice', async (newcomerId: string) => {
             if (!peers.current[newcomerId]) {
                 const peer = await createPeer(newcomerId, newConn, true);

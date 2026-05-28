@@ -19,11 +19,13 @@ namespace ServerUndercover.Services
         //Cấp từ khi bắt đầu ván mới, xóa khi ván kết thúc
         private readonly List<WordPair> _localWordPool = new(); // Kho từ tạm thời trên RAM
         private readonly FirebaseClient _firebaseClient;
+        private readonly IHttpClientFactory _httpClientFactory;
 
-        // Constructor của Service nhận FirebaseClient được inject từ hệ thống DI
-        public RoomManagerService(Firebase.Database.FirebaseClient firebaseClient)
+        // Constructor nhận cả FirebaseClient và IHttpClientFactory từ DI
+        public RoomManagerService(Firebase.Database.FirebaseClient firebaseClient, IHttpClientFactory httpClientFactory)
         {
             _firebaseClient = firebaseClient;
+            _httpClientFactory = httpClientFactory;
 
             // Kích hoạt nạp từ khóa từ Firebase lên RAM ngầm ngay khi Server khởi động (dotnet run)
             _ = InitializeWordPoolAsync();
@@ -42,10 +44,25 @@ namespace ServerUndercover.Services
                 if (room.Players.TryGetValue(userId, out RoomPlayer? player))
                 {
                     player.ConnectionId = connectionId;
+                    player.IsConnected = true;
+                    player.DisconnectedAt = null;
                 }
             }
 
             return oldConnectionId; // Trả về old connection để Hub gửi lệnh ForceLogout
+        }
+
+        public void MarkDisconnected(string userId)
+        {
+            if (_userRooms.TryGetValue(userId, out string? roomId) && _rooms.TryGetValue(roomId, out Room? room))
+            {
+                if (room.Players.TryGetValue(userId, out RoomPlayer? player))
+                {
+                    player.ConnectionId = string.Empty;
+                    player.IsConnected = false;
+                    player.DisconnectedAt = DateTime.UtcNow;
+                }
+            }
         }
 
         public void RemoveConnection(string userId)
@@ -110,6 +127,7 @@ namespace ServerUndercover.Services
                 UserId = hostId,
                 DisplayName = displayName,
                 ConnectionId = GetConnectionId(hostId) ?? string.Empty,
+                IsConnected = true,
                 IsReady = true // Host mặc định ready
             };
 
@@ -131,12 +149,26 @@ namespace ServerUndercover.Services
                 return null;
             }
 
-            // Nếu user đã ở trong chính phòng này rồi (VD: refresh trang, accept invite khi đã ở sẵn)
+            // Nếu user đã ở trong chính phòng này rồi (VD: refresh trang, reconnect khi đang chơi)
             if (_userRooms.TryGetValue(userId, out string? currentRoomId) && currentRoomId == roomId)
             {
                 if (room.Players.TryGetValue(userId, out var existingPlayer))
                 {
+                    // Nếu đang ở trong phòng chơi, chỉ cho reconnect khi game chưa qua quá nhiều giai đoạn
+                    if (room.State == RoomState.Playing && !existingPlayer.IsConnected)
+                    {
+                        if (room.Phase == GamePhase.WhiteHatGuess || room.Phase == GamePhase.GameEnd)
+                        {
+                            // Người chơi đã bỏ lỡ quá nhiều, loại khỏi trò chơi để tránh join lại khi đã qua phần mô tả/vote
+                            LeaveRoom(userId);
+                            errorMessage = "Bạn đã bỏ lỡ phần mô tả và vote. Hãy vào phòng chờ để chơi ván tiếp theo.";
+                            return null;
+                        }
+                    }
+
                     existingPlayer.ConnectionId = GetConnectionId(userId) ?? string.Empty;
+                    existingPlayer.IsConnected = true;
+                    existingPlayer.DisconnectedAt = null;
                 }
                 return room;
             }
@@ -173,7 +205,8 @@ namespace ServerUndercover.Services
             {
                 UserId = userId,
                 DisplayName = displayName,
-                ConnectionId = GetConnectionId(userId) ?? string.Empty
+                ConnectionId = GetConnectionId(userId) ?? string.Empty,
+                IsConnected = true
             };
 
             room.Players.TryAdd(userId, player);
@@ -257,18 +290,6 @@ namespace ServerUndercover.Services
         #endregion
 
         #region Word Pair Management
-
-        private readonly IHttpClientFactory _httpClientFactory;
-
-        // CỦA BẠN: Cập nhật Constructor để hệ thống tự động Inject IHttpClientFactory vào
-        public RoomManagerService(Firebase.Database.FirebaseClient firebaseClient, IHttpClientFactory httpClientFactory)
-        {
-            _firebaseClient = firebaseClient;
-            _httpClientFactory = httpClientFactory; // Lưu lại factory để tái sử dụng socket
-
-            // Kích hoạt nạp từ khóa từ Firebase lên RAM ngầm ngay khi Server khởi động (dotnet run)
-            _ = InitializeWordPoolAsync();
-        }
 
         /// <summary>
         /// Hàm khởi tạo: Tải chính xác mảng từ đang lưu trên Firebase Realtime Database về RAM
@@ -482,6 +503,155 @@ namespace ServerUndercover.Services
                 _localWordPool.AddRange(fallbackWords);
             }
             _ = _firebaseClient.Child("WordBank/AvailableWords").PutAsync(_localWordPool);
+        }
+
+        #endregion
+
+        #region Game Loop
+
+        /// <summary>
+        /// Xáo trộn và tạo mảng TurnOrder từ danh sách người còn sống.
+        /// Gọi mỗi khi bắt đầu vòng Describing mới.
+        /// </summary>
+        public void BuildTurnOrder(string roomId)
+        {
+            if (!_rooms.TryGetValue(roomId, out Room? room)) return;
+
+            var alivePlayers = room.Players.Values
+                .Where(p => !p.IsEliminated)
+                .Select(p => p.UserId)
+                .OrderBy(_ => Guid.NewGuid()) // Shuffle
+                .ToList();
+
+            room.TurnOrder = alivePlayers;
+            room.CurrentTurnIndex = 0;
+            room.Phase = GamePhase.Describing;
+        }
+
+        /// <summary>
+        /// Chuyển sang phase Voting: reset phiếu, tính VoteEndTime.
+        /// </summary>
+        public void StartVotingPhase(string roomId)
+        {
+            if (!_rooms.TryGetValue(roomId, out Room? room)) return;
+
+            // Reset votes và VoteCount
+            room.Votes.Clear();
+            foreach (var p in room.Players.Values)
+                p.VoteCount = 0;
+
+            room.Phase = GamePhase.Voting;
+            // 3 phút tính từ bây giờ, dùng Unix milliseconds để client dễ đồng bộ
+            room.VoteEndTime = DateTimeOffset.UtcNow.AddMinutes(3).ToUnixTimeMilliseconds();
+        }
+
+        public record VoteCastResult(bool Success, int NewVoteCount, string ErrorMessage);
+
+        /// <summary>
+        /// Ghi nhận một phiếu vote. Mỗi người chỉ vote 1 lần, không được vote cho mình / người chết.
+        /// Trả về số phiếu mới nhất của target.
+        /// </summary>
+        public VoteCastResult CastVote(string roomId, string voterId, string targetId)
+        {
+            if (!_rooms.TryGetValue(roomId, out Room? room))
+                return new VoteCastResult(false, 0, "Phòng không tồn tại.");
+
+            if (room.Phase != GamePhase.Voting)
+                return new VoteCastResult(false, 0, "Hiện không phải phase vote.");
+
+            if (voterId == targetId)
+                return new VoteCastResult(false, 0, "Không thể vote cho chính mình.");
+
+            if (!room.Players.TryGetValue(targetId, out var target) || target.IsEliminated)
+                return new VoteCastResult(false, 0, "Mục tiêu không hợp lệ.");
+
+            if (room.Votes.ContainsKey(voterId))
+                return new VoteCastResult(false, 0, "Bạn đã vote rồi.");
+
+            room.Votes[voterId] = targetId;
+            target.VoteCount++;
+
+            return new VoteCastResult(true, target.VoteCount, string.Empty);
+        }
+
+        public record VoteResolution(bool IsDraw, string? EliminatedUserId, string? EliminatedDisplayName);
+
+        /// <summary>
+        /// Tổng kết vote: ai nhiều phiếu nhất? Hòa không?
+        /// Nếu có người bị loại, đánh dấu IsEliminated = true và tăng RoundNumber.
+        /// </summary>
+        public VoteResolution ResolveVotes(string roomId)
+        {
+            if (!_rooms.TryGetValue(roomId, out Room? room))
+                return new VoteResolution(true, null, null);
+
+            // Đếm phiếu
+            var voteCounts = room.Votes.Values
+                .GroupBy(v => v)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            if (!voteCounts.Any())
+                return new VoteResolution(true, null, null); // Không ai vote → hòa
+
+            int maxVotes = voteCounts.Values.Max();
+            var topPlayers = voteCounts.Where(kv => kv.Value == maxVotes).ToList();
+
+            // Hòa: nhiều người cùng phiếu cao nhất
+            if (topPlayers.Count > 1)
+                return new VoteResolution(true, null, null);
+
+            string eliminatedId = topPlayers[0].Key;
+            if (!room.Players.TryGetValue(eliminatedId, out var eliminatedPlayer))
+                return new VoteResolution(true, null, null);
+
+            eliminatedPlayer.IsEliminated = true;
+            room.RoundNumber++;
+
+            return new VoteResolution(false, eliminatedId, eliminatedPlayer.DisplayName);
+        }
+
+        public record WinCheckResult(bool IsGameOver, string? WinnerRole, string Reason);
+
+        /// <summary>
+        /// Kiểm tra 3 điều kiện kết thúc game sau mỗi lần loại người.
+        /// Ưu tiên: WhiteHat thắng > BlackHat thắng > Civilian thắng
+        /// </summary>
+        public WinCheckResult CheckWinConditions(string roomId)
+        {
+            if (!_rooms.TryGetValue(roomId, out Room? room))
+                return new WinCheckResult(false, null, string.Empty);
+
+            var alive = room.Players.Values.Where(p => !p.IsEliminated).ToList();
+
+            int aliveBlackHats = alive.Count(p => p.Role == "BlackHat");
+            int aliveWhiteHats = alive.Count(p => p.Role == "WhiteHat");
+            int aliveCivilians = alive.Count(p => p.Role == "Civilian");
+
+            // Điều kiện 3: Dân thắng — không còn BlackHat và WhiteHat nào sống
+            if (aliveBlackHats == 0 && aliveWhiteHats == 0)
+                return new WinCheckResult(true, "Civilian", "Dân thường đã tiêu diệt toàn bộ kẻ thù!");
+
+            // Điều kiện 2: Đen thắng — BlackHat >= Civilian còn sống
+            if (aliveBlackHats >= aliveCivilians)
+                return new WinCheckResult(true, "BlackHat", "Mũ Đen đã chiếm đa số!");
+
+            return new WinCheckResult(false, null, string.Empty);
+        }
+
+        /// <summary>
+        /// Lưu từ miêu tả vào lịch sử của người chơi, tăng CurrentTurnIndex.
+        /// Trả về true nếu đã hết lượt (cần chuyển sang Voting).
+        /// </summary>
+        public bool SubmitDescription(string roomId, string userId, string word)
+        {
+            if (!_rooms.TryGetValue(roomId, out Room? room)) return false;
+            if (!room.Players.TryGetValue(userId, out var player)) return false;
+
+            player.DescriptionHistory.Add(word);
+            room.CurrentTurnIndex++;
+
+            // Kiểm tra đã hết mảng TurnOrder chưa
+            return room.CurrentTurnIndex >= room.TurnOrder.Count;
         }
 
         #endregion
