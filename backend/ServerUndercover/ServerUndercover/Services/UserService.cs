@@ -1,4 +1,4 @@
-﻿using Google.Cloud.Firestore;
+using Google.Cloud.Firestore;
 
 namespace ServerUndercover.Services
 {
@@ -24,6 +24,18 @@ namespace ServerUndercover.Services
                 return snapshot.ToDictionary(); // Lấy data thật từ Firestore
             }
             return null;
+        }
+
+        public async Task<bool> UpdateAvatar(string userId, string avatarData)
+        {
+            userId = userId.Trim();
+            DocumentReference docRef = _firestore.Collection("users").Document(userId);
+            Dictionary<string, object> updates = new Dictionary<string, object>
+            {
+                { "avatar", avatarData }
+            };
+            await docRef.UpdateAsync(updates);
+            return true;
         }
     }
 }

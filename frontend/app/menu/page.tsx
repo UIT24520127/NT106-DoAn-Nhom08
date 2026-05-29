@@ -28,7 +28,8 @@ export default function MainMenu() {
     undercoverWins: 0,
     mrWhiteWins: 0,
     winRate: "0%",
-    mostPlayedRole: "---"
+    mostPlayedRole: "---",
+    avatar: ""
   });
 
   const [isSearchOverlayOpen, setIsSearchOverlayOpen] = useState(false);
@@ -86,14 +87,15 @@ export default function MainMenu() {
             winRate: (data.totalGames || data.TotalGames) > 0
               ? (((data.wins || data.Wins) / (data.totalGames || data.TotalGames)) * 100).toFixed(1) + "%"
               : "0%",
-            mostPlayedRole: data.mostPlayedRole || data.MostPlayedRole || "Tân binh"
+            mostPlayedRole: data.mostPlayedRole || data.MostPlayedRole || "Tân binh",
+            avatar: data.avatar || data.Avatar || ""
           });
         }
       } catch (error) {
         console.error("Lỗi kết nối Backend:", error);
       }
     };
-    if (isProfileOpen) fetchProfile();
+    fetchProfile();
   }, [isProfileOpen]);
 
   const handleLogout = async () => {
@@ -215,9 +217,14 @@ export default function MainMenu() {
 
         <button
           onClick={() => setIsProfileOpen(true)}
-          className="bg-[#1a1c23] p-3 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg"
+          className="relative bg-[#1a1c23] w-[52px] h-[52px] rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg flex items-center justify-center overflow-hidden"
         >
-          <User size={24} color="white" strokeWidth={2.5} />
+          {playerStats.avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={playerStats.avatar} alt="User Avatar" className="w-full h-full object-cover" />
+          ) : (
+            <User size={24} color="white" strokeWidth={2.5} />
+          )}
         </button>
       </div>
 
@@ -260,6 +267,9 @@ export default function MainMenu() {
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         stats={playerStats}
+        onAvatarUpdated={(newAvatar) => {
+          setPlayerStats(prev => ({ ...prev, avatar: newAvatar }));
+        }}
       />
 
       {/* 👇 THÊM MỚI: FRIEND MODAL */}
