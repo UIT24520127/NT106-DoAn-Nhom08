@@ -574,6 +574,37 @@ namespace ServerUndercover.Services
             return new VoteCastResult(true, target.VoteCount, string.Empty);
         }
 
+        public VoteCastResult ChangeVote(string roomId, string voterId, string targetId)
+        {
+            if (!_rooms.TryGetValue(roomId, out Room? room))
+                return new VoteCastResult(false, 0, "Phong khong ton tai.");
+
+            if (room.Phase != GamePhase.Voting)
+                return new VoteCastResult(false, 0, "Hien khong phai phase vote.");
+
+            if (voterId == targetId)
+                return new VoteCastResult(false, 0, "Khong the vote cho chinh minh.");
+
+            if (!room.Players.TryGetValue(targetId, out var newTarget) || newTarget.IsEliminated)
+                return new VoteCastResult(false, 0, "Muc tieu khong hop le.");
+
+            if (!room.Votes.TryGetValue(voterId, out var oldTargetId))
+                return new VoteCastResult(false, 0, "Ban chua vote.");
+
+            if (oldTargetId == targetId)
+                return new VoteCastResult(true, newTarget.VoteCount, string.Empty);
+
+            if (room.Players.TryGetValue(oldTargetId, out var oldTarget) && oldTarget.VoteCount > 0)
+            {
+                oldTarget.VoteCount--;
+            }
+
+            room.Votes[voterId] = targetId;
+            newTarget.VoteCount++;
+
+            return new VoteCastResult(true, newTarget.VoteCount, string.Empty);
+        }
+
         public record VoteResolution(bool IsDraw, string? EliminatedUserId, string? EliminatedDisplayName);
 
         /// <summary>
@@ -611,6 +642,90 @@ namespace ServerUndercover.Services
         }
 
         public record WinCheckResult(bool IsGameOver, string? WinnerRole, string Reason);
+
+        public async Task CreateGameSessionAsync(Room room)
+        {
+            room.CurrentGameSessionId = Guid.NewGuid().ToString("N");
+            await _firebaseClient
+                .Child("gameSessions")
+                .Child(room.RoomId)
+                .Child(room.CurrentGameSessionId)
+                .PutAsync(new
+                {
+                    roomId = room.RoomId,
+                    status = "playing",
+                    phase = room.Phase.ToString(),
+                    roundNumber = room.RoundNumber,
+                    createdAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                });
+        }
+
+        public async Task UpdateGameSessionPhaseAsync(Room room)
+        {
+            if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
+
+            await _firebaseClient
+                .Child("gameSessions")
+                .Child(room.RoomId)
+                .Child(room.CurrentGameSessionId)
+                .PatchAsync(new
+                {
+                    phase = room.Phase.ToString(),
+                    roundNumber = room.RoundNumber,
+                    updatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                });
+        }
+
+        public async Task RecordDescriptionAsync(Room room, string userId, string text, string source, int turnIndex)
+        {
+            if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
+
+            await _firebaseClient
+                .Child("gameSessions")
+                .Child(room.RoomId)
+                .Child(room.CurrentGameSessionId)
+                .Child("descriptions")
+                .Child(room.RoundNumber.ToString())
+                .Child(userId)
+                .PutAsync(new
+                {
+                    text,
+                    source,
+                    turnIndex,
+                    submittedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                });
+        }
+
+        public async Task RecordVoteAsync(Room room, string voterId, string targetId)
+        {
+            if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
+
+            await _firebaseClient
+                .Child("gameSessions")
+                .Child(room.RoomId)
+                .Child(room.CurrentGameSessionId)
+                .Child("votes")
+                .Child(room.RoundNumber.ToString())
+                .Child(voterId)
+                .PutAsync(new
+                {
+                    targetId,
+                    submittedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                });
+        }
+
+        public async Task DeleteGameSessionAsync(Room room)
+        {
+            if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
+
+            await _firebaseClient
+                .Child("gameSessions")
+                .Child(room.RoomId)
+                .Child(room.CurrentGameSessionId)
+                .DeleteAsync();
+
+            room.CurrentGameSessionId = string.Empty;
+        }
 
         /// <summary>
         /// Kiểm tra 3 điều kiện kết thúc game sau mỗi lần loại người.

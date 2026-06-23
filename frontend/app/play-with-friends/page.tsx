@@ -51,7 +51,7 @@ export default function PlayWithFriends() {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem("token") || "";
+    const token = sessionStorage.getItem("token") || "";
     
     const connection = getSignalRConnection(token);
     setHubConnection(connection);

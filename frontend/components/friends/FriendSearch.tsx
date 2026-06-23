@@ -39,7 +39,7 @@ export default function FriendSearch({ token, onAvatarClick }: { token: string; 
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      const myUid = localStorage.getItem("userId");
+      const myUid = sessionStorage.getItem("userId");
       if (myUid) {
         await set(ref(realtimeDb, `friendRequests/${targetUserId}/${myUid}`), Date.now());
       }

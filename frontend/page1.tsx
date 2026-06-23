@@ -14,8 +14,8 @@ export default function RoomPage() {
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
-    const token = localStorage.getItem("token") || "";
-    const currentUserId = localStorage.getItem("userId") || "";
+    const token = sessionStorage.getItem("token") || "";
+    const currentUserId = sessionStorage.getItem("userId") || "";
     setUserId(currentUserId);
 
     const connection = getSignalRConnection(token);
@@ -97,7 +97,7 @@ export default function RoomPage() {
     );
   }
 
-  const isHost = roomState.hostId === userId;
+  const isHost = Boolean(roomState.hostId && roomState.hostId === userId);
   const players = Object.values(roomState.players || {}) as any[];
   const myPlayer = players.find(p => p.userId === userId);
   const isMyPlayerReady = myPlayer?.isReady ?? false;

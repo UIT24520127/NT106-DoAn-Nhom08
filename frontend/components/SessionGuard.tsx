@@ -25,7 +25,7 @@ export default function SessionGuard() {
     }
 
     const startConnection = async () => {
-      const uid = localStorage.getItem("userId");
+      const uid = sessionStorage.getItem("userId");
       if (!uid || uid === "null" || uid === "undefined") {
         return; // No user ID, probably not logged in
       }
@@ -84,7 +84,7 @@ export default function SessionGuard() {
 
   const handleConfirmLogout = async () => {
     setShowPopup(false);
-    localStorage.removeItem("userId");
+    sessionStorage.removeItem("userId");
     await logout(); // This will clear token and redirect to /login
   };
 

@@ -30,7 +30,7 @@ export default function FriendsPage() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    const uid = localStorage.getItem("userId");
+    const uid = sessionStorage.getItem("userId");
     if (!uid) return;
     const requestsRef = ref(realtimeDb, `friendRequests/${uid}`);
     const unsubscribe = onValue(requestsRef, (snapshot) => {
@@ -45,7 +45,7 @@ export default function FriendsPage() {
   }, []);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("token");
+    const storedToken = sessionStorage.getItem("token");
     if (storedToken) {
       setToken(storedToken);
     } else {

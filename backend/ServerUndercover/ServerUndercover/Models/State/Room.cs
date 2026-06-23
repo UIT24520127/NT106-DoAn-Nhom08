@@ -7,6 +7,10 @@ namespace ServerUndercover.Models.State
         public int MaxPlayers { get; set; } = 6;
         public int MaxBlackHats { get; set; } = 1;
         public int MaxWhiteHats { get; set; } = 1;
+        public bool RevealEliminatedRole { get; set; } = true;
+        public int DescribeDuration { get; set; } = 30;
+        public int VoteDuration { get; set; } = 60;
+        public int RoundTransitionDuration { get; set; } = 5;
     }
 
     public enum RoomState
@@ -18,6 +22,8 @@ namespace ServerUndercover.Models.State
 
     public enum GamePhase
     {
+        Loading,
+        RoleReveal,
         Describing,
         Voting,
         WhiteHatGuess,
@@ -44,14 +50,23 @@ namespace ServerUndercover.Models.State
         // GAME LOOP STATE
         // ============================================================
 
-        /// <summary>Phase hiện tại của game (Describing / Voting / WhiteHatGuess / GameEnd)</summary>
-        public GamePhase Phase { get; set; } = GamePhase.Describing;
+        /// <summary>Phase hiện tại của game (RoleReveal / Describing / Voting / WhiteHatGuess / GameEnd)</summary>
+        public GamePhase Phase { get; set; } = GamePhase.RoleReveal;
+
+        public DateTime? LoadingStartedAt { get; set; }
+        public int LoadingTimeoutSeconds { get; set; } = 10;
+        public bool LoadingClosed { get; set; } = false;
+        public ConcurrentDictionary<string, bool> LoadingReadyPlayerIds { get; set; } = new();
+        public string CurrentGameSessionId { get; set; } = string.Empty;
 
         /// <summary>Thứ tự lượt miêu tả (danh sách UserId của người còn sống, shuffle mỗi vòng)</summary>
         public List<string> TurnOrder { get; set; } = new();
 
         /// <summary>Index vào TurnOrder cho người đang đến lượt miêu tả</summary>
         public int CurrentTurnIndex { get; set; } = 0;
+
+        /// <summary>Thời điểm kết thúc lượt miêu tả hiện tại (Unix ms, để client sync countdown)</summary>
+        public long CurrentTurnEndTime { get; set; } = 0;
 
         /// <summary>Thời điểm kết thúc voting (Unix ms, để client sync countdown)</summary>
         public long VoteEndTime { get; set; } = 0;

@@ -44,7 +44,7 @@ export default function FriendRequests({
       });
       setRequests(requests.filter(r => r.friendshipId !== friendshipId));
 
-      const myUid = localStorage.getItem("userId");
+      const myUid = sessionStorage.getItem("userId");
       if (myUid) {
         await remove(ref(realtimeDb, `friendRequests/${myUid}/${requesterId}`));
       }

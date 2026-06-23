@@ -17,7 +17,7 @@ export default function FriendList({ token, onAvatarClick }: { token: string; on
   const [invitedUser, setInvitedUser] = useState<string | null>(null);
 
   useEffect(() => {
-    const uid = localStorage.getItem("userId");
+    const uid = sessionStorage.getItem("userId");
     if (!uid) return;
 
     setLoading(true);

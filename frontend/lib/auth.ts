@@ -4,17 +4,17 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"; // U
 
 // Lưu token sau khi đăng nhập thành công(locastorage cuar trinh duyet)
 export function saveToken(token: string) {
-  localStorage.setItem("token", token);
+  sessionStorage.setItem("token", token);
 }
 
 // Lấy token (dùng khi cần gọi API cần xác thực)
 export function getToken(): string | null {
-  return localStorage.getItem("token");
+  return sessionStorage.getItem("token");
 }
 
 // Kiểm tra đã đăng nhập chưa (dùng để bảo vệ route)
 export function isLoggedIn(): boolean {
-  return !!localStorage.getItem("token");
+  return !!sessionStorage.getItem("token");
 }
 
 // Đăng xuất
@@ -24,7 +24,7 @@ export async function logout() {
   } catch (error) {
     console.error("Lỗi logout:", error);
   } finally {
-    localStorage.removeItem("token");
+    sessionStorage.removeItem("token");
     window.location.href = "/login"; // Redirect về trang login
   }
 }

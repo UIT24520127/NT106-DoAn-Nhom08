@@ -57,13 +57,13 @@ export default function LoginPage() {
 
       if (res.ok) {
         saveToken(data.token);
-        localStorage.setItem("token", data.token);
+        sessionStorage.setItem("token", data.token);
         // fix: backend trả 'userId' và 'uid' — đọc cả hai để chắc chắn
         const nameToSave = data.username || data.email || "Người chơi";
-        localStorage.setItem("username", nameToSave);
+        sessionStorage.setItem("username", nameToSave);
         const idToSave = data.userId || data.uid || data.Id;
         if (idToSave) {
-          localStorage.setItem("userId", idToSave);
+          sessionStorage.setItem("userId", idToSave);
           console.log("Đã lưu userId:", idToSave);
         } else {
           console.warn("Cảnh báo: Backend không trả về userId!");
@@ -90,12 +90,12 @@ export default function LoginPage() {
       const checkRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/user/profile/${user.uid}`);
       if (checkRes.ok) {
         saveToken(idToken);
-        localStorage.setItem("userId", user.uid);
+        sessionStorage.setItem("userId", user.uid);
         console.log("Đã đăng nhập Google, userId:", user.uid);
         showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
       } else if (checkRes.status === 404) {
         saveToken(idToken);
-        localStorage.setItem("userId", user.uid);
+        sessionStorage.setItem("userId", user.uid);
         setGoogleUid(user.uid);
         setShowGooglePopup(true);
       } else {
@@ -103,7 +103,9 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error("Google login error:", err);
-      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        showPopup("Hủy đăng nhập", "Đã hủy đăng nhập bằng Google.", false);
+      } else {
         showPopup("Thất bại", "Đăng nhập bằng Google thất bại.", false);
       }
     } finally {

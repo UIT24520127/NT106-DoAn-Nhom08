@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Nunito } from "next/font/google";
 import "./globals.css";
 import SessionGuard from "@/components/SessionGuard";
 
-// Thay thế font Geist bằng Inter để hỗ trợ hoàn hảo dấu Tiếng Việt
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
+  variable: "--font-inter",
+});
+
+const nunito = Nunito({
+  subsets: ["latin", "vietnamese"],
+  variable: "--font-nunito",
+  weight: ["400", "600", "700", "800", "900"],
 });
 
 // Sẵn tiện mình đổi luôn Tiêu đề tab trình duyệt cho ngầu đúng chất game nhé!
@@ -23,7 +29,7 @@ export default function RootLayout({
     // Đổi lang="en" thành lang="vi" để tối ưu cho trình duyệt
     <html lang="vi">
       <body
-        className={`${inter.className} antialiased`}
+        className={`${inter.variable} ${nunito.variable} font-sans antialiased`}
       >
         <SessionGuard />
         {children}

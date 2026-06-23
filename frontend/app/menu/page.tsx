@@ -53,10 +53,10 @@ export default function MainMenu() {
 
   // 👈 THÊM MỚI: Lấy token + lắng nghe pending friend requests từ RTDB
   useEffect(() => {
-    const stored = localStorage.getItem("token");
+    const stored = sessionStorage.getItem("token");
     if (stored) setToken(stored);
 
-    const uid = localStorage.getItem("userId");
+    const uid = sessionStorage.getItem("userId");
     if (!uid) return;
     const requestsRef = ref(realtimeDb, `friendRequests/${uid}`);
     const unsub = onValue(requestsRef, (snap) => {
@@ -68,9 +68,9 @@ export default function MainMenu() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        let uid = localStorage.getItem("userId");
+        let uid = sessionStorage.getItem("userId");
         if (!uid || uid === "null" || uid === "undefined") {
-          console.error("LỖI: Không tìm thấy userId trong localStorage!");
+          console.error("LỖI: Không tìm thấy userId trong sessionStorage!");
           return;
         }
         const response = await fetch(`https://localhost:7210/api/user/profile/${uid}`);
@@ -98,14 +98,14 @@ export default function MainMenu() {
 
   const handleLogout = async () => {
     setShowSettingsMenu(false);
-    localStorage.removeItem("userId");
+    sessionStorage.removeItem("userId");
     await logout();
   };
 
   const handleFindMatch = async () => {
     setIsSearchOverlayOpen(true);
     setSearchStatus("Đang thiết lập kết nối...");
-    const token = localStorage.getItem("token") || "";
+    const token = sessionStorage.getItem("token") || "";
     const connection = getSignalRConnection(token);
     setHubConnection(connection);
     connection.off("WaitingForPlayers");
