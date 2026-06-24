@@ -1,11 +1,13 @@
 import * as signalR from "@microsoft/signalr";
 
+import { API_URL } from "./auth";
+
 let connection: signalR.HubConnection | null = null;
 
 export const getSignalRConnection = (token: string): signalR.HubConnection => {
   if (!connection) {
     connection = new signalR.HubConnectionBuilder()
-      .withUrl("https://localhost:7210/gamehub", {
+      .withUrl(`${API_URL}/gamehub`, {
         accessTokenFactory: () => token,
         skipNegotiation: true,
         transport: signalR.HttpTransportType.WebSockets

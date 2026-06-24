@@ -18,9 +18,10 @@ interface UserProfileProps {
     avatar?: string;       // Thêm ảnh đại diện
   };
   onAvatarUpdated?: (newAvatar: string) => void;
+  isOwnProfile?: boolean;
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats, onAvatarUpdated }) => {
+const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats, onAvatarUpdated, isOwnProfile = false }) => {
   const [animate, setAnimate] = useState(false);
   const [localAvatar, setLocalAvatar] = useState(stats.avatar || "");
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -67,8 +68,10 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats, onAva
           
           {/* Avatar tròn tương tác */}
           <div 
-            onClick={() => setIsEditModalOpen(true)}
-            className="group relative w-24 h-24 mb-4 rounded-full border-2 border-gray-600 hover:border-[#e6a822] cursor-pointer shadow-lg overflow-hidden flex items-center justify-center bg-gradient-to-tr from-[#111317] to-[#1a1c23] transition-all duration-300"
+            onClick={() => isOwnProfile && setIsEditModalOpen(true)}
+            className={`group relative w-24 h-24 mb-4 rounded-full border-2 border-gray-600 shadow-lg overflow-hidden flex items-center justify-center bg-gradient-to-tr from-[#111317] to-[#1a1c23] transition-all duration-300 ${
+              isOwnProfile ? 'hover:border-[#e6a822] cursor-pointer' : 'cursor-default'
+            }`}
           >
             {localAvatar ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -84,10 +87,12 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats, onAva
             )}
             
             {/* Lớp phủ hover đổi ảnh đại diện */}
-            <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-              <Camera size={20} className="text-[#e6a822]" />
-              <span className="text-[9px] font-black text-white mt-1 tracking-wider uppercase">Đổi ảnh</span>
-            </div>
+            {isOwnProfile && (
+              <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <Camera size={20} className="text-[#e6a822]" />
+                <span className="text-[9px] font-black text-white mt-1 tracking-wider uppercase">Đổi ảnh</span>
+              </div>
+            )}
           </div>
 
           <h2 className="text-3xl font-black text-white tracking-tight drop-shadow-md">

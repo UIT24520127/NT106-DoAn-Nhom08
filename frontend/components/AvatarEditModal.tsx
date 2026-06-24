@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import { X, Upload, Check, Sparkles, Image as ImageIcon } from "lucide-react";
+import { API_URL } from "@/lib/auth";
 
 interface AvatarEditModalProps {
   isOpen: boolean;
@@ -218,7 +219,7 @@ export default function AvatarEditModal({
       }
 
       // Gửi API cập nhật lên Firestore
-      const response = await fetch(`https://localhost:7210/api/user/profile/${userId}/avatar`, {
+      const response = await fetch(`${API_URL}/api/user/profile/${userId}/avatar`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

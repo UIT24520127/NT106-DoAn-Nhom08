@@ -9,6 +9,9 @@ import {
 } from '@microsoft/signalr';
 import { Shield } from 'lucide-react';
 import ChatBox from '@/components/ChatBox';
+import { ref, set } from 'firebase/database';
+import { realtimeDb } from '@/lib/firebase';
+import { API_URL } from '@/lib/auth';
 
 type PeerInstance = any;
 
@@ -28,6 +31,26 @@ export default function RoomPage() {
     const params = useParams();
     const roomId = params.roomId as string;
     const [connection, setConnection] = useState<HubConnection | null>(null);
+
+    // Tự động cập nhật Trạng thái Presence là In-Match khi bắt đầu vào Game
+    useEffect(() => {
+        const myId = localStorage.getItem("userId");
+        if (!myId) return;
+
+        const presenceRef = ref(realtimeDb, `presence/${myId}`);
+        set(presenceRef, {
+            status: "In-Match",
+            lastSeen: Date.now()
+        }).catch(console.error);
+
+        return () => {
+            // Khi thoát trận đấu, trả lại trạng thái Online
+            set(presenceRef, {
+                status: "Online",
+                lastSeen: Date.now()
+            }).catch(console.error);
+        };
+    }, []);
 
     // =========================
     // Trạng thái ván đấu & Mật danh
@@ -132,7 +155,7 @@ export default function RoomPage() {
 
         // 1. Khởi tạo kết nối với Factory Token động
         const newConn = new HubConnectionBuilder()
-            .withUrl("http://localhost:5120/gamehub", {
+            .withUrl(`${API_URL}/gamehub`, {
                 // Luôn lấy token mới nhất từ localStorage mỗi khi kết nối hoặc reconnect
                 accessTokenFactory: () => localStorage.getItem('token') || ""
             })
