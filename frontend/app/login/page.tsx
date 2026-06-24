@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { saveToken } from "@/lib/auth";
@@ -9,6 +9,13 @@ import { auth, googleProvider } from "@/lib/firebase";
 
 export default function LoginPage() {
   const router = useRouter();
+
+  useEffect(() => {
+    const token = sessionStorage.getItem("token");
+    if (token) {
+      router.push("/menu");
+    }
+  }, [router]);
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isGoogleLoggingIn, setIsGoogleLoggingIn] = useState(false);

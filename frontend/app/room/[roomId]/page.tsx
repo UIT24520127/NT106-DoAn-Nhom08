@@ -35,6 +35,7 @@ export default function RoomPage() {
     revealEliminatedRole: true,
     roundTransitionDuration: 5,
   });
+  const [popup, setPopup] = useState({ isOpen: false, title: "", message: "", redirectOnClose: false });
 
   useEffect(() => {
     const storedToken = sessionStorage.getItem("token") || "";
@@ -82,18 +83,14 @@ export default function RoomPage() {
       setTimeout(() => setErrorMsg(""), 3000);
       setRoomState((prev: any) => {
         if (!prev) {
-          setTimeout(() => {
-            alert(message);
-            router.push("/menu");
-          }, 0);
+          setPopup({ isOpen: true, title: "Lỗi Phòng", message, redirectOnClose: true });
         }
         return prev;
       });
     });
 
     connection.on("KickedFromRoom", (message: string) => {
-      alert(message);
-      router.push("/menu");
+      setPopup({ isOpen: true, title: "Đã Bị Kích", message, redirectOnClose: true });
     });
 
     if (connection.state === signalR.HubConnectionState.Disconnected) {
@@ -693,6 +690,25 @@ export default function RoomPage() {
           pendingCount={pendingCount}
         />
       )}
+      {/* POPUP THÔNG BÁO */}
+      {popup.isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-[#fcf8e8] w-full max-w-sm rounded-xl shadow-2xl border-2 border-[#d3b88b] p-6 text-center animate-fade-in">
+            <h2 className="text-2xl font-black mb-2 text-red-700">{popup.title}</h2>
+            <p className="text-[#3e2723] font-medium text-base mb-6">{popup.message}</p>
+            <button
+              onClick={() => {
+                setPopup({ ...popup, isOpen: false });
+                if (popup.redirectOnClose) router.push('/menu');
+              }}
+              className="w-full bg-[#3e2723] hover:bg-[#2b1b18] text-white font-bold py-2.5 rounded shadow transition-transform active:scale-95"
+            >
+              Đã hiểu
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

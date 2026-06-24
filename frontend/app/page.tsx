@@ -9,7 +9,12 @@ export default function LoadingScreen() {
   useEffect(() => {
     // Đợi 3 giây (3000ms) rồi tự động chuyển sang trang login
     const timer = setTimeout(() => {
-      router.push("/login");
+      const token = sessionStorage.getItem("token");
+      if (token) {
+        router.push("/menu");
+      } else {
+        router.push("/login");
+      }
     }, 3000);
     return () => clearTimeout(timer);
   }, [router]);

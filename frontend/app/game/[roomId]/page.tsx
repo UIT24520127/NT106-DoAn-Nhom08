@@ -7,7 +7,7 @@ import {
     HubConnectionBuilder,
     HubConnectionState
 } from '@microsoft/signalr';
-import { Shield, MessageSquare, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, CheckCircle2, LogOut } from 'lucide-react';
+import { Shield, MessageSquare, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, CheckCircle2, LogOut, Key } from 'lucide-react';
 import ChatBox from '@/components/ChatBox';
 import RoleRevealingScreen from '@/components/game/RoleRevealingScreen';
 import DescribingPhase from '@/components/game/DescribingPhase';
@@ -309,6 +309,7 @@ export default function GameRoomPage() {
         if (!connection) return;
         try { await connection.invoke("BackToLobby"); }
         catch (e) { console.error("PlayAgain error:", e); }
+        router.push(`/room/${roomId}`);
     };
 
     const handleUpdateSettings = async (newSettings: any) => {
@@ -536,20 +537,7 @@ export default function GameRoomPage() {
         });
 
         newConn.on("ReturnedToLobby", () => {
-            setGamePhase('lobby');
-            setMySecret(null);
-            setGameEndedData(null);
-            setRoomState((prev: any) => {
-                if (!prev) return prev;
-                const newPlayers = { ...prev.players };
-                Object.keys(newPlayers).forEach(k => {
-                    newPlayers[k].isReady = false;
-                    newPlayers[k].isEliminated = false;
-                    newPlayers[k].role = undefined;
-                    newPlayers[k].descriptionHistory = [];
-                });
-                return { ...prev, players: newPlayers };
-            });
+            console.log("Phòng đã được reset bởi chủ phòng. Bạn có thể tự bấm Chơi Lại.");
         });
 
         newConn.on("LoadingPhaseStarted", async (data: { timeoutSeconds?: number; totalCount?: number; startedAt?: number; readyCount?: number; readyPlayerIds?: string[] }) => {
@@ -1068,7 +1056,7 @@ export default function GameRoomPage() {
                     players={gameEndedData.players}
                     myUserId={currentUserId}
                     roomId={roomId}
-                    onPlayAgain={isHost ? handlePlayAgain : undefined}
+                    onPlayAgain={handlePlayAgain}
                     backgroundImage={backgroundImage}
                 />
             </div>
@@ -1085,9 +1073,29 @@ export default function GameRoomPage() {
                 {showWhiteHatGuess && (
                     <WhiteHatGuessOverlay
                         isWhiteHat={mySecret?.role === 'WhiteHat'}
-                        pendingWinner={pendingWinner}
                         onGuess={handleWhiteHatGuess}
+                        onCancel={() => setShowWhiteHatGuess(false)}
                     />
+                )}
+                {mySecret?.role === 'WhiteHat' && !isEliminated && !showWhiteHatGuess && (
+                    <button
+                        onClick={() => setShowWhiteHatGuess(true)}
+                        style={{
+                            position: "fixed", bottom: 24, left: 24, zIndex: 60,
+                            padding: "14px 28px", borderRadius: 99, border: "2px solid #FFD700",
+                            background: "linear-gradient(135deg, #2b1b18, #3e2723)",
+                            color: "#FFD700", fontWeight: 900, cursor: "pointer",
+                            boxShadow: "0 4px 20px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255,215,0,0.1)",
+                            display: "flex", alignItems: "center", gap: 10,
+                            letterSpacing: "0.05em",
+                            transition: "transform 0.2s"
+                        }}
+                        onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.05)"}
+                        onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"}
+                    >
+                        <Key size={20} />
+                        ĐOÁN TỪ KHÓA
+                    </button>
                 )}
                 <DescribingPhase
                     players={playersForDescribing}
@@ -1144,9 +1152,29 @@ export default function GameRoomPage() {
                 {showWhiteHatGuess && (
                     <WhiteHatGuessOverlay
                         isWhiteHat={mySecret?.role === 'WhiteHat'}
-                        pendingWinner={pendingWinner}
                         onGuess={handleWhiteHatGuess}
+                        onCancel={() => setShowWhiteHatGuess(false)}
                     />
+                )}
+                {mySecret?.role === 'WhiteHat' && !isEliminated && !showWhiteHatGuess && (
+                    <button
+                        onClick={() => setShowWhiteHatGuess(true)}
+                        style={{
+                            position: "fixed", bottom: 24, left: 24, zIndex: 60,
+                            padding: "14px 28px", borderRadius: 99, border: "2px solid #FFD700",
+                            background: "linear-gradient(135deg, #2b1b18, #3e2723)",
+                            color: "#FFD700", fontWeight: 900, cursor: "pointer",
+                            boxShadow: "0 4px 20px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255,215,0,0.1)",
+                            display: "flex", alignItems: "center", gap: 10,
+                            letterSpacing: "0.05em",
+                            transition: "transform 0.2s"
+                        }}
+                        onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.05)"}
+                        onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"}
+                    >
+                        <Key size={20} />
+                        ĐOÁN TỪ KHÓA
+                    </button>
                 )}
                 <VotingGrid
                     players={playersForVoting}

@@ -89,29 +89,16 @@ export default function DescribingPhase({
   const myColor = ROLE_COLOR[myRole] ?? "#22d3ee";
 
   useEffect(() => {
-    if (turnEndTime) {
-      const calc = () => Math.max(0, Math.floor((turnEndTime - Date.now()) / 1000));
-      setTimeLeft(calc());
-      const interval = window.setInterval(() => {
-        const next = calc();
-        setTimeLeft(next);
-        if (next === 0) window.clearInterval(interval);
-      }, 1000);
-      return () => window.clearInterval(interval);
-    }
-
     setTimeLeft(describeDuration);
+    const start = Date.now();
     const interval = window.setInterval(() => {
-      setTimeLeft(t => {
-        if (t <= 1) {
-          window.clearInterval(interval);
-          return 0;
-        }
-        return t - 1;
-      });
+      const elapsed = Math.floor((Date.now() - start) / 1000);
+      const remaining = Math.max(0, describeDuration - elapsed);
+      setTimeLeft(remaining);
+      if (remaining === 0) window.clearInterval(interval);
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [currentTurnIndex, turnEndTime, describeDuration]);
+  }, [currentTurnIndex, describeDuration]);
 
   useEffect(() => {
     setDescriptionText("");

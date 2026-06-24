@@ -349,6 +349,17 @@ namespace ServerUndercover.Hubs
                 {
                     _roomManager.MarkDisconnected(userId);
                     _roomManager.RemoveConnection(userId);
+
+                    string? roomId = _roomManager.GetUserRoomId(userId);
+                    if (roomId != null)
+                    {
+                        var room = _roomManager.GetRoom(roomId);
+                        if (room != null && (room.State == RoomState.Waiting || room.State == RoomState.Finished))
+                        {
+                            _roomManager.LeaveRoom(userId);
+                            await Clients.Group(roomId).SendAsync("RoomUpdated", room);
+                        }
+                    }
                 }
             }
             await base.OnDisconnectedAsync(exception);
@@ -763,11 +774,17 @@ namespace ServerUndercover.Hubs
             room.TurnOrder.Clear();
             room.CurrentTurnIndex = 0;
             room.RoundNumber = 0;
+            room.LoadingClosed = false;
+            room.LoadingReadyPlayerIds.Clear();
+            room.LoadingStartedAt = null;
+            room.CurrentTurnEndTime = 0;
+            room.VoteEndTime = 0;
 
             // Reset all players
             foreach (var p in room.Players.Values)
             {
-                p.IsReady = false;
+                // Host luôn luôn sẵn sàng, chỉ reset cho người chơi thường
+                p.IsReady = (p.UserId == room.HostId);
                 p.IsEliminated = false;
                 p.VoteCount = 0;
                 p.Role = string.Empty;
@@ -961,7 +978,9 @@ namespace ServerUndercover.Hubs
             if (roomId == null) return;
 
             var room = _roomManager.GetRoom(roomId);
-            if (room == null || room.HostId != userId) return;
+            if (room == null) return;
+            // Cho phép bất kỳ ai bấm Chơi Lại (chuyển về Waiting)
+            if (room.State != RoomState.Finished && room.HostId != userId) return;
             if (room.Phase != GamePhase.Voting) return;
 
             // Skip = tổng kết với votes hiện tại (hoặc hòa nếu chưa ai vote)
@@ -984,44 +1003,59 @@ namespace ServerUndercover.Hubs
                 eliminatedDisplayName = resolution.EliminatedDisplayName
             });
 
-            if (!resolution.IsDraw)
+            if (!resolution.IsDraw && resolution.EliminatedUserId != null)
             {
+                var eliminatedPlayer = room.Players[resolution.EliminatedUserId];
+                bool isWhiteHatEliminated = eliminatedPlayer.Role == "WhiteHat";
+
                 // Kiểm tra điều kiện thắng
                 var winCheck = _roomManager.CheckWinConditions(roomId);
 
-                // Nếu có Mũ Trắng còn sống và game sắp kết thúc → cho đoán hấp hối
-                bool hasAliveWhiteHat = room.Players.Values.Any(p => p.Role == "WhiteHat" && !p.IsEliminated);
+                await BroadcastPlayerEliminated(roomId, resolution);
+                await BroadcastRoundTransition(roomId, room, resolution);
 
-                if (winCheck.IsGameOver && hasAliveWhiteHat)
-                {
-                    room.Phase = GamePhase.WhiteHatGuess;
-                    await _roomManager.UpdateGameSessionPhaseAsync(room);
-                    await Clients.Group(roomId).SendAsync("WhiteHatOpportunity", new
-                    {
-                        pendingWinner = winCheck.WinnerRole,
-                        timeLeft = 30
-                    });
-                    return;
-                }
+                await Task.Delay(room.Settings.RoundTransitionDuration * 1000);
 
                 if (winCheck.IsGameOver)
                 {
+                    bool hasAliveWhiteHat = room.Players.Values.Any(p => !p.IsEliminated && p.Role == "WhiteHat");
+
+                    if (hasAliveWhiteHat)
+                    {
+                        room.Phase = GamePhase.WhiteHatGuess;
+                        await _roomManager.UpdateGameSessionPhaseAsync(room);
+                        await Clients.Group(roomId).SendAsync("WhiteHatOpportunity", new
+                        {
+                            pendingWinner = winCheck.WinnerRole,
+                            timeLeft = 30
+                        });
+                        return;
+                    }
+
                     room.Phase = GamePhase.GameEnd;
                     room.State = RoomState.Finished;
                     await _roomManager.DeleteGameSessionAsync(room);
                     await Clients.Group(roomId).SendAsync("GameEnded", new
                     {
                         winnerRole = winCheck.WinnerRole,
-                        reason = winCheck.Reason
+                        civilianWord = room.Players.Values.FirstOrDefault(p => p.Role == "Civilian")?.Word,
+                        players = room.Players.Values.Select(p => new
+                        {
+                            userId = p.UserId,
+                            displayName = p.DisplayName,
+                            role = p.Role,
+                            isEliminated = p.IsEliminated
+                        }).ToList()
                     });
                     return;
                 }
             }
+            else
+            {
+                await BroadcastRoundTransition(roomId, room, resolution);
+                await Task.Delay(room.Settings.RoundTransitionDuration * 1000);
+            }
 
-            await BroadcastPlayerEliminated(roomId, resolution);
-            await BroadcastRoundTransition(roomId, room, resolution);
-
-            await Task.Delay(5000);
             _roomManager.BuildTurnOrder(roomId);
             await _roomManager.UpdateGameSessionPhaseAsync(room);
             await BroadcastTurnOrderGenerated(room);
@@ -1066,8 +1100,15 @@ namespace ServerUndercover.Hubs
                 await _roomManager.DeleteGameSessionAsync(room);
                 await Clients.Group(roomId).SendAsync("GameEnded", new
                 {
-                    winnerRole = "WhiteHat",
-                    reason = $"Mũ Trắng đã đoán đúng từ khóa '{civilianWord}'!"
+                    winner = "WhiteHat",
+                    civilianWord = civilianWord,
+                    players = room.Players.Values.Select(p => new
+                    {
+                        userId = p.UserId,
+                        displayName = p.DisplayName,
+                        role = p.Role,
+                        isEliminated = p.IsEliminated
+                    }).ToList()
                 });
             }
             else
@@ -1080,6 +1121,12 @@ namespace ServerUndercover.Hubs
                     displayName = player.DisplayName
                 });
 
+                await Clients.Group(roomId).SendAsync("PlayerEliminated", new
+                {
+                    userId = userId,
+                    displayName = player.DisplayName
+                });
+
                 // Kiểm tra lại điều kiện thắng (không còn WhiteHat)
                 var winCheck = _roomManager.CheckWinConditions(roomId);
                 if (winCheck.IsGameOver)
@@ -1089,22 +1136,24 @@ namespace ServerUndercover.Hubs
                     await _roomManager.DeleteGameSessionAsync(room);
                     await Clients.Group(roomId).SendAsync("GameEnded", new
                     {
-                        winnerRole = winCheck.WinnerRole,
-                        reason = winCheck.Reason
+                        winner = winCheck.WinnerRole,
+                        civilianWord = room.Players.Values.FirstOrDefault(p => p.Role == "Civilian")?.Word,
+                        players = room.Players.Values.Select(p => new
+                        {
+                            userId = p.UserId,
+                            displayName = p.DisplayName,
+                            role = p.Role,
+                            isEliminated = p.IsEliminated
+                        }).ToList()
                     });
                 }
                 else
                 {
-                    // Tiếp tục game bình thường
-                    await Task.Delay(2000);
-                    _roomManager.BuildTurnOrder(roomId);
-                    await _roomManager.UpdateGameSessionPhaseAsync(room);
-                    await Clients.Group(roomId).SendAsync("PhaseChanged", new
+                    // Nếu đang tới lượt của người này, tự động bỏ qua lượt
+                    if (room.Phase == GamePhase.Describing && room.CurrentTurnIndex < room.TurnOrder.Count && room.TurnOrder[room.CurrentTurnIndex] == userId)
                     {
-                        phase = "Describing",
-                        turnOrder = room.TurnOrder,
-                        currentTurnIndex = 0
-                    });
+                        await SkipTurn();
+                    }
                 }
             }
         }
