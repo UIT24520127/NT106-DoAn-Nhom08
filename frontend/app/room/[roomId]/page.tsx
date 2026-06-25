@@ -36,6 +36,7 @@ export default function RoomPage() {
     roundTransitionDuration: 5,
   });
   const [popup, setPopup] = useState({ isOpen: false, title: "", message: "", redirectOnClose: false });
+  const [hasUnread, setHasUnread] = useState(false);
 
   useEffect(() => {
     const storedToken = sessionStorage.getItem("token") || "";
@@ -283,15 +284,40 @@ export default function RoomPage() {
             </h1>
           </div>
 
-          {/* Player count */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-            padding: "8px 16px", borderRadius: 10,
-          }}>
-            <Users size={15} style={{ color: "rgba(255,255,255,0.4)" }} />
-            <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>{players.length}</span>
-            <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 13 }}>/ {settings.maxPlayers || "?"}</span>
+          {/* Player count and Invite */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+              padding: "8px 16px", borderRadius: 10,
+            }}>
+              <Users size={15} style={{ color: "rgba(255,255,255,0.4)" }} />
+              <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>{players.length}</span>
+              <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 13 }}>/ {settings.maxPlayers || "?"}</span>
+            </div>
+            
+            <button
+              onClick={() => setIsFriendOpen(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: 8,
+                background: "#e6a822", color: "#000",
+                padding: "8px 16px", borderRadius: 10,
+                fontWeight: 900, fontSize: 13, cursor: "pointer",
+                border: "none", position: "relative",
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.05)"}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"}
+            >
+              <Users size={15} /> MỜI BẠN BÈ
+              {(pendingCount > 0 || hasUnread) && (
+                <span style={{
+                  position: "absolute", top: -4, right: -4,
+                  width: 12, height: 12, background: "#ef4444",
+                  borderRadius: "50%", border: "2px solid #1a1c23"
+                }} />
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -396,8 +422,13 @@ export default function RoomPage() {
                     color: isMe ? "#e6a822" : "#6366f1",
                     marginTop: isPlayerHost ? 10 : 0,
                     boxShadow: isMe ? "0 0 16px rgba(230,168,34,0.2)" : "none",
+                    overflow: "hidden",
                   }}>
-                    {player.displayName?.charAt(0)?.toUpperCase() || "?"}
+                    {player.avatar ? (
+                      <img src={player.avatar} alt={player.displayName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      player.displayName?.charAt(0)?.toUpperCase() || "?"
+                    )}
                   </div>
 
                   {/* Name */}
@@ -688,20 +719,32 @@ export default function RoomPage() {
           onClose={() => setIsFriendOpen(false)}
           token={token}
           pendingCount={pendingCount}
+          showInvite={true}
         />
       )}
       {/* POPUP THÔNG BÁO */}
       {popup.isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="bg-[#fcf8e8] w-full max-w-sm rounded-xl shadow-2xl border-2 border-[#d3b88b] p-6 text-center animate-fade-in">
-            <h2 className="text-2xl font-black mb-2 text-red-700">{popup.title}</h2>
-            <p className="text-[#3e2723] font-medium text-base mb-6">{popup.message}</p>
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", padding: 16,
+        }}>
+          <div style={{
+            background: "#fcf8e8", width: "100%", maxWidth: 400, borderRadius: 12,
+            boxShadow: "0 25px 50px -12px rgba(0,0,0,0.5)",
+            border: "2px solid #d3b88b", padding: 24, textAlign: "center",
+          }}>
+            <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 8, color: "#b91c1c" }}>{popup.title}</h2>
+            <p style={{ color: "#3e2723", fontWeight: 500, fontSize: 16, marginBottom: 24 }}>{popup.message}</p>
             <button
               onClick={() => {
                 setPopup({ ...popup, isOpen: false });
                 if (popup.redirectOnClose) router.push('/menu');
               }}
-              className="w-full bg-[#3e2723] hover:bg-[#2b1b18] text-white font-bold py-2.5 rounded shadow transition-transform active:scale-95"
+              style={{
+                width: "100%", background: "#3e2723", color: "#fff", fontWeight: 700,
+                padding: "10px 0", borderRadius: 4, border: "none", cursor: "pointer",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+              }}
             >
               Đã hiểu
             </button>

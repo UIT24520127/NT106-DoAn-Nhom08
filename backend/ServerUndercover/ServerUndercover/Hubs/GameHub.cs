@@ -34,9 +34,12 @@ namespace ServerUndercover.Hubs
             return room != null && !string.IsNullOrEmpty(userId) && room.HostId == userId;
         }
         
-        private async Task<string> GetDisplayNameAsync(string userId)
+        private async Task<(string displayName, string avatar)> GetUserProfileAsync(string userId)
         {
-            if (string.IsNullOrEmpty(userId)) return string.Empty;
+            string displayName = "Player_" + (userId.Length > 4 ? userId.Substring(0, 4) : userId);
+            string avatar = string.Empty;
+
+            if (string.IsNullOrEmpty(userId)) return (displayName, avatar);
             
             try 
             {
@@ -45,13 +48,15 @@ namespace ServerUndercover.Hubs
                 
                 if (snapshot.Exists)
                 {
-                    if (snapshot.TryGetValue("username", out string username)) return username;
-                    if (snapshot.TryGetValue("Username", out string usernameCapital)) return usernameCapital;
+                    if (snapshot.TryGetValue("username", out string username)) displayName = username;
+                    else if (snapshot.TryGetValue("Username", out string usernameCapital)) displayName = usernameCapital;
+
+                    if (snapshot.TryGetValue("avatar", out string userAvatar)) avatar = userAvatar;
                 }
             }
-            catch (Exception) { /* Bỏ qua lỗi, dùng fallback bên dưới */ }
+            catch (Exception) { /* Bỏ qua lỗi */ }
             
-            return Context.User?.FindFirst("name")?.Value ?? "Player_" + userId.Substring(0, 4);
+            return (displayName, avatar);
         }
 
         private object SanitizePlayer(RoomPlayer player)
@@ -368,7 +373,7 @@ namespace ServerUndercover.Hubs
         public async Task CreateRoom(int maxPlayers, int maxBlackHats, int maxWhiteHats, bool isPublic)
         {
             string userId = GetUserId();
-            string displayName = await GetDisplayNameAsync(userId);
+            var profile = await GetUserProfileAsync(userId);
 
             var settings = new GameSettings
             {
@@ -377,7 +382,7 @@ namespace ServerUndercover.Hubs
                 MaxWhiteHats = maxWhiteHats
             };
 
-            var room = _roomManager.CreateRoom(userId, displayName, isPublic, settings, out string errorMessage);
+            var room = _roomManager.CreateRoom(userId, profile.displayName, profile.avatar, isPublic, settings, out string errorMessage);
 
             if (room == null)
             {
@@ -393,9 +398,9 @@ namespace ServerUndercover.Hubs
         public async Task JoinRoom(string roomId)
         {
             string userId = GetUserId();
-            string displayName = await GetDisplayNameAsync(userId);
+            var profile = await GetUserProfileAsync(userId);
 
-            var room = _roomManager.JoinRoom(roomId, userId, displayName, out string errorMessage);
+            var room = _roomManager.JoinRoom(roomId, userId, profile.displayName, profile.avatar, out string errorMessage);
             if (room == null)
             {
                 await Clients.Caller.SendAsync("RoomError", errorMessage);

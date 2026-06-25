@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { Users, Settings, LogOut, X, User } from "lucide-react";
-import { logout } from "@/lib/auth";
+import { logout, API_URL } from "@/lib/auth";
 import UserProfile from "@/components/UserProfile";
 import FriendModal from "@/components/friends/FriendModal"; 
 import * as signalR from "@microsoft/signalr";
@@ -9,6 +9,75 @@ import { getSignalRConnection } from "@/lib/signalRConnection";
 import { ref, onValue } from "firebase/database";      
 import { realtimeDb } from "@/lib/firebase";            
 import { useRouter } from "next/navigation";
+
+// ─── Avatar Cache Helpers ────────────────────────────────────────────────────
+// Lưu avatar DiceBear dưới dạng Base64 trong localStorage để tránh gọi lại
+// api.dicebear.com mỗi lần render. Cache bị xóa khi URL avatar thay đổi.
+
+function getAvatarCacheKey(uid: string) {
+  return `avatar_cache_${uid}`;
+}
+function getAvatarCacheUrlKey(uid: string) {
+  return `avatar_cache_url_${uid}`;
+}
+
+/** Trả về Base64 đã cache nếu URL khớp, ngược lại trả về null */
+function getAvatarFromCache(uid: string, avatarUrl: string): string | null {
+  try {
+    const cachedUrl = localStorage.getItem(getAvatarCacheUrlKey(uid));
+    if (cachedUrl !== avatarUrl) return null; // URL đổi rồi → cache không còn hợp lệ
+    return localStorage.getItem(getAvatarCacheKey(uid));
+  } catch {
+    return null;
+  }
+}
+
+/** Lưu Base64 avatar vào cache kèm URL tương ứng */
+function saveAvatarToCache(uid: string, avatarUrl: string, base64: string) {
+  try {
+    localStorage.setItem(getAvatarCacheKey(uid), base64);
+    localStorage.setItem(getAvatarCacheUrlKey(uid), avatarUrl);
+  } catch {
+    // Bỏ qua nếu localStorage đầy
+  }
+}
+
+/** Xóa cache avatar (gọi khi đổi avatar mới) */
+function clearAvatarCache(uid: string) {
+  try {
+    localStorage.removeItem(getAvatarCacheKey(uid));
+    localStorage.removeItem(getAvatarCacheUrlKey(uid));
+  } catch {
+    // Bỏ qua
+  }
+}
+
+/**
+ * Download SVG từ DiceBear URL rồi convert sang Base64 để cache.
+ * Nếu thành công, lưu vào localStorage và cập nhật state.
+ */
+async function fetchAndCacheDiceBearAvatar(
+  uid: string,
+  avatarUrl: string,
+  onCached: (base64: string) => void
+) {
+  try {
+    const res = await fetch(avatarUrl);
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+    saveAvatarToCache(uid, avatarUrl, base64);
+    onCached(base64);
+  } catch {
+    // Giữ nguyên URL nếu fetch thất bại
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function MainMenu() {
   const [showOptions, setShowOptions] = useState(false);
@@ -20,6 +89,8 @@ export default function MainMenu() {
   const [isFriendOpen, setIsFriendOpen] = useState(false);  
   const [token, setToken] = useState("");                    
   const [pendingCount, setPendingCount] = useState(0);       
+  // Lazy initializer: đọc cache avatar từ localStorage NGAY LẬP TỨC (đồng bộ)
+  // trước khi render lần đầu → avatar hiển thị không cần chờ API
   const [playerStats, setPlayerStats] = useState({
     username: "Đang tải...",
     totalGames: 0,
@@ -28,7 +99,8 @@ export default function MainMenu() {
     undercoverWins: 0,
     mrWhiteWins: 0,
     winRate: "0%",
-    mostPlayedRole: "---"
+    mostPlayedRole: "---",
+    avatar: ""
   });
 
   const [isSearchOverlayOpen, setIsSearchOverlayOpen] = useState(false);
@@ -51,31 +123,74 @@ export default function MainMenu() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 👈 THÊM MỚI: Lấy token + lắng nghe pending friend requests từ RTDB
+  const [hasUnread, setHasUnread] = useState(false);
+
+  // 👈 THÊM MỚI: Lấy token + lắng nghe pending friend requests và unread messages từ RTDB
   useEffect(() => {
     const stored = sessionStorage.getItem("token");
     if (stored) setToken(stored);
 
     const uid = sessionStorage.getItem("userId");
     if (!uid) return;
+
+    // Đọc cache avatar từ localStorage an toàn trên client sau khi component mount (tránh lỗi Hydration Mismatch)
+    try {
+      const cachedData = localStorage.getItem(getAvatarCacheKey(uid));
+      if (cachedData) {
+        setPlayerStats(prev => ({ ...prev, avatar: cachedData }));
+      }
+    } catch (e) {
+      console.error("Lỗi đọc cache avatar:", e);
+    }
+
     const requestsRef = ref(realtimeDb, `friendRequests/${uid}`);
-    const unsub = onValue(requestsRef, (snap) => {
+    const unsubRequests = onValue(requestsRef, (snap) => {
       setPendingCount(snap.exists() ? Object.keys(snap.val()).length : 0);
     });
-    return () => unsub();
+
+    const unreadRef = ref(realtimeDb, `unread_messages/${uid}`);
+    const unsubUnread = onValue(unreadRef, (snap) => {
+      setHasUnread(snap.exists());
+    });
+
+    return () => {
+      unsubRequests();
+      unsubUnread();
+    };
   }, []);
 
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        let uid = sessionStorage.getItem("userId");
+        const uid = localStorage.getItem("userId");
         if (!uid || uid === "null" || uid === "undefined") {
           console.error("LỖI: Không tìm thấy userId trong sessionStorage!");
           return;
         }
-        const response = await fetch(`https://localhost:7210/api/user/profile/${uid}`);
+        const response = await fetch(`${API_URL}/api/user/profile/${uid}`);
         if (response.ok) {
           const data = await response.json();
+          const avatarUrl: string = data.avatar || data.Avatar || "";
+
+          // ── Xử lý Avatar với Cache ──────────────────────────────────────
+          let displayAvatar = avatarUrl;
+
+          if (avatarUrl.includes("dicebear.com")) {
+            // Kiểm tra cache trước — nếu có thì hiển thị ngay, không cần gọi dicebear.com
+            const cached = getAvatarFromCache(uid, avatarUrl);
+            if (cached) {
+              displayAvatar = cached;
+            } else {
+              // Chưa có cache: hiển thị URL gốc trước (để không bị trống),
+              // đồng thời fetch ngầm và cache lại cho lần sau
+              displayAvatar = avatarUrl;
+              fetchAndCacheDiceBearAvatar(uid, avatarUrl, (base64) => {
+                setPlayerStats(prev => ({ ...prev, avatar: base64 }));
+              });
+            }
+          }
+          // ────────────────────────────────────────────────────────────────
+
           setPlayerStats({
             username: data.username || data.Username || "Đặc vụ ẩn danh",
             totalGames: data.totalGames || data.TotalGames || 0,
@@ -86,15 +201,16 @@ export default function MainMenu() {
             winRate: (data.totalGames || data.TotalGames) > 0
               ? (((data.wins || data.Wins) / (data.totalGames || data.TotalGames)) * 100).toFixed(1) + "%"
               : "0%",
-            mostPlayedRole: data.mostPlayedRole || data.MostPlayedRole || "Tân binh"
+            mostPlayedRole: data.mostPlayedRole || data.MostPlayedRole || "Tân binh",
+            avatar: displayAvatar,
           });
         }
       } catch (error) {
         console.error("Lỗi kết nối Backend:", error);
       }
     };
-    if (isProfileOpen) fetchProfile();
-  }, [isProfileOpen]);
+    fetchProfile();
+  }, []); // Chỉ fetch 1 lần khi mount — không re-fetch khi đóng/mở modal
 
   const handleLogout = async () => {
     setShowSettingsMenu(false);
@@ -166,17 +282,15 @@ export default function MainMenu() {
       {/* 3 NÚT GÓC TRÊN PHẢI */}
       <div className="absolute top-6 right-8 flex gap-3 z-20">
 
-        {/* 👇 SỬA: Từ router.push('/friends') thành mở FriendModal */}
+        {/* 👇 SỬA: Từ router.push('/friends') thành mở FriendSidebar */}
         <button
           onClick={() => setIsFriendOpen(true)}
-          className="relative bg-[#1a1c23] p-3 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg"
+          className="relative bg-[#1a1c23] p-3 rounded-2xl border-2 border-transparent hover:border-[#e6a822] hover:shadow-[0_0_15px_rgba(230,168,34,0.3)] transition shadow-lg active:scale-95 duration-200"
         >
           <Users size={24} color="white" strokeWidth={2.5} />
-          {/* Badge số lời mời */}
-          {pendingCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-black text-[9px] font-black rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
-              {pendingCount}
-            </span>
+          {/* Badge hoặc Chấm đỏ thông báo phát sáng */}
+          {(pendingCount > 0 || hasUnread) && (
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-[#1a1c23] animate-pulse shadow-[0_0_8px_#ef4444]" />
           )}
         </button>
 
@@ -215,9 +329,14 @@ export default function MainMenu() {
 
         <button
           onClick={() => setIsProfileOpen(true)}
-          className="bg-[#1a1c23] p-3 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg"
+          className="relative bg-[#1a1c23] w-[52px] h-[52px] rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg flex items-center justify-center overflow-hidden"
         >
-          <User size={24} color="white" strokeWidth={2.5} />
+          {playerStats.avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={playerStats.avatar} alt="User Avatar" className="w-full h-full object-cover" />
+          ) : (
+            <User size={24} color="white" strokeWidth={2.5} />
+          )}
         </button>
       </div>
 
@@ -260,6 +379,13 @@ export default function MainMenu() {
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         stats={playerStats}
+        onAvatarUpdated={(newAvatar) => {
+          // Xóa cache cũ khi đổi avatar mới để lần fetch tiếp theo cache lại đúng
+          const uid = localStorage.getItem("userId") || "";
+          if (uid) clearAvatarCache(uid);
+          setPlayerStats(prev => ({ ...prev, avatar: newAvatar }));
+        }}
+        isOwnProfile={true}
       />
 
       {/* 👇 THÊM MỚI: FRIEND MODAL */}

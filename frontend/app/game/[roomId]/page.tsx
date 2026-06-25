@@ -16,6 +16,9 @@ import VotingGrid from '@/components/game/VotingGrid';
 import RoundTransitionScreen from '@/components/game/RoundTransitionScreen';
 import GameEndedScreen from '@/components/game/GameEndedScreen';
 import WhiteHatGuessOverlay from '@/components/game/WhiteHatGuessOverlay';
+import { ref, set } from 'firebase/database';
+import { realtimeDb } from '@/lib/firebase';
+import { API_URL } from '@/lib/auth';
 
 type PeerInstance = any;
 
@@ -128,6 +131,26 @@ export default function GameRoomPage() {
     const router = useRouter();
     const roomId = params.roomId as string;
     const [connection, setConnection] = useState<HubConnection | null>(null);
+
+    // Tự động cập nhật Trạng thái Presence là In-Match khi bắt đầu vào Game
+    useEffect(() => {
+        const myId = localStorage.getItem("userId");
+        if (!myId) return;
+
+        const presenceRef = ref(realtimeDb, `presence/${myId}`);
+        set(presenceRef, {
+            status: "In-Match",
+            lastSeen: Date.now()
+        }).catch(console.error);
+
+        return () => {
+            // Khi thoát trận đấu, trả lại trạng thái Online
+            set(presenceRef, {
+                status: "Online",
+                lastSeen: Date.now()
+            }).catch(console.error);
+        };
+    }, []);
 
     // ── Secret & Phase ──────────────────────
     const [mySecret, setMySecret] = useState<{ role: string; word: string } | null>(null);
@@ -456,12 +479,12 @@ export default function GameRoomPage() {
     // ================================
     useEffect(() => {
         let isMounted = true;
-        const storedUserId = sessionStorage.getItem('userId') || '';
+        const storedUserId = localStorage.getItem('userId') || '';
         setCurrentUserId(storedUserId);
 
         const newConn = new HubConnectionBuilder()
-            .withUrl("http://localhost:5120/gamehub", {
-                accessTokenFactory: () => sessionStorage.getItem('token') || ""
+            .withUrl(`${API_URL}/gamehub`, {
+                accessTokenFactory: () => localStorage.getItem('token') || ""
             })
             .withAutomaticReconnect()
             .build();

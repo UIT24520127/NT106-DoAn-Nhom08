@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
-import { X, Trophy, Gamepad2, Target, Star } from "lucide-react";
+import { X, Trophy, Gamepad2, Target, Star, Camera, User as UserIcon } from "lucide-react";
+import AvatarEditModal from "./AvatarEditModal";
 
 interface UserProfileProps {
   isOpen: boolean;
@@ -14,11 +15,16 @@ interface UserProfileProps {
     mrWhiteWins: number;    // Thêm mới
     winRate: string;
     mostPlayedRole: string;
+    avatar?: string;       // Thêm ảnh đại diện
   };
+  onAvatarUpdated?: (newAvatar: string) => void;
+  isOwnProfile?: boolean;
 }
 
-const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats }) => {
+const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats, onAvatarUpdated, isOwnProfile = false }) => {
   const [animate, setAnimate] = useState(false);
+  const [localAvatar, setLocalAvatar] = useState(stats.avatar || "");
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -29,7 +35,13 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats }) => 
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    setLocalAvatar(stats.avatar || "");
+  }, [stats.avatar]);
+
   if (!isOpen && !animate) return null;
+
+  const userId = typeof window !== "undefined" ? localStorage.getItem("userId") || "" : "";
 
   return (
     <>
@@ -53,12 +65,39 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats }) => 
 
         {/* TIÊU ĐỀ HỒ SƠ */}
         <div className="flex flex-col items-center mb-8 border-b border-gray-700 pb-6">
-          <div className="bg-[#e6a822] p-4 rounded-full shadow-lg mb-4">
-            <Star size={40} color="black" strokeWidth={2.5} />
+          
+          {/* Avatar tròn tương tác */}
+          <div 
+            onClick={() => isOwnProfile && setIsEditModalOpen(true)}
+            className={`group relative w-24 h-24 mb-4 rounded-full border-2 border-gray-600 shadow-lg overflow-hidden flex items-center justify-center bg-gradient-to-tr from-[#111317] to-[#1a1c23] transition-all duration-300 ${
+              isOwnProfile ? 'hover:border-[#e6a822] cursor-pointer' : 'cursor-default'
+            }`}
+          >
+            {localAvatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img 
+                src={localAvatar} 
+                alt="Đặc vụ Avatar" 
+                className="w-full h-full object-cover rounded-full" 
+              />
+            ) : (
+              <div className="flex items-center justify-center w-full h-full text-[#e6a822] font-black text-3xl">
+                {stats.username ? stats.username.charAt(0).toUpperCase() : <Star size={36} />}
+              </div>
+            )}
+            
+            {/* Lớp phủ hover đổi ảnh đại diện */}
+            {isOwnProfile && (
+              <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <Camera size={20} className="text-[#e6a822]" />
+                <span className="text-[9px] font-black text-white mt-1 tracking-wider uppercase">Đổi ảnh</span>
+              </div>
+            )}
           </div>
+
           <h2 className="text-3xl font-black text-white tracking-tight drop-shadow-md">
             {stats.username}
-          </h2> {/* <-- Sửa chỗ này: Đóng h2 thay vì div */}
+          </h2>
           <p className="text-[#e6a822] font-bold text-sm mt-1 uppercase tracking-widest">
             Hồ sơ đặc vụ
           </p>
@@ -73,7 +112,6 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats }) => 
         {/* CHI TIẾT TRẬN THẮNG THEO VAI TRÒ */}
         <p className="text-gray-400 text-xs uppercase tracking-widest mb-3 font-bold">Thắng theo vai trò</p>
         <div className="space-y-3">
-          {/* Bạn có thể tạo Component mới hoặc dùng lại StatCard nhưng chỉnh layout */}
           <StatCard icon={Trophy} label="Dân thường" value={stats.civilianWins} color="#22c55e" />
           <StatCard icon={Trophy} label="Mũ đen" value={stats.undercoverWins} color="#ef4444" />
           <StatCard icon={Trophy} label="Mũ trắng" value={stats.mrWhiteWins} color="#ffffff" />
@@ -83,6 +121,20 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats }) => 
           Đóng
         </button>
       </div>
+
+      {/* MODAL CẮT VÀ CHỌN ẢNH ĐẠI DIỆN */}
+      <AvatarEditModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        userId={userId}
+        currentAvatar={localAvatar}
+        onAvatarUpdated={(newAvatar) => {
+          setLocalAvatar(newAvatar);
+          if (onAvatarUpdated) {
+            onAvatarUpdated(newAvatar);
+          }
+        }}
+      />
     </>
   );
 };

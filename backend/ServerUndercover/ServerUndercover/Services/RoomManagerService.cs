@@ -92,7 +92,7 @@ namespace ServerUndercover.Services
             return roomId;
         }
 
-        public Room? CreateRoom(string hostId, string displayName, bool isPublic, GameSettings settings, out string errorMessage)
+        public Room? CreateRoom(string hostId, string displayName, string avatar, bool isPublic, GameSettings settings, out string errorMessage)
         {
             errorMessage = string.Empty;
 
@@ -126,6 +126,7 @@ namespace ServerUndercover.Services
             {
                 UserId = hostId,
                 DisplayName = displayName,
+                Avatar = avatar,
                 ConnectionId = GetConnectionId(hostId) ?? string.Empty,
                 IsConnected = true,
                 IsReady = true // Host mặc định ready
@@ -139,7 +140,7 @@ namespace ServerUndercover.Services
             return room;
         }
 
-        public Room? JoinRoom(string roomId, string userId, string displayName, out string errorMessage)
+        public Room? JoinRoom(string roomId, string userId, string displayName, string avatar, out string errorMessage)
         {
             errorMessage = string.Empty;
 
@@ -169,6 +170,7 @@ namespace ServerUndercover.Services
                     existingPlayer.ConnectionId = GetConnectionId(userId) ?? string.Empty;
                     existingPlayer.IsConnected = true;
                     existingPlayer.DisconnectedAt = null;
+                    existingPlayer.Avatar = avatar;
                 }
                 return room;
             }
@@ -205,6 +207,7 @@ namespace ServerUndercover.Services
             {
                 UserId = userId,
                 DisplayName = displayName,
+                Avatar = avatar,
                 ConnectionId = GetConnectionId(userId) ?? string.Empty,
                 IsConnected = true
             };
