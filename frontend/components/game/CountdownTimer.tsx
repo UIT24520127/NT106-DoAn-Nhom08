@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 interface CountdownTimerProps {
   /** Unix milliseconds timestamp khi vote kết thúc */
@@ -9,6 +9,11 @@ interface CountdownTimerProps {
 
 export default function CountdownTimer({ endTime, onExpired }: CountdownTimerProps) {
   const [timeLeft, setTimeLeft] = useState(0);
+  const onExpiredRef = useRef(onExpired);
+
+  useEffect(() => {
+    onExpiredRef.current = onExpired;
+  }, [onExpired]);
 
   useEffect(() => {
     const calc = () => Math.max(0, Math.floor((endTime - Date.now()) / 1000));
@@ -19,12 +24,12 @@ export default function CountdownTimer({ endTime, onExpired }: CountdownTimerPro
       setTimeLeft(remaining);
       if (remaining === 0) {
         clearInterval(interval);
-        onExpired?.();
+        onExpiredRef.current?.();
       }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [endTime, onExpired]);
+  }, [endTime]);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;

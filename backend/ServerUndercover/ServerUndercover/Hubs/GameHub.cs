@@ -1104,28 +1104,29 @@ namespace ServerUndercover.Hubs
 
                 await Task.Delay(room.Settings.RoundTransitionDuration * 1000);
 
+                bool hasAliveWhiteHat = room.Players.Values.Any(p => !p.IsEliminated && p.Role == "WhiteHat");
+
+                if (isWhiteHatEliminated || (winCheck.IsGameOver && hasAliveWhiteHat))
+                {
+                    room.Phase = GamePhase.WhiteHatGuess;
+                    await _roomManager.UpdateGameSessionPhaseAsync(room);
+                    await SendRoomUpdatedToGroup(roomId, room);
+                    await Clients.Group(roomId).SendAsync("WhiteHatOpportunity", new
+                    {
+                        pendingWinner = winCheck.WinnerRole,
+                        timeLeft = 30
+                    });
+                    return;
+                }
+
                 if (winCheck.IsGameOver)
                 {
-                    bool hasAliveWhiteHat = room.Players.Values.Any(p => !p.IsEliminated && p.Role == "WhiteHat");
-
-                    if (hasAliveWhiteHat)
-                    {
-                        room.Phase = GamePhase.WhiteHatGuess;
-                        await _roomManager.UpdateGameSessionPhaseAsync(room);
-                        await Clients.Group(roomId).SendAsync("WhiteHatOpportunity", new
-                        {
-                            pendingWinner = winCheck.WinnerRole,
-                            timeLeft = 30
-                        });
-                        return;
-                    }
-
                     room.Phase = GamePhase.GameEnd;
                     room.State = RoomState.Finished;
                     await _roomManager.DeleteGameSessionAsync(room);
                     await Clients.Group(roomId).SendAsync("GameEnded", new
                     {
-                        winnerRole = winCheck.WinnerRole,
+                        winner = winCheck.WinnerRole,
                         civilianWord = room.Players.Values.FirstOrDefault(p => p.Role == "Civilian")?.Word,
                         players = room.Players.Values.Select(p => new
                         {
@@ -1177,8 +1178,14 @@ namespace ServerUndercover.Hubs
             string? civilianWord = room.Players.Values
                 .FirstOrDefault(p => p.Role == "Civilian")?.Word;
 
-            bool isCorrect = !string.IsNullOrEmpty(civilianWord) &&
-                civilianWord.Trim().Equals(guessedWord.Trim(), StringComparison.OrdinalIgnoreCase);
+            bool isCorrect = false;
+            if (!string.IsNullOrEmpty(civilianWord) && !string.IsNullOrEmpty(guessedWord))
+            {
+                // Normalize to handle Vietnamese diacritics robustly (NFC normalization)
+                var normCiv = civilianWord.Normalize(System.Text.NormalizationForm.FormC).Trim();
+                var normGuess = guessedWord.Normalize(System.Text.NormalizationForm.FormC).Trim();
+                isCorrect = string.Compare(normCiv, normGuess, StringComparison.InvariantCultureIgnoreCase) == 0;
+            }
 
             if (isCorrect)
             {
