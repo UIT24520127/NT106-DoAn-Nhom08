@@ -40,12 +40,18 @@ export default function RoundTransitionScreen({
   useEffect(() => {
     const interval = setInterval(() => {
       setCountdown(c => {
-        if (c <= 1) { clearInterval(interval); onCountdownEnd(); return 0; }
+        if (c <= 1) { clearInterval(interval); return 0; }
         return c - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [onCountdownEnd]);
+  }, []);
+
+  useEffect(() => {
+    if (countdown === 0) {
+      onCountdownEnd();
+    }
+  }, [countdown, onCountdownEnd]);
 
   return (
     <div style={{

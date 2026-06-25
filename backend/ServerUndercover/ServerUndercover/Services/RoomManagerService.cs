@@ -757,13 +757,32 @@ namespace ServerUndercover.Services
             int aliveBlackHats = alive.Count(p => p.Role == "BlackHat");
             int aliveWhiteHats = alive.Count(p => p.Role == "WhiteHat");
             int aliveCivilians = alive.Count(p => p.Role == "Civilian");
+            int totalAlive = alive.Count;
 
+            // Nếu chỉ còn đúng 2 người sống và có 1 Mũ Trắng
+            if (totalAlive == 2 && aliveWhiteHats == 1)
+            {
+                if (aliveCivilians == 1)
+                    return new WinCheckResult(true, "Civilian", "Chỉ còn 1 Dân và 1 Mũ Trắng!");
+                if (aliveBlackHats == 1)
+                    return new WinCheckResult(true, "BlackHat", "Chỉ còn 1 Mũ Đen và 1 Mũ Trắng!");
+            }
+
+            // NẾU MŨ TRẮNG CÒN SỐNG VÀ totalAlive > 2, THÌ GAME CHƯA KẾT THÚC!
+            // Cứ vote liên tục cho đến khi Mũ Trắng chết hoặc chỉ còn 2 người.
+            if (aliveWhiteHats > 0 && totalAlive > 2)
+            {
+                return new WinCheckResult(false, null, string.Empty);
+            }
+
+            // Các điều kiện bên dưới chỉ áp dụng khi Mũ Trắng ĐÃ CHẾT (aliveWhiteHats == 0) hoặc totalAlive <= 2
+            
             // Điều kiện 3: Dân thắng — không còn BlackHat và WhiteHat nào sống
             if (aliveBlackHats == 0 && aliveWhiteHats == 0)
                 return new WinCheckResult(true, "Civilian", "Dân thường đã tiêu diệt toàn bộ kẻ thù!");
 
-            // Điều kiện 2: Đen thắng — BlackHat >= Civilian còn sống
-            if (aliveBlackHats >= aliveCivilians)
+            // Điều kiện 2: Đen thắng — BlackHat >= Civilian còn sống (và phải có ít nhất 1 BlackHat)
+            if (aliveBlackHats > 0 && aliveBlackHats >= aliveCivilians)
                 return new WinCheckResult(true, "BlackHat", "Mũ Đen đã chiếm đa số!");
 
             return new WinCheckResult(false, null, string.Empty);

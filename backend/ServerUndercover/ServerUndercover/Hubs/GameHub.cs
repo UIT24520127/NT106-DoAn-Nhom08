@@ -234,10 +234,7 @@ namespace ServerUndercover.Hubs
                 return Task.CompletedTask;
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            if (room.CurrentTurnEndTime <= now)
-            {
-                room.CurrentTurnEndTime = DateTimeOffset.UtcNow.AddSeconds(room.Settings.DescribeDuration).ToUnixTimeMilliseconds();
-            }
+            room.CurrentTurnEndTime = now + (room.Settings.DescribeDuration * 1000);
 
             _ = EndTurnAfterTimeout(roomId, room.CurrentTurnIndex, room.CurrentTurnEndTime);
 
@@ -1081,7 +1078,14 @@ namespace ServerUndercover.Hubs
             var room = _roomManager.GetRoom(roomId);
             if (room == null) return;
 
-            var resolution = _roomManager.ResolveVotes(roomId);
+            RoomManagerService.VoteResolution resolution;
+            lock (room)
+            {
+                if (room.Phase != GamePhase.Voting) return;
+                room.Phase = GamePhase.Loading; // Ngăn chặn các request khác lọt vào
+                resolution = _roomManager.ResolveVotes(roomId);
+                room.Votes.Clear(); // Xóa phiếu bầu sau khi đã đếm xong
+            }
 
             // Broadcast kết quả vote
             await Clients.Group(roomId).SendAsync("VotingResult", new
@@ -1100,14 +1104,13 @@ namespace ServerUndercover.Hubs
                 var winCheck = _roomManager.CheckWinConditions(roomId);
 
                 await BroadcastPlayerEliminated(roomId, resolution);
-                await BroadcastRoundTransition(roomId, room, resolution);
-
-                await Task.Delay(room.Settings.RoundTransitionDuration * 1000);
 
                 bool hasAliveWhiteHat = room.Players.Values.Any(p => !p.IsEliminated && p.Role == "WhiteHat");
 
+                // Nếu Mũ Trắng bị chết HOẶC game kết thúc mà Mũ Trắng vẫn còn sống (hấp hối)
                 if (isWhiteHatEliminated || (winCheck.IsGameOver && hasAliveWhiteHat))
                 {
+                    // Chuyển sang đoán từ NGAY LẬP TỨC (không hiện màn hình RoundTransitionScreen chờ 5s)
                     room.Phase = GamePhase.WhiteHatGuess;
                     await _roomManager.UpdateGameSessionPhaseAsync(room);
                     await SendRoomUpdatedToGroup(roomId, room);
@@ -1118,6 +1121,12 @@ namespace ServerUndercover.Hubs
                     });
                     return;
                 }
+
+                // Nếu là người bình thường chết (không kích hoạt đoán từ) thì mới hiện màn hình chờ chuyển vòng
+                await BroadcastRoundTransition(roomId, room, resolution);
+
+                // Thêm 1000ms (1s) để đảm bảo frontend chạy xong hàm onTransitionEnd
+                await Task.Delay((room.Settings.RoundTransitionDuration * 1000) + 1000);
 
                 if (winCheck.IsGameOver)
                 {
@@ -1244,10 +1253,26 @@ namespace ServerUndercover.Hubs
                 }
                 else
                 {
-                    // Nếu đang tới lượt của người này, tự động bỏ qua lượt
-                    if (room.Phase == GamePhase.Describing && room.CurrentTurnIndex < room.TurnOrder.Count && room.TurnOrder[room.CurrentTurnIndex] == userId)
+                    if (room.Phase == GamePhase.WhiteHatGuess)
                     {
-                        await SkipTurn();
+                        // Đoán thất bại sau khi bị vote out -> Trình chiếu RoundTransitionScreen cho người vừa chết (Mũ Trắng)
+                        var res = new RoomManagerService.VoteResolution(false, player.UserId, player.DisplayName);
+                        await BroadcastRoundTransition(roomId, room, res);
+                        await Task.Delay((room.Settings.RoundTransitionDuration * 1000) + 1000);
+
+                        // Bắt đầu vòng mới
+                        _roomManager.BuildTurnOrder(roomId);
+                        await _roomManager.UpdateGameSessionPhaseAsync(room);
+                        await BroadcastTurnOrderGenerated(room);
+                        await BroadcastTurnStarted(roomId, room);
+                    }
+                    else
+                    {
+                        // Nếu đang tới lượt của người này, tự động bỏ qua lượt
+                        if (room.Phase == GamePhase.Describing && room.CurrentTurnIndex < room.TurnOrder.Count && room.TurnOrder[room.CurrentTurnIndex] == userId)
+                        {
+                            await SkipTurn();
+                        }
                     }
                 }
             }

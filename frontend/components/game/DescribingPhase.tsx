@@ -88,6 +88,16 @@ export default function DescribingPhase({
   const currentPlayer = orderedAlive[currentTurnIndex];
   const myColor = ROLE_COLOR[myRole] ?? "#22d3ee";
 
+  const descriptionTextRef = useRef(descriptionText);
+  const descriptionSourceRef = useRef(descriptionSource);
+  const isMyTurnRef = useRef(isMyTurn);
+
+  useEffect(() => {
+    descriptionTextRef.current = descriptionText;
+    descriptionSourceRef.current = descriptionSource;
+    isMyTurnRef.current = isMyTurn;
+  }, [descriptionText, descriptionSource, isMyTurn]);
+
   useEffect(() => {
     setTimeLeft(describeDuration);
     const start = Date.now();
@@ -97,25 +107,22 @@ export default function DescribingPhase({
       setTimeLeft(remaining);
       if (remaining === 0) {
         window.clearInterval(interval);
+        
+        // Auto-submit logic when timer naturally hits 0
+        if (isMyTurnRef.current) {
+          window.setTimeout(() => {
+            const text = descriptionTextRef.current.trim();
+            if (!text) {
+              onSkipTurn();
+            } else {
+              onSubmitDescription(text, descriptionSourceRef.current);
+            }
+          }, 100);
+        }
       }
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [currentTurnIndex, describeDuration]);
-
-  // Handle auto-submit when time reaches 0
-  useEffect(() => {
-    if (timeLeft === 0 && isMyTurn) {
-      // Small timeout to let state settle
-      window.setTimeout(() => {
-        const text = descriptionText.trim();
-        if (!text) {
-          onSkipTurn();
-        } else {
-          onSubmitDescription(text, descriptionSource);
-        }
-      }, 100);
-    }
-  }, [timeLeft, isMyTurn, descriptionText, descriptionSource, onSkipTurn, onSubmitDescription]);
+  }, [currentTurnIndex, describeDuration, onSkipTurn, onSubmitDescription]);
 
   useEffect(() => {
     setDescriptionText("");
