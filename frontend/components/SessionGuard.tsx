@@ -1,9 +1,9 @@
 "use client";
-const getLS = () => typeof window !== 'undefined' ? (window as any).localStorage : null;
+const getLS = () => typeof window !== 'undefined' ? (window as any).sessionStorage : null;
 
 import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
-import { logout, API_URL } from "@/lib/auth";
+import { logout, API_URL, getToken } from "@/lib/auth";
 import { usePathname, useRouter } from "next/navigation";
 import { LogIn, X, Check } from "lucide-react";
 import { ref, onValue, off, set, onDisconnect } from "firebase/database";
@@ -114,6 +114,10 @@ export default function SessionGuard() {
     let unsubConnected: () => void = () => {};
 
     const startConnection = async () => {
+      // Gọi getToken() để tự động check token hết hạn và logout nếu cần
+      const token = getToken();
+      if (!token) return;
+
       const uid = sessionStorage.getItem("userId");
       if (!uid || uid === "null" || uid === "undefined") {
         return; 

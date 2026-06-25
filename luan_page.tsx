@@ -1,5 +1,4 @@
-"use client";
-const getLS = () => typeof window !== 'undefined' ? (window as any).sessionStorage : null;
+﻿"use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -17,9 +16,6 @@ import VotingGrid from '@/components/game/VotingGrid';
 import RoundTransitionScreen from '@/components/game/RoundTransitionScreen';
 import GameEndedScreen from '@/components/game/GameEndedScreen';
 import WhiteHatGuessOverlay from '@/components/game/WhiteHatGuessOverlay';
-import { ref, set } from 'firebase/database';
-import { realtimeDb } from '@/lib/firebase';
-import { API_URL, getToken } from '@/lib/auth';
 
 type PeerInstance = any;
 
@@ -30,18 +26,15 @@ interface Player {
     userId: string;
     displayName: string;
     connectionId: string;
-    avatar?: string;
     isReady?: boolean;
     isEliminated?: boolean;
     role?: string;
     descriptionHistory?: string[];
 }
 
-import { getSignalRConnection } from "@/lib/signalRConnection";
 interface RoomState {
     hostId: string;
     players: Record<string, Player>;
-    settings?: any;
 }
 
 type GamePhase =
@@ -91,9 +84,9 @@ const GAME_BACKGROUNDS = ['/bg1.jpg', '/bg2.jpg', '/bg3.jpg', '/bg4.png'];
 // ================================
 function Notification({ messages }: { messages: { id: string; type: 'info' | 'warning' | 'result'; text: string }[] }) {
     const typeStyle = {
-        info: { bg: "rgba(99,102,241,0.12)", border: "rgba(99,102,241,0.3)", color: "#818cf8", prefix: "ℹ️" },
-        warning: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", color: "#fbbf24", prefix: "⚠️" },
-        result: { bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", color: "#f87171", prefix: "📢" },
+        info: { bg: "rgba(99,102,241,0.12)", border: "rgba(99,102,241,0.3)", color: "#818cf8", prefix: "Γä╣∩╕Å" },
+        warning: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", color: "#fbbf24", prefix: "ΓÜá∩╕Å" },
+        result: { bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", color: "#f87171", prefix: "≡ƒôó" },
     };
     if (messages.length === 0) return null;
     return (
@@ -136,53 +129,37 @@ export default function GameRoomPage() {
     const roomId = params.roomId as string;
     const [connection, setConnection] = useState<HubConnection | null>(null);
 
-    // Tự động cập nhật Trạng thái Presence là In-Match khi bắt đầu vào Game
-    useEffect(() => {
-        const myId = sessionStorage.getItem("userId");
-        if (!myId) return;
-
-        const presenceRef = ref(realtimeDb, `presence/${myId}`);
-        set(presenceRef, {
-            status: "In-Match",
-            lastSeen: Date.now()
-        }).catch(console.error);
-
-        return () => {
-            // Khi thoát trận đấu, SessionGuard sẽ tự xử lý chuyển trạng thái (In-Room hoặc Online)
-        };
-    }, []);
-
-    // ── Secret & Phase ──────────────────────
+    // ΓöÇΓöÇ Secret & Phase ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [mySecret, setMySecret] = useState<{ role: string; word: string } | null>(null);
     const [gamePhase, setGamePhase] = useState<GamePhase>('lobby');
     const [isWaitingForTurnOrder, setIsWaitingForTurnOrder] = useState(false);
 
     const [loadingSync, setLoadingSync] = useState<LoadingSyncState | null>(null);
 
-    // ── Turn / Describing ───────────────────
+    // ΓöÇΓöÇ Turn / Describing ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [turnOrder, setTurnOrder] = useState<string[]>([]);
     const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
     const [roundNumber, setRoundNumber] = useState(1);
     const [turnEndTime, setTurnEndTime] = useState<number | undefined>(undefined);
     const [describeDuration, setDescribeDuration] = useState(30);
 
-    // ── Voting ──────────────────────────────
+    // ΓöÇΓöÇ Voting ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [voteEndTime, setVoteEndTime] = useState(Date.now() + 60000);
     const [voteCounts, setVoteCounts] = useState<VoteCounts>({});
     const [hasVoted, setHasVoted] = useState(false);
     const [myVoteTarget, setMyVoteTarget] = useState<string | null>(null);
 
-    // ── Round Transition ────────────────────
+    // ΓöÇΓöÇ Round Transition ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [transitionData, setTransitionData] = useState<RoundTransitionData | null>(null);
 
-    // ── Game Ended ──────────────────────────
+    // ΓöÇΓöÇ Game Ended ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [gameEndedData, setGameEndedData] = useState<GameEndedData | null>(null);
 
-    // ── White Hat ───────────────────────────
+    // ΓöÇΓöÇ White Hat ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [showWhiteHatGuess, setShowWhiteHatGuess] = useState(false);
     const [pendingWinner, setPendingWinner] = useState<string | null>(null);
 
-    // ── Voice ────────────────────────────────
+    // ΓöÇΓöÇ Voice ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [isMicOn, setIsMicOn] = useState(false);
     const [isSpeakerOn, setIsSpeakerOn] = useState(true);
     const [isJoinedVoice, setIsJoinedVoice] = useState(false);
@@ -190,14 +167,14 @@ export default function GameRoomPage() {
     const peers = useRef<Record<string, PeerInstance>>({});
     const remoteAudios = useRef<Record<string, HTMLAudioElement>>({});
 
-    // ── Room / UI ───────────────────────────
+    // ΓöÇΓöÇ Room / UI ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [roomState, setRoomState] = useState<RoomState | null>(null);
     const roomStateRef = useRef<RoomState | null>(null);
     const [currentUser, setCurrentUser] = useState<string>("");
     const [currentUserId, setCurrentUserId] = useState<string>("");
     const [isChatOpen, setIsChatOpen] = useState(false);
 
-    // ── Settings ────────────────────────────
+    // ΓöÇΓöÇ Settings ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [showSettings, setShowSettings] = useState(false);
     const [localSettings, setLocalSettings] = useState<any>({
         describeDuration: 30,
@@ -206,7 +183,7 @@ export default function GameRoomPage() {
         roundTransitionDuration: 5,
     });
 
-    // ── Notifications ───────────────────────
+    // ΓöÇΓöÇ Notifications ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [notifications, setNotifications] = useState<{ id: string; type: 'info' | 'warning' | 'result'; text: string }[]>([]);
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
     const addNotif = (text: string, type: 'info' | 'warning' | 'result' = 'info') => {
@@ -240,7 +217,7 @@ export default function GameRoomPage() {
             audio.srcObject = stream;
             audio.muted = !isSpeakerOn;
         });
-        peer.on('connect', () => console.log(`✅ P2P connected: ${targetId}`));
+        peer.on('connect', () => console.log(`Γ£à P2P connected: ${targetId}`));
         peer.on('error', (err: any) => { console.error('Peer error:', err); cleanupPeer(targetId); });
         peer.on('close', () => cleanupPeer(targetId));
         return peer;
@@ -261,7 +238,7 @@ export default function GameRoomPage() {
             await activeConn.invoke("StartVoiceChat", roomId);
             setIsJoinedVoice(true);
         } catch (err) {
-            console.error("❌ Mic access denied:", err);
+            console.error("Γ¥î Mic access denied:", err);
         }
     };
 
@@ -302,7 +279,7 @@ export default function GameRoomPage() {
             await connection.invoke("SubmitVote", targetUserId);
             setMyVoteTarget(targetUserId);
             setHasVoted(true);
-            addNotif(`Đã bầu cho ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
+            addNotif(`─É├ú bß║ºu cho ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
         } catch (e) { console.error("Vote error:", e); }
     };
 
@@ -311,7 +288,7 @@ export default function GameRoomPage() {
         try {
             await connection.invoke("ChangeVote", targetUserId);
             setMyVoteTarget(targetUserId);
-            addNotif(`Đã đổi vote sang ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
+            addNotif(`─É├ú ─æß╗òi vote sang ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
         } catch (e) { console.error("ChangeVote error:", e); }
     };
 
@@ -398,7 +375,7 @@ export default function GameRoomPage() {
                 e.currentTarget.style.boxShadow = "0 4px 15px rgba(0,0,0,0.2)";
             }}
         >
-            <LogOut size={16} /> RỜI PHÒNG
+            <LogOut size={16} /> Rß╗£I PH├ÆNG
         </button>
     );
 
@@ -412,9 +389,9 @@ export default function GameRoomPage() {
                 boxShadow: '0 24px 70px rgba(0,0,0,0.7)', padding: '28px 26px', border: '1px solid rgba(255,255,255,0.06)',
                 color: '#fff', textAlign: 'center', lineHeight: 1.6,
             }}>
-                <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>Xác nhận rời phòng</div>
+                <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>X├íc nhß║¡n rß╗¥i ph├▓ng</div>
                 <div style={{ color: 'rgba(255,255,255,0.82)', marginBottom: 24, fontSize: 15 }}>
-                    Bạn có chắc muốn rời phòng? Bạn sẽ mất kết nối với ván đấu hiện tại.
+                    Bß║ín c├│ chß║»c muß╗æn rß╗¥i ph├▓ng? Bß║ín sß║╜ mß║Ñt kß║┐t nß╗æi vß╗¢i v├ín ─æß║Ñu hiß╗çn tß║íi.
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
                     <button
@@ -424,14 +401,14 @@ export default function GameRoomPage() {
                             background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.14)',
                             cursor: 'pointer', fontWeight: 700,
                         }}
-                    >Hủy</button>
+                    >Hß╗ºy</button>
                     <button
                         onClick={handleLeaveRoom}
                         style={{
                             minWidth: 120, padding: '10px 16px', borderRadius: 12,
                             background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700,
                         }}
-                    >Rời phòng</button>
+                    >Rß╗¥i ph├▓ng</button>
                 </div>
             </div>
         </div>
@@ -479,17 +456,20 @@ export default function GameRoomPage() {
     // ================================
     useEffect(() => {
         let isMounted = true;
-        const storedUserId = getLS()?.getItem('userId') || '';
+        const storedUserId = sessionStorage.getItem('userId') || '';
         setCurrentUserId(storedUserId);
 
-        const newConn = getSignalRConnection(getToken() || "");
+        const newConn = new HubConnectionBuilder()
+            .withUrl("http://localhost:5120/gamehub", {
+                accessTokenFactory: () => sessionStorage.getItem('token') || ""
+            })
+            .withAutomaticReconnect()
+            .build();
 
-        // ── Room events ──────────────────────────
+        // ΓöÇΓöÇ Room events ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         newConn.on("RoomJoined", (room: RoomState) => {
             setRoomState(room);
-            if (newConn.state === HubConnectionState.Connected) {
-                newConn.invoke("GetRoomState", roomId).catch(console.error);
-            }
+            newConn.invoke("GetRoomState", roomId).catch(console.error);
         });
 
         newConn.on("RoomError", (message: string) => {
@@ -517,7 +497,7 @@ export default function GameRoomPage() {
             if (me?.displayName) setCurrentUser(me.displayName);
         });
 
-        // ── Voice events ─────────────────────────
+        // ΓöÇΓöÇ Voice events ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         newConn.on('UserJoinedVoice', async (newcomerId: string) => {
             if (!peers.current[newcomerId]) {
                 const peer = await createPeer(newcomerId, newConn, true);
@@ -534,15 +514,15 @@ export default function GameRoomPage() {
         });
         newConn.on('PlayerDisconnected', (id: string) => cleanupPeer(id));
 
-        // ── Game phase events ────────────────────
+        // ΓöÇΓöÇ Game phase events ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-        // 1. Nhận vai trò bí mật → chuyển sang phase roleRevealing
+        // 1. Nhß║¡n vai tr├▓ b├¡ mß║¡t ΓåÆ chuyß╗ân sang phase roleRevealing
         newConn.on("ReceiveSecretWord", (data: { role: string; word: string }) => {
             setMySecret(data);
             setGamePhase('roleRevealing');
             addNotif(data.word
-                ? `Bạn đã nhận từ khóa: ${data.word}`
-                : 'Bạn đã nhận vai trò. Chờ bắt đầu lượt miêu tả.',
+                ? `Bß║ín ─æ├ú nhß║¡n tß╗½ kh├│a: ${data.word}`
+                : 'Bß║ín ─æ├ú nhß║¡n vai tr├▓. Chß╗¥ bß║»t ─æß║ºu l╞░ß╗út mi├¬u tß║ú.',
                 'info');
         });
 
@@ -551,13 +531,13 @@ export default function GameRoomPage() {
             setMySecret(data);
             setGamePhase('roleRevealing');
             addNotif(data.word
-                ? `Bạn đã nhận từ khóa: ${data.word}`
-                : 'Bạn đã nhận vai trò. Chờ bắt đầu lượt miêu tả.',
+                ? `Bß║ín ─æ├ú nhß║¡n tß╗½ kh├│a: ${data.word}`
+                : 'Bß║ín ─æ├ú nhß║¡n vai tr├▓. Chß╗¥ bß║»t ─æß║ºu l╞░ß╗út mi├¬u tß║ú.',
                 'info');
         });
 
         newConn.on("ReturnedToLobby", () => {
-            console.log("Phòng đã được reset. Bạn có thể tự bấm Chơi Lại.");
+            console.log("Ph├▓ng ─æ├ú ─æ╞░ß╗úc reset bß╗ƒi chß╗º ph├▓ng. Bß║ín c├│ thß╗â tß╗▒ bß║Ñm Ch╞íi Lß║íi.");
         });
 
         newConn.on("LoadingPhaseStarted", async (data: { timeoutSeconds?: number; totalCount?: number; startedAt?: number; readyCount?: number; readyPlayerIds?: string[] }) => {
@@ -635,7 +615,7 @@ export default function GameRoomPage() {
                     : [...(prev?.spectatorIds ?? []), storedUserId],
                 activePlayerIds: prev?.activePlayerIds ?? [],
             }));
-            addNotif(data.reason ?? "Kết nối của bạn hơi chậm. Bạn đang quan sát ván này.", 'warning');
+            addNotif(data.reason ?? "Kß║┐t nß╗æi cß╗ºa bß║ín h╞íi chß║¡m. Bß║ín ─æang quan s├ít v├ín n├áy.", 'warning');
         });
 
         newConn.on("SpectatorUpdated", (data: { spectatorIds?: string[]; activePlayerIds?: string[] }) => {
@@ -662,12 +642,12 @@ export default function GameRoomPage() {
                 : prev);
         });
 
-        // All players ready → start game
+        // All players ready ΓåÆ start game
         newConn.on("AllPlayersReady", () => {
             setIsWaitingForTurnOrder(true);
         });
 
-        // 2. Thứ tự lượt nói
+        // 2. Thß╗⌐ tß╗▒ l╞░ß╗út n├│i
         newConn.on("TurnOrderGenerated", (data: { roundNumber: number; turnOrder: string[] }) => {
             setTurnOrder(data.turnOrder);
             setCurrentTurnIndex(0);
@@ -675,10 +655,10 @@ export default function GameRoomPage() {
             setIsWaitingForTurnOrder(false);
             setLoadingSync(null);
             setGamePhase('describing');
-            addNotif(`Vòng ${data.roundNumber} bắt đầu! Thứ tự đã được random.`, 'info');
+            addNotif(`V├▓ng ${data.roundNumber} bß║»t ─æß║ºu! Thß╗⌐ tß╗▒ ─æ├ú ─æ╞░ß╗úc random.`, 'info');
         });
 
-        // 3. Lượt nói bắt đầu
+        // 3. L╞░ß╗út n├│i bß║»t ─æß║ºu
         newConn.on("TurnStarted", (data: {
             currentSpeakerId: string;
             currentTurnIndex: number;
@@ -694,14 +674,14 @@ export default function GameRoomPage() {
             const speaker = players.find((p: any) => p.userId === data.currentSpeakerId) as any;
             if (speaker) {
                 if (data.currentSpeakerId === storedUserId) {
-                    addNotif('Đến lượt bạn miêu tả!', 'result');
+                    addNotif('─Éß║┐n l╞░ß╗út bß║ín mi├¬u tß║ú!', 'result');
                 } else {
-                    addNotif(`Đến lượt ${speaker.displayName} miêu tả.`, 'info');
+                    addNotif(`─Éß║┐n l╞░ß╗út ${speaker.displayName} mi├¬u tß║ú.`, 'info');
                 }
             }
         });
 
-        // 4. Lượt nói kết thúc / skip
+        // 4. L╞░ß╗út n├│i kß║┐t th├║c / skip
         newConn.on("TurnEnded", (data: { nextTurnIndex: number }) => {
             setCurrentTurnIndex(data.nextTurnIndex);
         });
@@ -709,7 +689,7 @@ export default function GameRoomPage() {
             setCurrentTurnIndex(data.nextTurnIndex);
         });
 
-        // 5. Bắt đầu vote
+        // 5. Bß║»t ─æß║ºu vote
         newConn.on("DescriptionSubmitted", (data: { userId: string; word: string }) => {
             setRoomState(prev => {
                 if (!prev || !prev.players[data.userId]) return prev;
@@ -735,7 +715,7 @@ export default function GameRoomPage() {
             setVoteCounts({});
             setLoadingSync(null);
             setGamePhase('voting');
-            addNotif('Vòng bình chọn bắt đầu!', 'result');
+            addNotif('V├▓ng b├¼nh chß╗ìn bß║»t ─æß║ºu!', 'result');
         });
 
         // 6. Vote count update realtime
@@ -790,9 +770,9 @@ export default function GameRoomPage() {
             setGamePhase('roundTransition');
 
             if (!data.isTieVote && data.eliminatedPlayer) {
-                addNotif(`${data.eliminatedPlayer.displayName} bị loại với số phiếu cao nhất.`, 'result');
+                addNotif(`${data.eliminatedPlayer.displayName} bß╗ï loß║íi vß╗¢i sß╗æ phiß║┐u cao nhß║Ñt.`, 'result');
             } else if (data.isTieVote) {
-                addNotif('Hòa phiếu! Không ai bị loại.', 'warning');
+                addNotif('H├▓a phiß║┐u! Kh├┤ng ai bß╗ï loß║íi.', 'warning');
             }
 
             // Update room state players eliminated status
@@ -813,7 +793,7 @@ export default function GameRoomPage() {
             }
         });
 
-        // 8. Player eliminated (có thể server gửi riêng)
+        // 8. Player eliminated (c├│ thß╗â server gß╗¡i ri├¬ng)
         newConn.on("PlayerEliminated", (data: { userId: string; displayName: string }) => {
             setRoomState(prev => {
                 if (!prev) return prev;
@@ -853,97 +833,65 @@ export default function GameRoomPage() {
             setRoomState(room);
         });
 
-        // ── Start connection ─────────────────────
-                const start = async () => {
+        // ΓöÇΓöÇ Start connection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+        const start = async () => {
             if (newConn.state === HubConnectionState.Disconnected) {
                 try {
                     await newConn.start();
-                } catch (err: any) {
-                    console.error("❌ SignalR Error:", err);
-                    return;
-                }
-            }
-            if (isMounted) {
-                setConnection(newConn);
-                try {
-                    await newConn.invoke("JoinRoom", roomId);
-                    await newConn.invoke("GetRoomState", roomId);
-                    const pendingLoading = sessionStorage.getItem(`loading:${roomId}`);
-                    if (pendingLoading) {
-                        sessionStorage.removeItem(`loading:${roomId}`);
-                        const parsed = JSON.parse(pendingLoading) as { timeoutSeconds?: number; totalCount?: number; startedAt?: number };
-                        const timeoutSeconds = parsed.timeoutSeconds ?? 10;
-                        const startedAt = parsed.startedAt ?? Date.now();
-                        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
-                        const hash = roomId.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
-                        const syncedBackground = GAME_BACKGROUNDS[hash % GAME_BACKGROUNDS.length];
+                    if (isMounted) {
+                        setConnection(newConn);
+                        await newConn.invoke("JoinRoom", roomId);
+                        await newConn.invoke("GetRoomState", roomId);
+                        const pendingLoading = sessionStorage.getItem(`loading:${roomId}`);
+                        if (pendingLoading) {
+                            sessionStorage.removeItem(`loading:${roomId}`);
+                            const parsed = JSON.parse(pendingLoading) as { timeoutSeconds?: number; totalCount?: number; startedAt?: number };
+                            const timeoutSeconds = parsed.timeoutSeconds ?? 10;
+                            const startedAt = parsed.startedAt ?? Date.now();
+                            const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+                            const hash = roomId.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+                            const syncedBackground = GAME_BACKGROUNDS[hash % GAME_BACKGROUNDS.length];
 
-                        setLoadingSync({
-                            readyCount: 0,
-                            totalCount: parsed.totalCount ?? 0,
-                            readyPlayerIds: [],
-                            timeoutSeconds,
-                            startedAt,
-                            secondsLeft: Math.max(0, timeoutSeconds - elapsed),
-                            isMeReady: false,
-                            isSpectator: false,
-                            spectatorIds: [],
-                            activePlayerIds: [],
-                        });
-                        setGamePhase(prev => prev === 'roleRevealing' ? 'roleRevealing' : 'loading');
-                        await preloadGameAssets(syncedBackground);
-                        try {
-                            await newConn.invoke("PlayerLoadingReady", roomId);
-                            setLoadingSync(prev => prev ? {
-                                ...prev,
-                                isMeReady: true,
-                                readyPlayerIds: prev.readyPlayerIds.includes(storedUserId)
-                                    ? prev.readyPlayerIds
-                                    : [...prev.readyPlayerIds, storedUserId],
-                            } : prev);
-                        } catch (e) {
-                            console.error("PlayerLoadingReady error:", e);
+                            setLoadingSync({
+                                readyCount: 0,
+                                totalCount: parsed.totalCount ?? 0,
+                                readyPlayerIds: [],
+                                timeoutSeconds,
+                                startedAt,
+                                secondsLeft: Math.max(0, timeoutSeconds - elapsed),
+                                isMeReady: false,
+                                isSpectator: false,
+                                spectatorIds: [],
+                                activePlayerIds: [],
+                            });
+                            setGamePhase('loading');
+                            await preloadGameAssets(syncedBackground);
+                            try {
+                                await newConn.invoke("PlayerLoadingReady", roomId);
+                                setLoadingSync(prev => prev ? {
+                                    ...prev,
+                                    isMeReady: true,
+                                    readyPlayerIds: prev.readyPlayerIds.includes(storedUserId)
+                                        ? prev.readyPlayerIds
+                                        : [...prev.readyPlayerIds, storedUserId],
+                                } : prev);
+                            } catch (e) {
+                                console.error("PlayerLoadingReady error:", e);
+                            }
                         }
                     }
-                } catch (err) {
-                    console.error("Error joining room or getting state:", err);
+                } catch (err: any) {
+                    if (!err.message?.includes("stopped during negotiation")) {
+                        console.error("Γ¥î SignalR Error:", err);
+                    }
                 }
             }
         };
         start();
 
-                return () => {
+        return () => {
             isMounted = false;
-            newConn.off('RoomJoined');
-            newConn.off('RoomError');
-            newConn.off('KickedFromRoom');
-            newConn.off('RoomUpdated');
-            newConn.off('UserJoinedVoice');
-            newConn.off('ReceiveSignal');
-            newConn.off('PlayerDisconnected');
-            newConn.off('ReceiveSecretWord');
-            newConn.off('RoleAssigned');
-            newConn.off('ReturnedToLobby');
-            newConn.off('LoadingPhaseStarted');
-            newConn.off('LoadingProgressUpdated');
-            newConn.off('SwitchedToSpectator');
-            newConn.off('SpectatorUpdated');
-            newConn.off('GameStarted');
-            newConn.off('AllPlayersReady');
-            newConn.off('TurnOrderGenerated');
-            newConn.off('TurnStarted');
-            newConn.off('TurnEnded');
-            newConn.off('TurnSkipped');
-            newConn.off('DescriptionSubmitted');
-            newConn.off('VotingStarted');
-            newConn.off('VoteUpdated');
-            newConn.off('PhaseChanged');
-            newConn.off('RoundTransitionStarted');
-            newConn.off('PlayerEliminated');
-            newConn.off('GameEnded');
-            newConn.off('ErrorMessage');
-            newConn.off('WhiteHatOpportunity');
-            newConn.off('RoundStarted');
+            if (newConn.state === HubConnectionState.Connected) newConn.stop();
             userStream.current?.getTracks().forEach(t => t.stop());
         };
     }, [roomId]);
@@ -1146,7 +1094,7 @@ export default function GameRoomPage() {
                         onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"}
                     >
                         <Key size={20} />
-                        ĐOÁN TỪ KHÓA
+                        ─ÉO├üN Tß╗¬ KH├ôA
                     </button>
                 )}
                 <DescribingPhase
@@ -1185,7 +1133,7 @@ export default function GameRoomPage() {
                         <ChatBox
                             connection={connection}
                             roomId={roomId}
-                            currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
+                            currentUser={currentUser || sessionStorage.getItem("username") || "Ng╞░ß╗¥i ch╞íi"}
                             playerCount={currentPlayerCount}
                         />
                     )}
@@ -1225,7 +1173,7 @@ export default function GameRoomPage() {
                         onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"}
                     >
                         <Key size={20} />
-                        ĐOÁN TỪ KHÓA
+                        ─ÉO├üN Tß╗¬ KH├ôA
                     </button>
                 )}
                 <VotingGrid
@@ -1242,7 +1190,7 @@ export default function GameRoomPage() {
                     onChangeVote={handleChangeVote}
                     onSkip={handleSkipVoting}
                     onTimerExpired={() => {
-                        addNotif('Thời gian vote đã hết!', 'warning');
+                        addNotif('Thß╗¥i gian vote ─æ├ú hß║┐t!', 'warning');
                     }}
                     backgroundImage={backgroundImage}
                 />
@@ -1268,7 +1216,7 @@ export default function GameRoomPage() {
                         <ChatBox
                             connection={connection}
                             roomId={roomId}
-                            currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
+                            currentUser={currentUser || sessionStorage.getItem("username") || "Ng╞░ß╗¥i ch╞íi"}
                             playerCount={currentPlayerCount}
                         />
                     )}
@@ -1283,248 +1231,214 @@ export default function GameRoomPage() {
     const isMyPlayerReady = players.find(p => p.userId === currentUserId)?.isReady ?? false;
     const allReady = players.length >= 3 && players.every(p => p.isReady || p.userId === roomState?.hostId);
     const canStart = isHost && allReady;
-    const settings = roomState?.settings || {};
-    const maxPlayers = settings.maxPlayers || 8;
-    
-    // Dynamic sizing based on players
-    let gridColsClass = "grid-cols-3";
-    let cardPaddingClass = "p-6";
-    let avatarSizeClass = "w-24 h-24";
-    let iconSize = 40;
-    let titleSizeClass = "text-lg";
-    let crownSize = 14;
-    let readyBadgeClass = "px-3 py-1 text-sm";
-    let checkIconSize = 16;
-    let cardGapClass = "gap-4";
-    let topOffsetClass = "-top-4";
-
-    if (maxPlayers > 6 && maxPlayers <= 10) {
-      gridColsClass = "grid-cols-4";
-      cardPaddingClass = "p-4";
-      avatarSizeClass = "w-16 h-16";
-      iconSize = 30;
-      titleSizeClass = "text-base";
-      crownSize = 12;
-      readyBadgeClass = "px-2.5 py-0.5 text-xs";
-      checkIconSize = 12;
-      cardGapClass = "gap-3";
-      topOffsetClass = "-top-3.5";
-    } else if (maxPlayers > 10) {
-      gridColsClass = "grid-cols-5";
-      cardPaddingClass = "p-3";
-      avatarSizeClass = "w-12 h-12";
-      iconSize = 24;
-      titleSizeClass = "text-sm";
-      crownSize = 10;
-      readyBadgeClass = "px-2 py-0.5 text-[10px]";
-      checkIconSize = 10;
-      cardGapClass = "gap-2";
-      topOffsetClass = "-top-3";
-    }
 
     return (
-        <div 
-          className="relative min-h-screen w-screen bg-cover bg-center overflow-x-hidden overflow-y-auto flex flex-col items-center pt-20 pb-28 custom-scrollbar"
-          style={{ backgroundImage: `linear-gradient(180deg, rgba(7,9,17,0.9) 0%, rgba(7,9,17,0.62) 44%, rgba(4,5,10,0.96) 100%), url(${backgroundImage})` }}
-        >
+        <div style={pageRootStyle}>
             {overlayElements}
             {leaveRoomButton}
+            <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                padding: "80px 16px 24px",
+                fontFamily: "'Inter', 'Segoe UI', sans-serif",
+                position: "relative",
+                minHeight: "100vh",
+            }}>
+                <Notification messages={notifications} />
 
-            {/* Background ambient glow */}
-            <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(230,168,34,0.08)_0%,transparent_60%)]" />
-            <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full h-[300px] pointer-events-none bg-[radial-gradient(ellipse_60%_80%_at_50%_100%,rgba(99,102,241,0.06)_0%,transparent_70%)]" />
-
-            <Notification messages={notifications} />
-
-            {/* ── SECRET WORD DISPLAY (Only when game starts/roles are revealed) ── */}
-            {mySecret && (
-                <div className="mb-10 text-center flex flex-col items-center gap-3 z-10">
-                    <p className="text-white/30 text-[10px] tracking-[0.3em] uppercase m-0">
-                        Từ khóa bí mật
-                    </p>
-                    <div
-                        onClick={() => setIsChatOpen(p => p)}
-                        className="bg-black/40 border-2 border-[#e6a822]/20 rounded-[50px] px-8 py-3 text-[#e6a822] font-black text-xl tracking-[0.15em] cursor-pointer min-w-[240px] text-center shadow-[0_0_20px_rgba(230,168,34,0.08)] backdrop-blur-md"
-                    >
-                        <span className="animate-pulse">{mySecret.word}</span>
-                    </div>
-                </div>
-            )}
-
-            {/* ====== MAIN LAYOUT ====== */}
-            <div className="flex flex-col lg:flex-row gap-6 w-full max-w-5xl z-10 items-start px-4 sm:px-0 mt-8">
-                {/* PLAYER GRID */}
-                <div className="flex-1 w-full">
-                    <div className={`grid ${gridColsClass} gap-3.5 max-h-[55vh] overflow-y-auto pr-2 custom-scrollbar`}>
-                        {players.map(player => {
-                            const isMe = player.userId === currentUserId;
-                            const isPlayerHost = player.userId === roomState?.hostId;
-                            return (
-                                <div key={player.userId} 
-                                    className={`backdrop-blur-md rounded-2xl ${cardPaddingClass} flex flex-col items-center ${cardGapClass} relative transition-all duration-300 ${
-                                        player.isEliminated
-                                            ? "bg-black/30 border border-red-500/15 grayscale-[60%] opacity-60"
-                                            : player.isReady 
-                                                ? "bg-gradient-to-br from-green-500/10 to-white/5 border border-green-500/25 shadow-[0_0_20px_rgba(34,197,94,0.06)]"
-                                                : isMe 
-                                                    ? "bg-white/5 border border-[#e6a822]/30 shadow-[0_0_20px_rgba(230,168,34,0.08)]"
-                                                    : "bg-white/5 border border-white/10"
-                                    }`}
-                                >
-                                    {isPlayerHost && (
-                                        <div className={`absolute ${topOffsetClass} left-1/2 -translate-x-1/2 bg-gradient-to-br from-[#e6a822] to-[#d4941a] text-black px-3 py-1 rounded-full text-[10px] font-black flex items-center gap-1 shadow-[0_4px_12px_rgba(230,168,34,0.4)] tracking-widest`}>
-                                            <Shield size={crownSize} fill="currentColor" /> CHỦ PHÒNG
-                                        </div>
-                                    )}
-
-                                    <div className={`${avatarSizeClass} rounded-full flex items-center justify-center font-black text-2xl overflow-hidden shadow-inner ${
-                                        isMe 
-                                            ? "bg-[radial-gradient(circle_at_35%_35%,rgba(230,168,34,0.3),#0a0a14)] border-2 border-[#e6a822]/50 text-[#e6a822] shadow-[0_0_16px_rgba(230,168,34,0.2)]"
-                                            : "bg-[radial-gradient(circle_at_35%_35%,rgba(99,102,241,0.2),#0a0a14)] border-2 border-indigo-500/30 text-indigo-500"
-                                    } ${isPlayerHost ? 'mt-2' : ''}`}>
-                                        {player.avatar ? (
-                                            // eslint-disable-next-line @next/next/no-img-element
-                                            <img src={player.avatar} alt={player.displayName} className="w-full h-full object-cover" />
-                                        ) : (
-                                            player.displayName?.charAt(0)?.toUpperCase() || "?"
-                                        )}
-                                    </div>
-
-                                    <div className="text-center w-full">
-                                        <h3 className={`${isMe ? 'text-[#e6a822]' : 'text-white'} font-bold ${titleSizeClass} truncate px-1 w-full`}>
-                                            {player.displayName}
-                                        </h3>
-                                        {isMe && <p className="text-[#e6a822]/60 text-[10px] mt-0.5 tracking-widest uppercase">(Bạn)</p>}
-                                    </div>
-
-                                    {player.isEliminated && (
-                                        <span className="text-lg">❌</span>
-                                    )}
-
-                                    {!mySecret && !player.isEliminated && (
-                                        player.isReady ? (
-                                            <span className={`flex items-center gap-1.5 text-green-500 font-extrabold bg-green-500/10 border border-green-500/30 ${readyBadgeClass} rounded-full tracking-wider`}>
-                                                <CheckCircle2 size={checkIconSize} /> SẴN SÀNG
-                                            </span>
-                                        ) : (
-                                            <span className={`text-white/30 font-semibold bg-white/5 border border-white/10 ${readyBadgeClass} rounded-full`}>
-                                                Đang chờ...
-                                            </span>
-                                        )
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* SETTINGS PANEL (Host only) */}
+                {/* ====== SETTINGS PANEL (Host only) ====== */}
                 {isHost && (
-                    <div className="w-full lg:w-[280px] shrink-0 bg-white/5 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl flex flex-col h-fit">
+                    <div style={{
+                        width: 320, maxWidth: "100%", marginBottom: 30,
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        borderRadius: 18, overflow: "hidden",
+                        backdropFilter: "blur(12px)",
+                    }}>
                         <button
                             onClick={() => setShowSettings(!showSettings)}
-                            className={`w-full px-5 py-4 bg-transparent border-none flex items-center gap-3 cursor-pointer text-white transition-all hover:bg-white/5 ${showSettings ? 'border-b border-white/10' : ''}`}
+                            style={{
+                                width: "100%", padding: "16px 20px",
+                                background: "transparent", border: "none",
+                                display: "flex", alignItems: "center", gap: 10,
+                                cursor: "pointer", color: "#fff",
+                                borderBottom: showSettings ? "1px solid rgba(255,255,255,0.07)" : "none",
+                            }}
                         >
-                            <Settings size={18} className="text-[#e6a822]" />
-                            <span className="font-bold text-sm flex-1 text-left uppercase tracking-wider">Cài đặt phòng</span>
-                            {showSettings ? <ChevronUp size={16} className="text-white/40" /> : <ChevronDown size={16} className="text-white/40" />}
+                            <Settings size={16} style={{ color: "#e6a822" }} />
+                            <span style={{ fontWeight: 700, fontSize: 14, flex: 1, textAlign: "left" }}>C├ái ─æß║╖t ph├▓ng</span>
+                            {showSettings ? <ChevronUp size={16} style={{ color: "rgba(255,255,255,0.4)" }} /> : <ChevronDown size={16} style={{ color: "rgba(255,255,255,0.4)" }} />}
                         </button>
-
                         {showSettings && (
-                            <div className="p-5 flex flex-col gap-5">
-                                <div className="flex flex-col">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-1.5 text-white/70 text-xs font-bold uppercase tracking-wide">
-                                            <Clock size={14} className="text-green-500" /> Thời gian nói
-                                        </div>
-                                        <span className="text-green-500 font-black text-sm">{localSettings.describeDuration}s</span>
+                            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+                                <div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                                        <Clock size={13} style={{ color: "#22c55e" }} />
+                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Thß╗¥i gian n├│i</span>
+                                        <span style={{ marginLeft: "auto", color: "#22c55e", fontWeight: 800, fontSize: 13 }}>{localSettings.describeDuration}s</span>
                                     </div>
-                                    <input
-                                        type="range" min={15} max={60} step={5}
-                                        value={localSettings.describeDuration}
-                                        onChange={e => handleUpdateSettings({ describeDuration: Number(e.target.value) })}
-                                        className="w-full accent-green-500"
-                                    />
-                                    <div className="flex justify-between text-white/20 text-[10px] mt-1 font-medium">
-                                        <span>15s</span><span>60s</span>
-                                    </div>
+                                    <input type="range" min={15} max={60} step={5} value={localSettings.describeDuration} onChange={e => handleUpdateSettings({ describeDuration: Number(e.target.value) })} style={{ width: "100%", accentColor: "#22c55e" }} />
                                 </div>
-
-                                <div className="flex flex-col">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-1.5 text-white/70 text-xs font-bold uppercase tracking-wide">
-                                            <Vote size={14} className="text-[#e6a822]" /> Thời gian vote
-                                        </div>
-                                        <span className="text-[#e6a822] font-black text-sm">{localSettings.voteDuration}s</span>
+                                <div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                                        <Vote size={13} style={{ color: "#e6a822" }} />
+                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Thß╗¥i gian vote</span>
+                                        <span style={{ marginLeft: "auto", color: "#e6a822", fontWeight: 800, fontSize: 13 }}>{localSettings.voteDuration}s</span>
                                     </div>
-                                    <input
-                                        type="range" min={30} max={90} step={15}
-                                        value={localSettings.voteDuration}
-                                        onChange={e => handleUpdateSettings({ voteDuration: Number(e.target.value) })}
-                                        className="w-full accent-[#e6a822]"
-                                    />
-                                    <div className="flex justify-between text-white/20 text-[10px] mt-1 font-medium">
-                                        <span>30s</span><span>90s</span>
-                                    </div>
+                                    <input type="range" min={30} max={90} step={15} value={localSettings.voteDuration} onChange={e => handleUpdateSettings({ voteDuration: Number(e.target.value) })} style={{ width: "100%", accentColor: "#e6a822" }} />
                                 </div>
-
-                                <div className="flex flex-col">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-1.5 text-white/70 text-xs font-bold uppercase tracking-wide">
-                                            <Clock size={14} className="text-indigo-500" /> Chờ giữa vòng
-                                        </div>
-                                        <span className="text-indigo-500 font-black text-sm">{localSettings.roundTransitionDuration}s</span>
+                                <div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                                        <Clock size={13} style={{ color: "#6366f1" }} />
+                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Chß╗¥ giß╗»a v├▓ng</span>
+                                        <span style={{ marginLeft: "auto", color: "#6366f1", fontWeight: 800, fontSize: 13 }}>{localSettings.roundTransitionDuration}s</span>
                                     </div>
-                                    <input
-                                        type="range" min={5} max={10} step={1}
-                                        value={localSettings.roundTransitionDuration}
-                                        onChange={e => handleUpdateSettings({ roundTransitionDuration: Number(e.target.value) })}
-                                        className="w-full accent-indigo-500"
-                                    />
-                                    <div className="flex justify-between text-white/20 text-[10px] mt-1 font-medium">
-                                        <span>5s</span><span>10s</span>
-                                    </div>
-                                </div>
-                                
-                                <div 
-                                    onClick={() => handleUpdateSettings({ revealEliminatedRole: !localSettings.revealEliminatedRole })}
-                                    className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
-                                        localSettings.revealEliminatedRole 
-                                        ? 'bg-green-500/10 border-green-500/20' 
-                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
-                                    }`}
-                                >
-                                    {localSettings.revealEliminatedRole ? <Eye size={18} className="text-green-500"/> : <EyeOff size={18} className="text-white/30"/>}
-                                    <div className="flex-1">
-                                        <div className="text-white text-xs font-bold">Tiết lộ vai</div>
-                                        <div className="text-white/30 text-[10px] mt-0.5">
-                                        {localSettings.revealEliminatedRole ? "Công khai" : "Ẩn thân"}
-                                        </div>
-                                    </div>
-                                    <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${localSettings.revealEliminatedRole ? 'bg-green-500' : 'bg-white/10'}`}>
-                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${localSettings.revealEliminatedRole ? 'left-[18px]' : 'left-0.5'}`} />
-                                    </div>
+                                    <input type="range" min={5} max={10} step={1} value={localSettings.roundTransitionDuration} onChange={e => handleUpdateSettings({ roundTransitionDuration: Number(e.target.value) })} style={{ width: "100%", accentColor: "#6366f1" }} />
                                 </div>
                             </div>
                         )}
                     </div>
                 )}
-            </div>
 
-            {/* ====== BOTTOM ACTIONS (SẴN SÀNG / BẮT ĐẦU) ====== */}
-            {!mySecret && (
-                <div className="fixed bottom-0 left-0 right-0 px-6 py-5 bg-gradient-to-t from-[#0a0a14] via-[#0a0a14]/90 to-transparent flex justify-center gap-4 z-50 pointer-events-none">
-                    <div className="pointer-events-auto flex gap-4">
+                {/* ΓöÇΓöÇ SECRET WORD DISPLAY (Only when game starts/roles are revealed) ΓöÇΓöÇ */}
+                {mySecret && (
+                    <div style={{ marginBottom: 40, textAlign: "center" }}>
+                        <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, letterSpacing: "0.3em", textTransform: "uppercase", margin: "0 0 10px" }}>
+                            Tß╗½ kh├│a b├¡ mß║¡t
+                        </p>
+                        <div
+                            onClick={() => setIsChatOpen(p => p)}
+                            style={{
+                                background: "rgba(0,0,0,0.4)",
+                                border: "2px solid rgba(230,168,34,0.2)",
+                                borderRadius: 50, padding: "12px 32px",
+                                color: "#e6a822", fontWeight: 900, fontSize: 20,
+                                letterSpacing: "0.15em", cursor: "pointer",
+                                minWidth: 240, textAlign: "center",
+                                boxShadow: "0 0 20px rgba(230,168,34,0.08)",
+                            }}
+                        >
+                            <span style={{ animation: "pulse 2s infinite" }}>{mySecret.word}</span>
+                        </div>
+                    </div>
+                )}
+
+                {/* ΓöÇΓöÇ PLAYER GRID ΓöÇΓöÇ */}
+                <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
+                    gap: 14, width: "100%", maxWidth: 900,
+                }}>
+                    {players.map(player => (
+                        <div key={player.userId} style={{
+                            background: player.isEliminated ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.04)",
+                            border: player.isEliminated
+                                ? "1px solid rgba(239,68,68,0.15)"
+                                : player.userId === currentUserId
+                                    ? "1px solid rgba(230,168,34,0.3)"
+                                    : "1px solid rgba(255,255,255,0.08)",
+                            borderRadius: 18, padding: "18px 14px",
+                            display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+                            filter: player.isEliminated ? "grayscale(60%)" : "none",
+                            opacity: player.isEliminated ? 0.6 : 1,
+                            position: "relative",
+                            transition: "all 0.3s",
+                        }}>
+                            {player.userId === roomState?.hostId && (
+                                <div style={{
+                                    position: "absolute", top: 8, right: 8,
+                                    color: "#e6a822",
+                                }}>
+                                    <Shield size={14} fill="currentColor" />
+                                </div>
+                            )}
+
+                            {/* Avatar */}
+                            <div style={{
+                                width: 52, height: 52, borderRadius: "50%",
+                                background: player.userId === currentUserId
+                                    ? "radial-gradient(circle at 35% 35%, rgba(230,168,34,0.3), #0a0a14)"
+                                    : "radial-gradient(circle at 35% 35%, rgba(99,102,241,0.2), #0a0a14)",
+                                border: `2px solid ${player.userId === currentUserId ? "rgba(230,168,34,0.5)" : "rgba(99,102,241,0.3)"}`,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontSize: 18, fontWeight: 900,
+                                color: player.userId === currentUserId ? "#e6a822" : "#6366f1",
+                            }}>
+                                {player.displayName?.charAt(0)?.toUpperCase() || "?"}
+                            </div>
+
+                            <div style={{ textAlign: "center" }}>
+                                <div style={{
+                                    color: player.userId === currentUserId ? "#e6a822" : "#fff",
+                                    fontWeight: 700, fontSize: 13,
+                                    maxWidth: 130, overflow: "hidden",
+                                    textOverflow: "ellipsis", whiteSpace: "nowrap",
+                                }}>
+                                    {player.displayName}
+                                </div>
+                                {player.userId === currentUserId && (
+                                    <div style={{ color: "rgba(230,168,34,0.6)", fontSize: 10, marginTop: 2 }}>(Bß║ín)</div>
+                                )}
+                            </div>
+
+                            {player.isEliminated && (
+                                <span style={{ fontSize: 18 }}>Γ¥î</span>
+                            )}
+
+                            {/* Ready Status (only show in lobby before game starts) */}
+                            {!mySecret && !player.isEliminated && (
+                                player.isReady ? (
+                                    <div style={{
+                                        display: "flex", alignItems: "center", gap: 5,
+                                        background: "rgba(34,197,94,0.12)",
+                                        border: "1px solid rgba(34,197,94,0.3)",
+                                        color: "#22c55e", padding: "4px 12px", borderRadius: 99,
+                                        fontSize: 11, fontWeight: 800, letterSpacing: "0.06em",
+                                    }}>
+                                        <CheckCircle2 size={12} /> Sß║┤N S├ÇNG
+                                    </div>
+                                ) : (
+                                    <div style={{
+                                        color: "rgba(255,255,255,0.25)",
+                                        background: "rgba(255,255,255,0.04)",
+                                        border: "1px solid rgba(255,255,255,0.07)",
+                                        padding: "4px 12px", borderRadius: 99,
+                                        fontSize: 11, fontWeight: 600,
+                                    }}>
+                                        ─Éang chß╗¥...
+                                    </div>
+                                )
+                            )}
+                        </div>
+                    ))}
+                </div>
+
+                {/* ====== BOTTOM ACTIONS ====== */}
+                {!mySecret && (
+                    <div style={{
+                        position: "fixed", bottom: 0, left: 0, right: 0,
+                        padding: "20px 24px",
+                        background: "linear-gradient(to top, rgba(10,10,20,0.98) 0%, rgba(10,10,20,0.8) 70%, transparent 100%)",
+                        display: "flex", justifyContent: "center", gap: 12,
+                        zIndex: 50,
+                    }}>
                         {!isHost && (
                             <button
                                 onClick={() => connection?.invoke("ToggleReady", !isMyPlayerReady)}
-                                className={`px-10 py-3.5 rounded-2xl font-black text-sm md:text-base cursor-pointer tracking-wider border-none transition-all shadow-[0_8px_24px_rgba(0,0,0,0.4)] ${
-                                    isMyPlayerReady
-                                        ? 'bg-white/10 text-white/50 border-t border-white/10'
-                                        : 'bg-gradient-to-br from-green-500 to-green-600 text-white hover:-translate-y-0.5'
-                                }`}
+                                style={{
+                                    padding: "14px 40px", borderRadius: 14,
+                                    fontWeight: 900, fontSize: 15, cursor: "pointer",
+                                    letterSpacing: "0.08em", border: "none",
+                                    transition: "all 0.2s", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                                    background: isMyPlayerReady
+                                        ? "rgba(255,255,255,0.07)"
+                                        : "linear-gradient(135deg, #22c55e, #16a34a)",
+                                    color: isMyPlayerReady ? "rgba(255,255,255,0.5)" : "#fff",
+                                    borderTop: isMyPlayerReady ? "1px solid rgba(255,255,255,0.08)" : "none",
+                                }}
+                                onMouseEnter={e => !isMyPlayerReady && ((e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)")}
+                                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"}
                             >
-                                {isMyPlayerReady ? "✖ HỦY SẴN SÀNG" : "✓ SẴN SÀNG"}
+                                {isMyPlayerReady ? "Γ£û Hß╗ªY Sß║┤N S├ÇNG" : "Γ£ô Sß║┤N S├ÇNG"}
                             </button>
                         )}
 
@@ -1536,75 +1450,114 @@ export default function GameRoomPage() {
                                     catch (err) { console.error("StartGame error:", err); }
                                 }}
                                 disabled={!canStart}
-                                className={`px-12 py-3.5 rounded-2xl font-black text-sm md:text-base tracking-wider border-none transition-all flex items-center gap-2.5 ${
-                                    canStart
-                                        ? 'bg-gradient-to-br from-[#e6a822] to-[#d4941a] text-black shadow-[0_8px_32px_rgba(230,168,34,0.35)] hover:-translate-y-0.5 cursor-pointer'
-                                        : 'bg-white/5 text-white/20 cursor-not-allowed'
-                                }`}
+                                style={{
+                                    padding: "14px 48px", borderRadius: 14,
+                                    fontWeight: 900, fontSize: 15, cursor: canStart ? "pointer" : "not-allowed",
+                                    letterSpacing: "0.08em", border: "none",
+                                    transition: "all 0.2s",
+                                    background: canStart
+                                        ? "linear-gradient(135deg, #e6a822, #d4941a)"
+                                        : "rgba(255,255,255,0.05)",
+                                    color: canStart ? "#000" : "rgba(255,255,255,0.2)",
+                                    boxShadow: canStart ? "0 8px 32px rgba(230,168,34,0.35)" : "none",
+                                }}
+                                onMouseEnter={e => canStart && ((e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)")}
+                                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"}
                             >
-                                BẮT ĐẦU GAME
+                                Bß║«T ─Éß║ªU GAME
                             </button>
                         )}
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* ── VOICE & CHAT CONTROLS ── */}
-            {isJoinedVoice && (
-                <div className="fixed bottom-6 right-6 flex items-center gap-3 z-50">
-                    <div className="flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+                {/* ΓöÇΓöÇ VOICE CONTROLS ΓöÇΓöÇ */}
+                {isJoinedVoice && (
+                    <div style={{
+                        position: "fixed", bottom: 24, right: 24,
+                        display: "flex", alignItems: "center", gap: 10, zIndex: 50,
+                    }}>
+                        <div style={{
+                            display: "flex", gap: 8,
+                            background: "rgba(0,0,0,0.5)", backdropFilter: "blur(12px)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            padding: "8px 12px", borderRadius: 99,
+                            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                        }}>
+                            <button
+                                onClick={toggleSpeaker}
+                                style={{
+                                    width: 42, height: 42, borderRadius: "50%", border: "none",
+                                    background: isSpeakerOn ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
+                                    color: isSpeakerOn ? "#6366f1" : "rgba(255,255,255,0.3)",
+                                    cursor: "pointer", fontSize: 18,
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    transition: "all 0.2s",
+                                }}
+                            >
+                                {isSpeakerOn ? "≡ƒöè" : "≡ƒöç"}
+                            </button>
+                            <button
+                                onClick={toggleMic}
+                                style={{
+                                    width: 42, height: 42, borderRadius: "50%", border: "none",
+                                    background: isMicOn ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.1)",
+                                    color: isMicOn ? "#ef4444" : "#22c55e",
+                                    cursor: "pointer", fontSize: 18,
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    transition: "all 0.2s",
+                                }}
+                            >
+                                {isMicOn ? "≡ƒÄÖ∩╕Å" : "≡ƒÜ½"}
+                            </button>
+                        </div>
+
                         <button
-                            onClick={toggleSpeaker}
-                            className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center text-lg cursor-pointer transition-all ${
-                                isSpeakerOn ? "bg-indigo-500/20 text-indigo-400" : "bg-white/5 text-white/30 hover:bg-white/10"
-                            }`}
+                            onClick={() => setIsChatOpen(!isChatOpen)}
+                            style={{
+                                width: 52, height: 52, borderRadius: "50%", border: "none",
+                                background: isChatOpen ? "#e6a822" : "rgba(255,255,255,0.08)",
+                                color: isChatOpen ? "#000" : "rgba(255,255,255,0.6)",
+                                cursor: "pointer", fontSize: 20,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                boxShadow: isChatOpen ? "0 4px 20px rgba(230,168,34,0.4)" : "0 4px 16px rgba(0,0,0,0.4)",
+                                transition: "all 0.2s",
+                            }}
                         >
-                            {isSpeakerOn ? "🔊" : "🔇"}
-                        </button>
-                        <button
-                            onClick={toggleMic}
-                            className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center text-lg cursor-pointer transition-all ${
-                                isMicOn ? "bg-red-500/20 text-red-500" : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
-                            }`}
-                        >
-                            {isMicOn ? "🎙️" : "🚫"}
+                            {isChatOpen ? "Γ£û" : "≡ƒÆ¼"}
                         </button>
                     </div>
-
-                    <button
-                        onClick={() => setIsChatOpen(!isChatOpen)}
-                        className={`w-[52px] h-[52px] rounded-full border-none flex items-center justify-center text-xl cursor-pointer transition-all ${
-                            isChatOpen 
-                                ? "bg-[#e6a822] text-black shadow-[0_4px_20px_rgba(230,168,34,0.4)]" 
-                                : "bg-white/10 text-white/60 hover:bg-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
-                        }`}
-                    >
-                        {isChatOpen ? "✖" : "💬"}
-                    </button>
-                </div>
-            )}
-
-            {!isJoinedVoice && (
-                <div className="fixed bottom-6 right-6 bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
-                    <span className="w-2 h-2 rounded-full bg-yellow-500/50"></span>
-                    Đang kết nối voice...
-                </div>
-            )}
-
-            {/* Chat box */}
-            <div className={`fixed bottom-24 right-6 w-[340px] z-[55] transition-all duration-300 ${isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-                {connection && (
-                    <ChatBox
-                        connection={connection}
-                        roomId={roomId}
-                        currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
-                        playerCount={Object.keys(roomState?.players || {}).length}
-                    />
                 )}
+
+                {!isJoinedVoice && (
+                    <div style={{
+                        position: "fixed", bottom: 24, right: 24,
+                        background: "rgba(0,0,0,0.5)", borderRadius: 99, padding: "8px 16px",
+                        color: "rgba(255,255,255,0.3)", fontSize: 12,
+                        animation: "pulse-opacity 1.5s ease-in-out infinite",
+                    }}>
+                        <style>{`@keyframes pulse-opacity { 0%,100%{opacity:0.5;} 50%{opacity:1;} }`}</style>
+                        ≡ƒÄñ ─Éang kß║┐t nß╗æi voice...
+                    </div>
+                )}
+
+                {/* Chat box */}
+                <div style={{
+                    position: "fixed", bottom: 90, right: 24, width: 340,
+                    zIndex: 55, display: isChatOpen ? "block" : "none",
+                }}>
+                    {connection && (
+                        <ChatBox
+                            connection={connection}
+                            roomId={roomId}
+                            currentUser={currentUser || sessionStorage.getItem("username") || "Ng╞░ß╗¥i ch╞íi"}
+                            playerCount={currentPlayerCount}
+                        />
+                    )}
+                </div>
             </div>
         </div>
     );
 }
 
-// Helper — move outside component to avoid recreation
-function canSkip() { return true; } // Logic thực sẽ do server control
+// Helper ΓÇö move outside component to avoid recreation
+function canSkip() { return true; } // Logic thß╗▒c sß║╜ do server control
