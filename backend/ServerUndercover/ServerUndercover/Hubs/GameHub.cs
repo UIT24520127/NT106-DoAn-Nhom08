@@ -65,6 +65,7 @@ namespace ServerUndercover.Hubs
             {
                 player.UserId,
                 player.DisplayName,
+                player.Avatar,
                 player.IsReady,
                 player.IsConnected,
                 player.IsEliminated,
@@ -77,16 +78,16 @@ namespace ServerUndercover.Hubs
         {
             return new
             {
-                room.RoomId,
-                room.HostId,
-                room.IsPublic,
-                room.State,
-                room.Settings,
-                room.Phase,
-                room.TurnOrder,
-                room.CurrentTurnIndex,
-                room.VoteEndTime,
-                room.RoundNumber,
+                roomId = room.RoomId,
+                hostId = room.HostId,
+                isPublic = room.IsPublic,
+                state = room.State.ToString(),
+                phase = room.Phase.ToString(),
+                settings = room.Settings,
+                turnOrder = room.TurnOrder,
+                currentTurnIndex = room.CurrentTurnIndex,
+                voteEndTime = room.VoteEndTime,
+                roundNumber = room.RoundNumber,
                 players = room.Players.Values.ToDictionary(p => p.UserId, p => SanitizePlayer(p))
             };
         }
@@ -150,10 +151,19 @@ namespace ServerUndercover.Hubs
 
         private async Task CloseLoadingAndRevealRoles(Room room)
         {
-            if (room.LoadingClosed || room.Phase != GamePhase.Loading) return;
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", $"DEBUG: CloseLoadingAndRevealRoles entered! Phase: {room.Phase}");
+            
+            lock (room)
+            {
+                if (room.LoadingClosed || room.Phase != GamePhase.Loading) 
+                {
+                    _ = _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", $"DEBUG: Early exit. LoadingClosed: {room.LoadingClosed}, Phase: {room.Phase}");
+                    return;
+                }
+                room.LoadingClosed = true;
+            }
 
-            room.LoadingClosed = true;
-
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", $"DEBUG: Past lock. TimedOut Check...");
             var timedOutPlayers = room.Players.Values
                 .Where(p => !room.LoadingReadyPlayerIds.ContainsKey(p.UserId))
                 .ToList();
@@ -193,10 +203,15 @@ namespace ServerUndercover.Hubs
                 player.IsReady = false;
             }
 
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Updating Session Phase...");
             await _roomManager.UpdateGameSessionPhaseAsync(room);
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Broadcasting Loading...");
             await BroadcastLoadingProgress(room);
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Sending Room Updated...");
             await SendRoomUpdatedToGroup(room.RoomId, room);
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Sending Secrets...");
             await SendSecretsToRoom(room);
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: CloseLoadingAndRevealRoles FINISHED!");
         }
 
         private async Task CloseLoadingAfterTimeout(string roomId, DateTime loadingStartedAt)
@@ -353,7 +368,7 @@ namespace ServerUndercover.Hubs
                 if (_roomManager.GetConnectionId(userId) == Context.ConnectionId)
                 {
                     _roomManager.MarkDisconnected(userId);
-                    _roomManager.RemoveConnection(userId);
+                    _roomManager.RemoveConnection(userId, Context.ConnectionId);
 
                     string? roomId = _roomManager.GetUserRoomId(userId);
                     if (roomId != null)

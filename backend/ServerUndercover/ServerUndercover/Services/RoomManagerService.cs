@@ -65,9 +65,15 @@ namespace ServerUndercover.Services
             }
         }
 
-        public void RemoveConnection(string userId)
+        public void RemoveConnection(string userId, string connectionId)
         {
-            _userConnections.TryRemove(userId, out _);
+            if (_userConnections.TryGetValue(userId, out string? currentConnectionId))
+            {
+                if (currentConnectionId == connectionId)
+                {
+                    _userConnections.TryRemove(userId, out _);
+                }
+            }
         }
 
         public string? GetConnectionId(string userId)
@@ -665,18 +671,25 @@ namespace ServerUndercover.Services
 
         public async Task UpdateGameSessionPhaseAsync(Room room)
         {
-            if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
+            try
+            {
+                if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
 
-            await _firebaseClient
-                .Child("gameSessions")
-                .Child(room.RoomId)
-                .Child(room.CurrentGameSessionId)
-                .PatchAsync(new
-                {
-                    phase = room.Phase.ToString(),
-                    roundNumber = room.RoundNumber,
-                    updatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                });
+                await _firebaseClient
+                    .Child("gameSessions")
+                    .Child(room.RoomId)
+                    .Child(room.CurrentGameSessionId)
+                    .PatchAsync(new
+                    {
+                        phase = room.Phase.ToString(),
+                        roundNumber = room.RoundNumber,
+                        updatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Firebase Error] UpdateGameSessionPhaseAsync: {ex.Message}");
+            }
         }
 
         public async Task RecordDescriptionAsync(Room room, string userId, string text, string source, int turnIndex)
