@@ -239,7 +239,9 @@ namespace ServerUndercover.Hubs
                 room.CurrentTurnEndTime = DateTimeOffset.UtcNow.AddSeconds(room.Settings.DescribeDuration).ToUnixTimeMilliseconds();
             }
 
-            return Clients.Group(roomId).SendAsync("TurnStarted", new
+            _ = EndTurnAfterTimeout(roomId, room.CurrentTurnIndex, room.CurrentTurnEndTime);
+
+            return _hubContext.Clients.Group(roomId).SendAsync("TurnStarted", new
             {
                 currentSpeakerId = room.TurnOrder[room.CurrentTurnIndex],
                 currentTurnIndex = room.CurrentTurnIndex,
@@ -248,16 +250,59 @@ namespace ServerUndercover.Hubs
             });
         }
 
+        private async Task EndTurnAfterTimeout(string roomId, int turnIndex, long endTime)
+        {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var delayMs = endTime - now;
+            if (delayMs > 0)
+            {
+                await Task.Delay((int)delayMs);
+            }
+
+            var room = _roomManager.GetRoom(roomId);
+            if (room == null || room.Phase != GamePhase.Describing || room.CurrentTurnIndex != turnIndex)
+                return;
+
+            string currentSpeakerId = room.TurnOrder[turnIndex];
+
+            // Auto submit timeout description
+            int submittedTurnIndex = room.CurrentTurnIndex;
+            bool roundOver = _roomManager.SubmitDescription(roomId, currentSpeakerId, "(Hết thời gian)");
+            await _roomManager.RecordDescriptionAsync(room, currentSpeakerId, "(Hết thời gian)", "typed", submittedTurnIndex);
+
+            await _hubContext.Clients.Group(roomId).SendAsync("DescriptionSubmitted", new
+            {
+                userId = currentSpeakerId,
+                word = "(Hết thời gian)",
+                source = "typed",
+                roundNumber = room.RoundNumber,
+                currentTurnIndex = submittedTurnIndex
+            });
+
+            if (roundOver)
+            {
+                _roomManager.StartVotingPhase(roomId);
+                await _roomManager.UpdateGameSessionPhaseAsync(room);
+                await BroadcastVotingStarted(roomId, room);
+            }
+            else
+            {
+                await _hubContext.Clients.Group(roomId).SendAsync("TurnEnded", new
+                {
+                    nextTurnIndex = room.CurrentTurnIndex
+                });
+                await BroadcastTurnStarted(roomId, room);
+            }
+        }
+
         private Task SendTurnStartedToCaller(string roomId, Room room)
         {
             if (room.CurrentTurnIndex >= room.TurnOrder.Count)
                 return Task.CompletedTask;
 
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            if (room.CurrentTurnEndTime <= now)
-            {
-                room.CurrentTurnEndTime = DateTimeOffset.UtcNow.AddSeconds(room.Settings.DescribeDuration).ToUnixTimeMilliseconds();
-            }
+            // REMOVED resetting CurrentTurnEndTime here!
+            // When F5 reconnecting, it should just receive the existing endTime
+            // (even if it's already in the past, client will show 0s)
 
             return Clients.Caller.SendAsync("TurnStarted", new
             {
@@ -270,11 +315,34 @@ namespace ServerUndercover.Hubs
 
         private Task BroadcastVotingStarted(string roomId, Room room)
         {
-            return Clients.Group(roomId).SendAsync("VotingStarted", new
+            // Only fire timeout if we just started the vote (time <= now before this call)
+            // Wait, we can just ALWAYS fire a background task, the background task will check Phase and Time
+            _ = EndVotingAfterTimeout(roomId, room.VoteEndTime);
+
+            return _hubContext.Clients.Group(roomId).SendAsync("VotingStarted", new
             {
                 endTime = room.VoteEndTime,
                 duration = room.Settings.VoteDuration
             });
+        }
+
+        private async Task EndVotingAfterTimeout(string roomId, long endTime)
+        {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var delayMs = endTime - now;
+            if (delayMs > 0)
+            {
+                await Task.Delay((int)delayMs);
+            }
+
+            var room = _roomManager.GetRoom(roomId);
+            if (room == null || room.Phase != GamePhase.Voting || room.VoteEndTime != endTime)
+                return;
+
+            // Timeout hit, resolve votes forcefully
+            var resolution = _roomManager.ResolveVotes(roomId);
+            await _roomManager.UpdateGameSessionPhaseAsync(room);
+            await BroadcastRoundTransition(roomId, room, resolution);
         }
 
         private Task SendVotingStartedToCaller(string roomId, Room room)

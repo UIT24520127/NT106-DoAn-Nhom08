@@ -550,8 +550,8 @@ namespace ServerUndercover.Services
                 p.VoteCount = 0;
 
             room.Phase = GamePhase.Voting;
-            // 3 phút tính từ bây giờ, dùng Unix milliseconds để client dễ đồng bộ
-            room.VoteEndTime = DateTimeOffset.UtcNow.AddMinutes(3).ToUnixTimeMilliseconds();
+            // Dùng Unix milliseconds để client dễ đồng bộ
+            room.VoteEndTime = DateTimeOffset.UtcNow.AddSeconds(room.Settings.VoteDuration).ToUnixTimeMilliseconds();
         }
 
         public record VoteCastResult(bool Success, int NewVoteCount, string ErrorMessage);

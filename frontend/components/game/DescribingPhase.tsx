@@ -95,10 +95,27 @@ export default function DescribingPhase({
       const elapsed = Math.floor((Date.now() - start) / 1000);
       const remaining = Math.max(0, describeDuration - elapsed);
       setTimeLeft(remaining);
-      if (remaining === 0) window.clearInterval(interval);
+      if (remaining === 0) {
+        window.clearInterval(interval);
+      }
     }, 1000);
     return () => window.clearInterval(interval);
   }, [currentTurnIndex, describeDuration]);
+
+  // Handle auto-submit when time reaches 0
+  useEffect(() => {
+    if (timeLeft === 0 && isMyTurn) {
+      // Small timeout to let state settle
+      window.setTimeout(() => {
+        const text = descriptionText.trim();
+        if (!text) {
+          onSkipTurn();
+        } else {
+          onSubmitDescription(text, descriptionSource);
+        }
+      }, 100);
+    }
+  }, [timeLeft, isMyTurn, descriptionText, descriptionSource, onSkipTurn, onSubmitDescription]);
 
   useEffect(() => {
     setDescriptionText("");
