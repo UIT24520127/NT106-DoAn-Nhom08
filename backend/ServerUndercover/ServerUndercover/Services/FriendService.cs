@@ -2,6 +2,8 @@ using Google.Cloud.Firestore;
 using ServerUndercover.Models.DTOs;
 using Firebase.Database;
 using Firebase.Database.Query;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace ServerUndercover.Services
 {
@@ -191,7 +193,6 @@ namespace ServerUndercover.Services
         public async Task<List<Dictionary<string, object>>> GetFriendsAsync(string userId)
         {
             var friendshipsRef = _firestore.Collection("friendships");
-            var friends = new List<Dictionary<string, object>>();
 
             Query query1 = friendshipsRef.WhereEqualTo("requesterId", userId).WhereEqualTo("status", "accepted");
             Query query2 = friendshipsRef.WhereEqualTo("addresseeId", userId).WhereEqualTo("status", "accepted");
@@ -199,7 +200,7 @@ namespace ServerUndercover.Services
             var snap1 = await query1.GetSnapshotAsync();
             var snap2 = await query2.GetSnapshotAsync();
 
-            foreach (var doc in snap1.Documents.Concat(snap2.Documents))
+            var tasks = snap1.Documents.Concat(snap2.Documents).Select(async doc =>
             {
                 var data = doc.ToDictionary();
                 string friendId = data["requesterId"].ToString() == userId ? data["addresseeId"].ToString() : data["requesterId"].ToString();
@@ -211,20 +212,38 @@ namespace ServerUndercover.Services
                 };
                 userInfo["id"] = friendId;
                 userInfo["friendshipId"] = data["id"];
-                friends.Add(userInfo);
+                return userInfo;
+            });
+
+            var results = await Task.WhenAll(tasks);
+            var friendsList = results.ToList();
+
+            // Tự động đồng bộ lại danh sách bạn bè lên RTDB để tránh lỗi mất đồng bộ dữ liệu
+            try
+            {
+                var rtdbFriendsRef = _firebaseClient.Child("friends").Child(userId);
+                foreach(var friend in friendsList)
+                {
+                    await rtdbFriendsRef.Child(friend["id"].ToString()).PutAsync(new {
+                        id = friend["id"],
+                        username = friend["username"],
+                        friendshipId = friend["friendshipId"]
+                    });
+                }
             }
-            return friends;
+            catch { /* ignore error during sync */ }
+
+            return friendsList;
         }
 
         public async Task<List<Dictionary<string, object>>> GetPendingRequestsAsync(string userId)
         {
             var friendshipsRef = _firestore.Collection("friendships");
-            var requests = new List<Dictionary<string, object>>();
 
             Query query = friendshipsRef.WhereEqualTo("addresseeId", userId).WhereEqualTo("status", "pending");
             var snap = await query.GetSnapshotAsync();
 
-            foreach (var doc in snap.Documents)
+            var tasks = snap.Documents.Select(async doc =>
             {
                 var data = doc.ToDictionary();
                 string requesterId = data["requesterId"].ToString();
@@ -237,10 +256,11 @@ namespace ServerUndercover.Services
                 userInfo["id"] = requesterId;
                 userInfo["friendshipId"] = data["id"];
                 userInfo["createdAt"] = data["createdAt"];
-                requests.Add(userInfo);
-            }
+                return userInfo;
+            });
 
-            return requests;
+            var results = await Task.WhenAll(tasks);
+            return results.ToList();
         }
         
         public async Task<List<Dictionary<string, object>>> SearchUsersAsync(string searchQuery, string currentUserId)
@@ -260,6 +280,83 @@ namespace ServerUndercover.Services
                     results.Add(userInfo);
                 }
             }
+            return results;
+        }
+
+        public async Task<string> SendMessageAsync(string senderId, SendMessageDto request)
+        {
+            var userSnap = await _firestore.Collection("users").Document(senderId).GetSnapshotAsync();
+            string senderName = userSnap.Exists && userSnap.ContainsField("username") 
+                                ? userSnap.GetValue<string>("username") 
+                                : "Unknown";
+
+            var msg = new Dictionary<string, object>
+            {
+                { "senderId", senderId },
+                { "senderName", senderName },
+                { "text", request.Text },
+                { "timestamp", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() }
+            };
+
+            var msgRef = string.IsNullOrEmpty(request.ClientMsgId) 
+                            ? _firestore.Collection("FriendChats")
+                                        .Document(request.FriendshipId)
+                                        .Collection("Messages")
+                                        .Document()
+                            : _firestore.Collection("FriendChats")
+                                        .Document(request.FriendshipId)
+                                        .Collection("Messages")
+                                        .Document(request.ClientMsgId);
+            
+            // Lấy ID thật sau khi gen để trả về hoặc có thể push thẳng RTDB
+            msg["msgId"] = msgRef.Id;
+
+            await msgRef.SetAsync(msg);
+
+            // Ghi vào RTDB để realtime push cho người nhận
+            await _firebaseClient.Child("friend_chats")
+                                 .Child(request.FriendshipId)
+                                 .Child("messages")
+                                 .Child(msgRef.Id)
+                                 .PutAsync(msg);
+
+            // Cập nhật cờ chưa đọc cho đối phương nếu có TargetUserId
+            if (!string.IsNullOrEmpty(request.TargetUserId))
+            {
+                await _firebaseClient.Child("unread_messages")
+                                     .Child(request.TargetUserId)
+                                     .Child(request.FriendshipId)
+                                     .PutAsync(true);
+            }
+
+            return string.Empty;
+        }
+
+        public async Task<List<Dictionary<string, object>>> GetMessagesAsync(string friendshipId, long? beforeTimestamp)
+        {
+            var query = _firestore.Collection("FriendChats")
+                                  .Document(friendshipId)
+                                  .Collection("Messages")
+                                  .OrderByDescending("timestamp");
+
+            if (beforeTimestamp.HasValue)
+            {
+                query = query.WhereLessThan("timestamp", beforeTimestamp.Value);
+            }
+
+            var snapshot = await query.Limit(30).GetSnapshotAsync();
+            var results = new List<Dictionary<string, object>>();
+
+            // Vì orderByDescending nên danh sách lấy được là từ mới đến cũ
+            // Chúng ta cần đảo ngược lại để hiển thị đúng thứ tự từ trên xuống dưới
+            foreach (var doc in snapshot.Documents)
+            {
+                var dict = doc.ToDictionary();
+                dict["msgId"] = doc.Id;
+                results.Add(dict);
+            }
+
+            results.Reverse(); // Lật ngược lại để cũ ở trên, mới ở dưới
             return results;
         }
     }

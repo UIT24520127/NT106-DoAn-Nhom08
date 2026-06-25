@@ -65,9 +65,15 @@ namespace ServerUndercover.Services
             }
         }
 
-        public void RemoveConnection(string userId)
+        public void RemoveConnection(string userId, string connectionId)
         {
-            _userConnections.TryRemove(userId, out _);
+            if (_userConnections.TryGetValue(userId, out string? currentConnectionId))
+            {
+                if (currentConnectionId == connectionId)
+                {
+                    _userConnections.TryRemove(userId, out _);
+                }
+            }
         }
 
         public string? GetConnectionId(string userId)
@@ -92,7 +98,7 @@ namespace ServerUndercover.Services
             return roomId;
         }
 
-        public Room? CreateRoom(string hostId, string displayName, bool isPublic, GameSettings settings, out string errorMessage)
+        public Room? CreateRoom(string hostId, string displayName, string avatar, bool isPublic, GameSettings settings, out string errorMessage)
         {
             errorMessage = string.Empty;
 
@@ -126,6 +132,7 @@ namespace ServerUndercover.Services
             {
                 UserId = hostId,
                 DisplayName = displayName,
+                Avatar = avatar,
                 ConnectionId = GetConnectionId(hostId) ?? string.Empty,
                 IsConnected = true,
                 IsReady = true // Host mặc định ready
@@ -139,7 +146,7 @@ namespace ServerUndercover.Services
             return room;
         }
 
-        public Room? JoinRoom(string roomId, string userId, string displayName, out string errorMessage)
+        public Room? JoinRoom(string roomId, string userId, string displayName, string avatar, out string errorMessage)
         {
             errorMessage = string.Empty;
 
@@ -169,6 +176,7 @@ namespace ServerUndercover.Services
                     existingPlayer.ConnectionId = GetConnectionId(userId) ?? string.Empty;
                     existingPlayer.IsConnected = true;
                     existingPlayer.DisconnectedAt = null;
+                    existingPlayer.Avatar = avatar;
                 }
                 return room;
             }
@@ -205,6 +213,7 @@ namespace ServerUndercover.Services
             {
                 UserId = userId,
                 DisplayName = displayName,
+                Avatar = avatar,
                 ConnectionId = GetConnectionId(userId) ?? string.Empty,
                 IsConnected = true
             };
@@ -541,8 +550,8 @@ namespace ServerUndercover.Services
                 p.VoteCount = 0;
 
             room.Phase = GamePhase.Voting;
-            // 3 phút tính từ bây giờ, dùng Unix milliseconds để client dễ đồng bộ
-            room.VoteEndTime = DateTimeOffset.UtcNow.AddMinutes(3).ToUnixTimeMilliseconds();
+            // Dùng Unix milliseconds để client dễ đồng bộ
+            room.VoteEndTime = DateTimeOffset.UtcNow.AddSeconds(room.Settings.VoteDuration).ToUnixTimeMilliseconds();
         }
 
         public record VoteCastResult(bool Success, int NewVoteCount, string ErrorMessage);
@@ -662,18 +671,25 @@ namespace ServerUndercover.Services
 
         public async Task UpdateGameSessionPhaseAsync(Room room)
         {
-            if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
+            try
+            {
+                if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
 
-            await _firebaseClient
-                .Child("gameSessions")
-                .Child(room.RoomId)
-                .Child(room.CurrentGameSessionId)
-                .PatchAsync(new
-                {
-                    phase = room.Phase.ToString(),
-                    roundNumber = room.RoundNumber,
-                    updatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                });
+                await _firebaseClient
+                    .Child("gameSessions")
+                    .Child(room.RoomId)
+                    .Child(room.CurrentGameSessionId)
+                    .PatchAsync(new
+                    {
+                        phase = room.Phase.ToString(),
+                        roundNumber = room.RoundNumber,
+                        updatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Firebase Error] UpdateGameSessionPhaseAsync: {ex.Message}");
+            }
         }
 
         public async Task RecordDescriptionAsync(Room room, string userId, string text, string source, int turnIndex)

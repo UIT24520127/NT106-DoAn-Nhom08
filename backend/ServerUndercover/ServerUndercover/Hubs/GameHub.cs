@@ -34,9 +34,12 @@ namespace ServerUndercover.Hubs
             return room != null && !string.IsNullOrEmpty(userId) && room.HostId == userId;
         }
         
-        private async Task<string> GetDisplayNameAsync(string userId)
+        private async Task<(string displayName, string avatar)> GetUserProfileAsync(string userId)
         {
-            if (string.IsNullOrEmpty(userId)) return string.Empty;
+            string displayName = "Player_" + (userId.Length > 4 ? userId.Substring(0, 4) : userId);
+            string avatar = string.Empty;
+
+            if (string.IsNullOrEmpty(userId)) return (displayName, avatar);
             
             try 
             {
@@ -45,13 +48,15 @@ namespace ServerUndercover.Hubs
                 
                 if (snapshot.Exists)
                 {
-                    if (snapshot.TryGetValue("username", out string username)) return username;
-                    if (snapshot.TryGetValue("Username", out string usernameCapital)) return usernameCapital;
+                    if (snapshot.TryGetValue("username", out string username)) displayName = username;
+                    else if (snapshot.TryGetValue("Username", out string usernameCapital)) displayName = usernameCapital;
+
+                    if (snapshot.TryGetValue("avatar", out string userAvatar)) avatar = userAvatar;
                 }
             }
-            catch (Exception) { /* Bỏ qua lỗi, dùng fallback bên dưới */ }
+            catch (Exception) { /* Bỏ qua lỗi */ }
             
-            return Context.User?.FindFirst("name")?.Value ?? "Player_" + userId.Substring(0, 4);
+            return (displayName, avatar);
         }
 
         private object SanitizePlayer(RoomPlayer player)
@@ -60,6 +65,7 @@ namespace ServerUndercover.Hubs
             {
                 player.UserId,
                 player.DisplayName,
+                player.Avatar,
                 player.IsReady,
                 player.IsConnected,
                 player.IsEliminated,
@@ -72,16 +78,16 @@ namespace ServerUndercover.Hubs
         {
             return new
             {
-                room.RoomId,
-                room.HostId,
-                room.IsPublic,
-                room.State,
-                room.Settings,
-                room.Phase,
-                room.TurnOrder,
-                room.CurrentTurnIndex,
-                room.VoteEndTime,
-                room.RoundNumber,
+                roomId = room.RoomId,
+                hostId = room.HostId,
+                isPublic = room.IsPublic,
+                state = room.State.ToString(),
+                phase = room.Phase.ToString(),
+                settings = room.Settings,
+                turnOrder = room.TurnOrder,
+                currentTurnIndex = room.CurrentTurnIndex,
+                voteEndTime = room.VoteEndTime,
+                roundNumber = room.RoundNumber,
                 players = room.Players.Values.ToDictionary(p => p.UserId, p => SanitizePlayer(p))
             };
         }
@@ -145,10 +151,19 @@ namespace ServerUndercover.Hubs
 
         private async Task CloseLoadingAndRevealRoles(Room room)
         {
-            if (room.LoadingClosed || room.Phase != GamePhase.Loading) return;
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", $"DEBUG: CloseLoadingAndRevealRoles entered! Phase: {room.Phase}");
+            
+            lock (room)
+            {
+                if (room.LoadingClosed || room.Phase != GamePhase.Loading) 
+                {
+                    _ = _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", $"DEBUG: Early exit. LoadingClosed: {room.LoadingClosed}, Phase: {room.Phase}");
+                    return;
+                }
+                room.LoadingClosed = true;
+            }
 
-            room.LoadingClosed = true;
-
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", $"DEBUG: Past lock. TimedOut Check...");
             var timedOutPlayers = room.Players.Values
                 .Where(p => !room.LoadingReadyPlayerIds.ContainsKey(p.UserId))
                 .ToList();
@@ -188,10 +203,15 @@ namespace ServerUndercover.Hubs
                 player.IsReady = false;
             }
 
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Updating Session Phase...");
             await _roomManager.UpdateGameSessionPhaseAsync(room);
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Broadcasting Loading...");
             await BroadcastLoadingProgress(room);
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Sending Room Updated...");
             await SendRoomUpdatedToGroup(room.RoomId, room);
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Sending Secrets...");
             await SendSecretsToRoom(room);
+            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: CloseLoadingAndRevealRoles FINISHED!");
         }
 
         private async Task CloseLoadingAfterTimeout(string roomId, DateTime loadingStartedAt)
@@ -219,7 +239,9 @@ namespace ServerUndercover.Hubs
                 room.CurrentTurnEndTime = DateTimeOffset.UtcNow.AddSeconds(room.Settings.DescribeDuration).ToUnixTimeMilliseconds();
             }
 
-            return Clients.Group(roomId).SendAsync("TurnStarted", new
+            _ = EndTurnAfterTimeout(roomId, room.CurrentTurnIndex, room.CurrentTurnEndTime);
+
+            return _hubContext.Clients.Group(roomId).SendAsync("TurnStarted", new
             {
                 currentSpeakerId = room.TurnOrder[room.CurrentTurnIndex],
                 currentTurnIndex = room.CurrentTurnIndex,
@@ -228,16 +250,59 @@ namespace ServerUndercover.Hubs
             });
         }
 
+        private async Task EndTurnAfterTimeout(string roomId, int turnIndex, long endTime)
+        {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var delayMs = endTime - now;
+            if (delayMs > 0)
+            {
+                await Task.Delay((int)delayMs);
+            }
+
+            var room = _roomManager.GetRoom(roomId);
+            if (room == null || room.Phase != GamePhase.Describing || room.CurrentTurnIndex != turnIndex)
+                return;
+
+            string currentSpeakerId = room.TurnOrder[turnIndex];
+
+            // Auto submit timeout description
+            int submittedTurnIndex = room.CurrentTurnIndex;
+            bool roundOver = _roomManager.SubmitDescription(roomId, currentSpeakerId, "(Hết thời gian)");
+            await _roomManager.RecordDescriptionAsync(room, currentSpeakerId, "(Hết thời gian)", "typed", submittedTurnIndex);
+
+            await _hubContext.Clients.Group(roomId).SendAsync("DescriptionSubmitted", new
+            {
+                userId = currentSpeakerId,
+                word = "(Hết thời gian)",
+                source = "typed",
+                roundNumber = room.RoundNumber,
+                currentTurnIndex = submittedTurnIndex
+            });
+
+            if (roundOver)
+            {
+                _roomManager.StartVotingPhase(roomId);
+                await _roomManager.UpdateGameSessionPhaseAsync(room);
+                await BroadcastVotingStarted(roomId, room);
+            }
+            else
+            {
+                await _hubContext.Clients.Group(roomId).SendAsync("TurnEnded", new
+                {
+                    nextTurnIndex = room.CurrentTurnIndex
+                });
+                await BroadcastTurnStarted(roomId, room);
+            }
+        }
+
         private Task SendTurnStartedToCaller(string roomId, Room room)
         {
             if (room.CurrentTurnIndex >= room.TurnOrder.Count)
                 return Task.CompletedTask;
 
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            if (room.CurrentTurnEndTime <= now)
-            {
-                room.CurrentTurnEndTime = DateTimeOffset.UtcNow.AddSeconds(room.Settings.DescribeDuration).ToUnixTimeMilliseconds();
-            }
+            // REMOVED resetting CurrentTurnEndTime here!
+            // When F5 reconnecting, it should just receive the existing endTime
+            // (even if it's already in the past, client will show 0s)
 
             return Clients.Caller.SendAsync("TurnStarted", new
             {
@@ -250,11 +315,34 @@ namespace ServerUndercover.Hubs
 
         private Task BroadcastVotingStarted(string roomId, Room room)
         {
-            return Clients.Group(roomId).SendAsync("VotingStarted", new
+            // Only fire timeout if we just started the vote (time <= now before this call)
+            // Wait, we can just ALWAYS fire a background task, the background task will check Phase and Time
+            _ = EndVotingAfterTimeout(roomId, room.VoteEndTime);
+
+            return _hubContext.Clients.Group(roomId).SendAsync("VotingStarted", new
             {
                 endTime = room.VoteEndTime,
                 duration = room.Settings.VoteDuration
             });
+        }
+
+        private async Task EndVotingAfterTimeout(string roomId, long endTime)
+        {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var delayMs = endTime - now;
+            if (delayMs > 0)
+            {
+                await Task.Delay((int)delayMs);
+            }
+
+            var room = _roomManager.GetRoom(roomId);
+            if (room == null || room.Phase != GamePhase.Voting || room.VoteEndTime != endTime)
+                return;
+
+            // Timeout hit, resolve votes forcefully
+            var resolution = _roomManager.ResolveVotes(roomId);
+            await _roomManager.UpdateGameSessionPhaseAsync(room);
+            await BroadcastRoundTransition(roomId, room, resolution);
         }
 
         private Task SendVotingStartedToCaller(string roomId, Room room)
@@ -348,7 +436,7 @@ namespace ServerUndercover.Hubs
                 if (_roomManager.GetConnectionId(userId) == Context.ConnectionId)
                 {
                     _roomManager.MarkDisconnected(userId);
-                    _roomManager.RemoveConnection(userId);
+                    _roomManager.RemoveConnection(userId, Context.ConnectionId);
 
                     string? roomId = _roomManager.GetUserRoomId(userId);
                     if (roomId != null)
@@ -368,7 +456,7 @@ namespace ServerUndercover.Hubs
         public async Task CreateRoom(int maxPlayers, int maxBlackHats, int maxWhiteHats, bool isPublic)
         {
             string userId = GetUserId();
-            string displayName = await GetDisplayNameAsync(userId);
+            var profile = await GetUserProfileAsync(userId);
 
             var settings = new GameSettings
             {
@@ -377,7 +465,7 @@ namespace ServerUndercover.Hubs
                 MaxWhiteHats = maxWhiteHats
             };
 
-            var room = _roomManager.CreateRoom(userId, displayName, isPublic, settings, out string errorMessage);
+            var room = _roomManager.CreateRoom(userId, profile.displayName, profile.avatar, isPublic, settings, out string errorMessage);
 
             if (room == null)
             {
@@ -393,9 +481,9 @@ namespace ServerUndercover.Hubs
         public async Task JoinRoom(string roomId)
         {
             string userId = GetUserId();
-            string displayName = await GetDisplayNameAsync(userId);
+            var profile = await GetUserProfileAsync(userId);
 
-            var room = _roomManager.JoinRoom(roomId, userId, displayName, out string errorMessage);
+            var room = _roomManager.JoinRoom(roomId, userId, profile.displayName, profile.avatar, out string errorMessage);
             if (room == null)
             {
                 await Clients.Caller.SendAsync("RoomError", errorMessage);
