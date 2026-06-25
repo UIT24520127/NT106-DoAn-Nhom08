@@ -6,6 +6,7 @@ import { API_URL } from "@/lib/auth";
 import FriendCard from "./FriendCard";
 import UnfriendDialog from "./Unfrienddialog";
 import InviteSentSuccessDialog from "./Invitesentsuccessdialog";
+import InviteErrorDialog from "./InviteErrorDialog";
 import { watchFriendPresence } from "@/lib/presence";
 import { realtimeDb } from "@/lib/firebase";
 import { ref, onValue } from "firebase/database";
@@ -28,6 +29,7 @@ export default function FriendList({ token, onAvatarClick, onChat, showInvite = 
   const [loading, setLoading] = useState(true);
   const [unfriendTarget, setUnfriendTarget] = useState<any | null>(null);
   const [invitedUser, setInvitedUser] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   // 1. Lắng nghe danh sách bạn bè
   useEffect(() => {
@@ -104,7 +106,7 @@ export default function FriendList({ token, onAvatarClick, onChat, showInvite = 
 
   // 3. Lắng nghe cờ báo tin nhắn chưa đọc của từng bạn bè
   useEffect(() => {
-    const uid = localStorage.getItem("userId");
+    const uid = sessionStorage.getItem("userId");
     if (!uid) return;
 
     const unreadRef = ref(realtimeDb, `unread_messages/${uid}`);
@@ -154,7 +156,7 @@ export default function FriendList({ token, onAvatarClick, onChat, showInvite = 
     const roomId = window.location.pathname.split("/room/")[1];
     
     if (!roomId) {
-      alert("Bạn cần ở trong một phòng để có thể mời bạn bè.");
+      setInviteError("Bạn cần ở trong một phòng để có thể mời bạn bè.");
       return;
     }
     
@@ -167,7 +169,7 @@ export default function FriendList({ token, onAvatarClick, onChat, showInvite = 
       });
       setInvitedUser(username);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Lỗi gửi lời mời");
+      setInviteError(err.response?.data?.message || "Lỗi gửi lời mời");
     }
   };
 
@@ -220,6 +222,13 @@ export default function FriendList({ token, onAvatarClick, onChat, showInvite = 
         <InviteSentSuccessDialog 
           username={invitedUser}
           onClose={() => setInvitedUser(null)}
+        />
+      )}
+
+      {inviteError && (
+        <InviteErrorDialog 
+          errorMessage={inviteError}
+          onClose={() => setInviteError(null)}
         />
       )}
     </>

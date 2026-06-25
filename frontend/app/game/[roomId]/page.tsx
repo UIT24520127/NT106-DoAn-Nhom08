@@ -29,6 +29,7 @@ interface Player {
     userId: string;
     displayName: string;
     connectionId: string;
+    avatar?: string;
     isReady?: boolean;
     isEliminated?: boolean;
     role?: string;
@@ -38,6 +39,7 @@ interface Player {
 interface RoomState {
     hostId: string;
     players: Record<string, Player>;
+    settings?: any;
 }
 
 type GamePhase =
@@ -134,7 +136,7 @@ export default function GameRoomPage() {
 
     // Tự động cập nhật Trạng thái Presence là In-Match khi bắt đầu vào Game
     useEffect(() => {
-        const myId = localStorage.getItem("userId");
+        const myId = sessionStorage.getItem("userId");
         if (!myId) return;
 
         const presenceRef = ref(realtimeDb, `presence/${myId}`);
@@ -144,11 +146,7 @@ export default function GameRoomPage() {
         }).catch(console.error);
 
         return () => {
-            // Khi thoát trận đấu, trả lại trạng thái Online
-            set(presenceRef, {
-                status: "Online",
-                lastSeen: Date.now()
-            }).catch(console.error);
+            // Khi thoát trận đấu, SessionGuard sẽ tự xử lý chuyển trạng thái (In-Room hoặc Online)
         };
     }, []);
 
@@ -484,7 +482,7 @@ export default function GameRoomPage() {
 
         const newConn = new HubConnectionBuilder()
             .withUrl(`${API_URL}/gamehub`, {
-                accessTokenFactory: () => localStorage.getItem('token') || ""
+                accessTokenFactory: () => sessionStorage.getItem('token') || ""
             })
             .withAutomaticReconnect()
             .build();
@@ -492,7 +490,9 @@ export default function GameRoomPage() {
         // ── Room events ──────────────────────────
         newConn.on("RoomJoined", (room: RoomState) => {
             setRoomState(room);
-            newConn.invoke("GetRoomState", roomId).catch(console.error);
+            if (newConn.state === HubConnectionState.Connected) {
+                newConn.invoke("GetRoomState", roomId).catch(console.error);
+            }
         });
 
         newConn.on("RoomError", (message: string) => {
@@ -887,7 +887,7 @@ export default function GameRoomPage() {
                                 spectatorIds: [],
                                 activePlayerIds: [],
                             });
-                            setGamePhase('loading');
+                            setGamePhase(prev => prev === 'roleRevealing' ? 'roleRevealing' : 'loading');
                             await preloadGameAssets(syncedBackground);
                             try {
                                 await newConn.invoke("PlayerLoadingReady", roomId);
@@ -902,6 +902,9 @@ export default function GameRoomPage() {
                                 console.error("PlayerLoadingReady error:", e);
                             }
                         }
+                    } else {
+                        // Bắt dọn dẹp ở đây để không gây lỗi "stopped during negotiation"
+                        newConn.stop().catch(() => {});
                     }
                 } catch (err: any) {
                     if (!err.message?.includes("stopped during negotiation")) {
@@ -914,7 +917,10 @@ export default function GameRoomPage() {
 
         return () => {
             isMounted = false;
-            if (newConn.state === HubConnectionState.Connected) newConn.stop();
+            // Chỉ gọi stop nếu đã Connected. Nếu đang Connecting, nó sẽ được stop ở khối else bên trên
+            if (newConn.state === HubConnectionState.Connected) {
+                newConn.stop().catch(() => {});
+            }
             userStream.current?.getTracks().forEach(t => t.stop());
         };
     }, [roomId]);
@@ -1254,212 +1260,246 @@ export default function GameRoomPage() {
     const isMyPlayerReady = players.find(p => p.userId === currentUserId)?.isReady ?? false;
     const allReady = players.length >= 3 && players.every(p => p.isReady || p.userId === roomState?.hostId);
     const canStart = isHost && allReady;
+    const settings = roomState?.settings || {};
+    const maxPlayers = settings.maxPlayers || 8;
+    
+    // Dynamic sizing based on players
+    let gridColsClass = "grid-cols-3";
+    let cardPaddingClass = "p-6";
+    let avatarSizeClass = "w-24 h-24";
+    let iconSize = 40;
+    let titleSizeClass = "text-lg";
+    let crownSize = 14;
+    let readyBadgeClass = "px-3 py-1 text-sm";
+    let checkIconSize = 16;
+    let cardGapClass = "gap-4";
+    let topOffsetClass = "-top-4";
+
+    if (maxPlayers > 6 && maxPlayers <= 10) {
+      gridColsClass = "grid-cols-4";
+      cardPaddingClass = "p-4";
+      avatarSizeClass = "w-16 h-16";
+      iconSize = 30;
+      titleSizeClass = "text-base";
+      crownSize = 12;
+      readyBadgeClass = "px-2.5 py-0.5 text-xs";
+      checkIconSize = 12;
+      cardGapClass = "gap-3";
+      topOffsetClass = "-top-3.5";
+    } else if (maxPlayers > 10) {
+      gridColsClass = "grid-cols-5";
+      cardPaddingClass = "p-3";
+      avatarSizeClass = "w-12 h-12";
+      iconSize = 24;
+      titleSizeClass = "text-sm";
+      crownSize = 10;
+      readyBadgeClass = "px-2 py-0.5 text-[10px]";
+      checkIconSize = 10;
+      cardGapClass = "gap-2";
+      topOffsetClass = "-top-3";
+    }
 
     return (
-        <div style={pageRootStyle}>
+        <div 
+          className="relative min-h-screen w-screen bg-cover bg-center overflow-x-hidden overflow-y-auto flex flex-col items-center pt-20 pb-28 custom-scrollbar"
+          style={{ backgroundImage: `linear-gradient(180deg, rgba(7,9,17,0.9) 0%, rgba(7,9,17,0.62) 44%, rgba(4,5,10,0.96) 100%), url(${backgroundImage})` }}
+        >
             {overlayElements}
             {leaveRoomButton}
-            <div style={{
-                display: "flex", flexDirection: "column", alignItems: "center",
-                padding: "80px 16px 24px",
-                fontFamily: "'Inter', 'Segoe UI', sans-serif",
-                position: "relative",
-                minHeight: "100vh",
-            }}>
-                <Notification messages={notifications} />
 
-                {/* ====== SETTINGS PANEL (Host only) ====== */}
+            {/* Background ambient glow */}
+            <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(230,168,34,0.08)_0%,transparent_60%)]" />
+            <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full h-[300px] pointer-events-none bg-[radial-gradient(ellipse_60%_80%_at_50%_100%,rgba(99,102,241,0.06)_0%,transparent_70%)]" />
+
+            <Notification messages={notifications} />
+
+            {/* ── SECRET WORD DISPLAY (Only when game starts/roles are revealed) ── */}
+            {mySecret && (
+                <div className="mb-10 text-center flex flex-col items-center gap-3 z-10">
+                    <p className="text-white/30 text-[10px] tracking-[0.3em] uppercase m-0">
+                        Từ khóa bí mật
+                    </p>
+                    <div
+                        onClick={() => setIsChatOpen(p => p)}
+                        className="bg-black/40 border-2 border-[#e6a822]/20 rounded-[50px] px-8 py-3 text-[#e6a822] font-black text-xl tracking-[0.15em] cursor-pointer min-w-[240px] text-center shadow-[0_0_20px_rgba(230,168,34,0.08)] backdrop-blur-md"
+                    >
+                        <span className="animate-pulse">{mySecret.word}</span>
+                    </div>
+                </div>
+            )}
+
+            {/* ====== MAIN LAYOUT ====== */}
+            <div className="flex flex-col lg:flex-row gap-6 w-full max-w-5xl z-10 items-start px-4 sm:px-0 mt-8">
+                {/* PLAYER GRID */}
+                <div className="flex-1 w-full">
+                    <div className={`grid ${gridColsClass} gap-3.5 max-h-[55vh] overflow-y-auto pr-2 custom-scrollbar`}>
+                        {players.map(player => {
+                            const isMe = player.userId === currentUserId;
+                            const isPlayerHost = player.userId === roomState?.hostId;
+                            return (
+                                <div key={player.userId} 
+                                    className={`backdrop-blur-md rounded-2xl ${cardPaddingClass} flex flex-col items-center ${cardGapClass} relative transition-all duration-300 ${
+                                        player.isEliminated
+                                            ? "bg-black/30 border border-red-500/15 grayscale-[60%] opacity-60"
+                                            : player.isReady 
+                                                ? "bg-gradient-to-br from-green-500/10 to-white/5 border border-green-500/25 shadow-[0_0_20px_rgba(34,197,94,0.06)]"
+                                                : isMe 
+                                                    ? "bg-white/5 border border-[#e6a822]/30 shadow-[0_0_20px_rgba(230,168,34,0.08)]"
+                                                    : "bg-white/5 border border-white/10"
+                                    }`}
+                                >
+                                    {isPlayerHost && (
+                                        <div className={`absolute ${topOffsetClass} left-1/2 -translate-x-1/2 bg-gradient-to-br from-[#e6a822] to-[#d4941a] text-black px-3 py-1 rounded-full text-[10px] font-black flex items-center gap-1 shadow-[0_4px_12px_rgba(230,168,34,0.4)] tracking-widest`}>
+                                            <Shield size={crownSize} fill="currentColor" /> CHỦ PHÒNG
+                                        </div>
+                                    )}
+
+                                    <div className={`${avatarSizeClass} rounded-full flex items-center justify-center font-black text-2xl overflow-hidden shadow-inner ${
+                                        isMe 
+                                            ? "bg-[radial-gradient(circle_at_35%_35%,rgba(230,168,34,0.3),#0a0a14)] border-2 border-[#e6a822]/50 text-[#e6a822] shadow-[0_0_16px_rgba(230,168,34,0.2)]"
+                                            : "bg-[radial-gradient(circle_at_35%_35%,rgba(99,102,241,0.2),#0a0a14)] border-2 border-indigo-500/30 text-indigo-500"
+                                    } ${isPlayerHost ? 'mt-2' : ''}`}>
+                                        {player.avatar ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img src={player.avatar} alt={player.displayName} className="w-full h-full object-cover" />
+                                        ) : (
+                                            player.displayName?.charAt(0)?.toUpperCase() || "?"
+                                        )}
+                                    </div>
+
+                                    <div className="text-center w-full">
+                                        <h3 className={`${isMe ? 'text-[#e6a822]' : 'text-white'} font-bold ${titleSizeClass} truncate px-1 w-full`}>
+                                            {player.displayName}
+                                        </h3>
+                                        {isMe && <p className="text-[#e6a822]/60 text-[10px] mt-0.5 tracking-widest uppercase">(Bạn)</p>}
+                                    </div>
+
+                                    {player.isEliminated && (
+                                        <span className="text-lg">❌</span>
+                                    )}
+
+                                    {!mySecret && !player.isEliminated && (
+                                        player.isReady ? (
+                                            <span className={`flex items-center gap-1.5 text-green-500 font-extrabold bg-green-500/10 border border-green-500/30 ${readyBadgeClass} rounded-full tracking-wider`}>
+                                                <CheckCircle2 size={checkIconSize} /> SẴN SÀNG
+                                            </span>
+                                        ) : (
+                                            <span className={`text-white/30 font-semibold bg-white/5 border border-white/10 ${readyBadgeClass} rounded-full`}>
+                                                Đang chờ...
+                                            </span>
+                                        )
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* SETTINGS PANEL (Host only) */}
                 {isHost && (
-                    <div style={{
-                        width: 320, maxWidth: "100%", marginBottom: 30,
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        borderRadius: 18, overflow: "hidden",
-                        backdropFilter: "blur(12px)",
-                    }}>
+                    <div className="w-full lg:w-[280px] shrink-0 bg-white/5 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl flex flex-col h-fit">
                         <button
                             onClick={() => setShowSettings(!showSettings)}
-                            style={{
-                                width: "100%", padding: "16px 20px",
-                                background: "transparent", border: "none",
-                                display: "flex", alignItems: "center", gap: 10,
-                                cursor: "pointer", color: "#fff",
-                                borderBottom: showSettings ? "1px solid rgba(255,255,255,0.07)" : "none",
-                            }}
+                            className={`w-full px-5 py-4 bg-transparent border-none flex items-center gap-3 cursor-pointer text-white transition-all hover:bg-white/5 ${showSettings ? 'border-b border-white/10' : ''}`}
                         >
-                            <Settings size={16} style={{ color: "#e6a822" }} />
-                            <span style={{ fontWeight: 700, fontSize: 14, flex: 1, textAlign: "left" }}>Cài đặt phòng</span>
-                            {showSettings ? <ChevronUp size={16} style={{ color: "rgba(255,255,255,0.4)" }} /> : <ChevronDown size={16} style={{ color: "rgba(255,255,255,0.4)" }} />}
+                            <Settings size={18} className="text-[#e6a822]" />
+                            <span className="font-bold text-sm flex-1 text-left uppercase tracking-wider">Cài đặt phòng</span>
+                            {showSettings ? <ChevronUp size={16} className="text-white/40" /> : <ChevronDown size={16} className="text-white/40" />}
                         </button>
+
                         {showSettings && (
-                            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-                                <div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                                        <Clock size={13} style={{ color: "#22c55e" }} />
-                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Thời gian nói</span>
-                                        <span style={{ marginLeft: "auto", color: "#22c55e", fontWeight: 800, fontSize: 13 }}>{localSettings.describeDuration}s</span>
+                            <div className="p-5 flex flex-col gap-5">
+                                <div className="flex flex-col">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-1.5 text-white/70 text-xs font-bold uppercase tracking-wide">
+                                            <Clock size={14} className="text-green-500" /> Thời gian nói
+                                        </div>
+                                        <span className="text-green-500 font-black text-sm">{localSettings.describeDuration}s</span>
                                     </div>
-                                    <input type="range" min={15} max={60} step={5} value={localSettings.describeDuration} onChange={e => handleUpdateSettings({ describeDuration: Number(e.target.value) })} style={{ width: "100%", accentColor: "#22c55e" }} />
+                                    <input
+                                        type="range" min={15} max={60} step={5}
+                                        value={localSettings.describeDuration}
+                                        onChange={e => handleUpdateSettings({ describeDuration: Number(e.target.value) })}
+                                        className="w-full accent-green-500"
+                                    />
+                                    <div className="flex justify-between text-white/20 text-[10px] mt-1 font-medium">
+                                        <span>15s</span><span>60s</span>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                                        <Vote size={13} style={{ color: "#e6a822" }} />
-                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Thời gian vote</span>
-                                        <span style={{ marginLeft: "auto", color: "#e6a822", fontWeight: 800, fontSize: 13 }}>{localSettings.voteDuration}s</span>
+
+                                <div className="flex flex-col">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-1.5 text-white/70 text-xs font-bold uppercase tracking-wide">
+                                            <Vote size={14} className="text-[#e6a822]" /> Thời gian vote
+                                        </div>
+                                        <span className="text-[#e6a822] font-black text-sm">{localSettings.voteDuration}s</span>
                                     </div>
-                                    <input type="range" min={30} max={90} step={15} value={localSettings.voteDuration} onChange={e => handleUpdateSettings({ voteDuration: Number(e.target.value) })} style={{ width: "100%", accentColor: "#e6a822" }} />
+                                    <input
+                                        type="range" min={30} max={90} step={15}
+                                        value={localSettings.voteDuration}
+                                        onChange={e => handleUpdateSettings({ voteDuration: Number(e.target.value) })}
+                                        className="w-full accent-[#e6a822]"
+                                    />
+                                    <div className="flex justify-between text-white/20 text-[10px] mt-1 font-medium">
+                                        <span>30s</span><span>90s</span>
+                                    </div>
                                 </div>
-                                <div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                                        <Clock size={13} style={{ color: "#6366f1" }} />
-                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Chờ giữa vòng</span>
-                                        <span style={{ marginLeft: "auto", color: "#6366f1", fontWeight: 800, fontSize: 13 }}>{localSettings.roundTransitionDuration}s</span>
+
+                                <div className="flex flex-col">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-1.5 text-white/70 text-xs font-bold uppercase tracking-wide">
+                                            <Clock size={14} className="text-indigo-500" /> Chờ giữa vòng
+                                        </div>
+                                        <span className="text-indigo-500 font-black text-sm">{localSettings.roundTransitionDuration}s</span>
                                     </div>
-                                    <input type="range" min={5} max={10} step={1} value={localSettings.roundTransitionDuration} onChange={e => handleUpdateSettings({ roundTransitionDuration: Number(e.target.value) })} style={{ width: "100%", accentColor: "#6366f1" }} />
+                                    <input
+                                        type="range" min={5} max={10} step={1}
+                                        value={localSettings.roundTransitionDuration}
+                                        onChange={e => handleUpdateSettings({ roundTransitionDuration: Number(e.target.value) })}
+                                        className="w-full accent-indigo-500"
+                                    />
+                                    <div className="flex justify-between text-white/20 text-[10px] mt-1 font-medium">
+                                        <span>5s</span><span>10s</span>
+                                    </div>
+                                </div>
+                                
+                                <div 
+                                    onClick={() => handleUpdateSettings({ revealEliminatedRole: !localSettings.revealEliminatedRole })}
+                                    className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
+                                        localSettings.revealEliminatedRole 
+                                        ? 'bg-green-500/10 border-green-500/20' 
+                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                    }`}
+                                >
+                                    {localSettings.revealEliminatedRole ? <Eye size={18} className="text-green-500"/> : <EyeOff size={18} className="text-white/30"/>}
+                                    <div className="flex-1">
+                                        <div className="text-white text-xs font-bold">Tiết lộ vai</div>
+                                        <div className="text-white/30 text-[10px] mt-0.5">
+                                        {localSettings.revealEliminatedRole ? "Công khai" : "Ẩn thân"}
+                                        </div>
+                                    </div>
+                                    <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${localSettings.revealEliminatedRole ? 'bg-green-500' : 'bg-white/10'}`}>
+                                        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${localSettings.revealEliminatedRole ? 'left-[18px]' : 'left-0.5'}`} />
+                                    </div>
                                 </div>
                             </div>
                         )}
                     </div>
                 )}
+            </div>
 
-                {/* ── SECRET WORD DISPLAY (Only when game starts/roles are revealed) ── */}
-                {mySecret && (
-                    <div style={{ marginBottom: 40, textAlign: "center" }}>
-                        <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, letterSpacing: "0.3em", textTransform: "uppercase", margin: "0 0 10px" }}>
-                            Từ khóa bí mật
-                        </p>
-                        <div
-                            onClick={() => setIsChatOpen(p => p)}
-                            style={{
-                                background: "rgba(0,0,0,0.4)",
-                                border: "2px solid rgba(230,168,34,0.2)",
-                                borderRadius: 50, padding: "12px 32px",
-                                color: "#e6a822", fontWeight: 900, fontSize: 20,
-                                letterSpacing: "0.15em", cursor: "pointer",
-                                minWidth: 240, textAlign: "center",
-                                boxShadow: "0 0 20px rgba(230,168,34,0.08)",
-                            }}
-                        >
-                            <span style={{ animation: "pulse 2s infinite" }}>{mySecret.word}</span>
-                        </div>
-                    </div>
-                )}
-
-                {/* ── PLAYER GRID ── */}
-                <div style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-                    gap: 14, width: "100%", maxWidth: 900,
-                }}>
-                    {players.map(player => (
-                        <div key={player.userId} style={{
-                            background: player.isEliminated ? "rgba(0,0,0,0.3)" : "rgba(255,255,255,0.04)",
-                            border: player.isEliminated
-                                ? "1px solid rgba(239,68,68,0.15)"
-                                : player.userId === currentUserId
-                                    ? "1px solid rgba(230,168,34,0.3)"
-                                    : "1px solid rgba(255,255,255,0.08)",
-                            borderRadius: 18, padding: "18px 14px",
-                            display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-                            filter: player.isEliminated ? "grayscale(60%)" : "none",
-                            opacity: player.isEliminated ? 0.6 : 1,
-                            position: "relative",
-                            transition: "all 0.3s",
-                        }}>
-                            {player.userId === roomState?.hostId && (
-                                <div style={{
-                                    position: "absolute", top: 8, right: 8,
-                                    color: "#e6a822",
-                                }}>
-                                    <Shield size={14} fill="currentColor" />
-                                </div>
-                            )}
-
-                            {/* Avatar */}
-                            <div style={{
-                                width: 52, height: 52, borderRadius: "50%",
-                                background: player.userId === currentUserId
-                                    ? "radial-gradient(circle at 35% 35%, rgba(230,168,34,0.3), #0a0a14)"
-                                    : "radial-gradient(circle at 35% 35%, rgba(99,102,241,0.2), #0a0a14)",
-                                border: `2px solid ${player.userId === currentUserId ? "rgba(230,168,34,0.5)" : "rgba(99,102,241,0.3)"}`,
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                fontSize: 18, fontWeight: 900,
-                                color: player.userId === currentUserId ? "#e6a822" : "#6366f1",
-                            }}>
-                                {player.displayName?.charAt(0)?.toUpperCase() || "?"}
-                            </div>
-
-                            <div style={{ textAlign: "center" }}>
-                                <div style={{
-                                    color: player.userId === currentUserId ? "#e6a822" : "#fff",
-                                    fontWeight: 700, fontSize: 13,
-                                    maxWidth: 130, overflow: "hidden",
-                                    textOverflow: "ellipsis", whiteSpace: "nowrap",
-                                }}>
-                                    {player.displayName}
-                                </div>
-                                {player.userId === currentUserId && (
-                                    <div style={{ color: "rgba(230,168,34,0.6)", fontSize: 10, marginTop: 2 }}>(Bạn)</div>
-                                )}
-                            </div>
-
-                            {player.isEliminated && (
-                                <span style={{ fontSize: 18 }}>❌</span>
-                            )}
-
-                            {/* Ready Status (only show in lobby before game starts) */}
-                            {!mySecret && !player.isEliminated && (
-                                player.isReady ? (
-                                    <div style={{
-                                        display: "flex", alignItems: "center", gap: 5,
-                                        background: "rgba(34,197,94,0.12)",
-                                        border: "1px solid rgba(34,197,94,0.3)",
-                                        color: "#22c55e", padding: "4px 12px", borderRadius: 99,
-                                        fontSize: 11, fontWeight: 800, letterSpacing: "0.06em",
-                                    }}>
-                                        <CheckCircle2 size={12} /> SẴN SÀNG
-                                    </div>
-                                ) : (
-                                    <div style={{
-                                        color: "rgba(255,255,255,0.25)",
-                                        background: "rgba(255,255,255,0.04)",
-                                        border: "1px solid rgba(255,255,255,0.07)",
-                                        padding: "4px 12px", borderRadius: 99,
-                                        fontSize: 11, fontWeight: 600,
-                                    }}>
-                                        Đang chờ...
-                                    </div>
-                                )
-                            )}
-                        </div>
-                    ))}
-                </div>
-
-                {/* ====== BOTTOM ACTIONS ====== */}
-                {!mySecret && (
-                    <div style={{
-                        position: "fixed", bottom: 0, left: 0, right: 0,
-                        padding: "20px 24px",
-                        background: "linear-gradient(to top, rgba(10,10,20,0.98) 0%, rgba(10,10,20,0.8) 70%, transparent 100%)",
-                        display: "flex", justifyContent: "center", gap: 12,
-                        zIndex: 50,
-                    }}>
+            {/* ====== BOTTOM ACTIONS (SẴN SÀNG / BẮT ĐẦU) ====== */}
+            {!mySecret && (
+                <div className="fixed bottom-0 left-0 right-0 px-6 py-5 bg-gradient-to-t from-[#0a0a14] via-[#0a0a14]/90 to-transparent flex justify-center gap-4 z-50 pointer-events-none">
+                    <div className="pointer-events-auto flex gap-4">
                         {!isHost && (
                             <button
                                 onClick={() => connection?.invoke("ToggleReady", !isMyPlayerReady)}
-                                style={{
-                                    padding: "14px 40px", borderRadius: 14,
-                                    fontWeight: 900, fontSize: 15, cursor: "pointer",
-                                    letterSpacing: "0.08em", border: "none",
-                                    transition: "all 0.2s", boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-                                    background: isMyPlayerReady
-                                        ? "rgba(255,255,255,0.07)"
-                                        : "linear-gradient(135deg, #22c55e, #16a34a)",
-                                    color: isMyPlayerReady ? "rgba(255,255,255,0.5)" : "#fff",
-                                    borderTop: isMyPlayerReady ? "1px solid rgba(255,255,255,0.08)" : "none",
-                                }}
-                                onMouseEnter={e => !isMyPlayerReady && ((e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)")}
-                                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"}
+                                className={`px-10 py-3.5 rounded-2xl font-black text-sm md:text-base cursor-pointer tracking-wider border-none transition-all shadow-[0_8px_24px_rgba(0,0,0,0.4)] ${
+                                    isMyPlayerReady
+                                        ? 'bg-white/10 text-white/50 border-t border-white/10'
+                                        : 'bg-gradient-to-br from-green-500 to-green-600 text-white hover:-translate-y-0.5'
+                                }`}
                             >
                                 {isMyPlayerReady ? "✖ HỦY SẴN SÀNG" : "✓ SẴN SÀNG"}
                             </button>
@@ -1473,110 +1513,71 @@ export default function GameRoomPage() {
                                     catch (err) { console.error("StartGame error:", err); }
                                 }}
                                 disabled={!canStart}
-                                style={{
-                                    padding: "14px 48px", borderRadius: 14,
-                                    fontWeight: 900, fontSize: 15, cursor: canStart ? "pointer" : "not-allowed",
-                                    letterSpacing: "0.08em", border: "none",
-                                    transition: "all 0.2s",
-                                    background: canStart
-                                        ? "linear-gradient(135deg, #e6a822, #d4941a)"
-                                        : "rgba(255,255,255,0.05)",
-                                    color: canStart ? "#000" : "rgba(255,255,255,0.2)",
-                                    boxShadow: canStart ? "0 8px 32px rgba(230,168,34,0.35)" : "none",
-                                }}
-                                onMouseEnter={e => canStart && ((e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)")}
-                                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"}
+                                className={`px-12 py-3.5 rounded-2xl font-black text-sm md:text-base tracking-wider border-none transition-all flex items-center gap-2.5 ${
+                                    canStart
+                                        ? 'bg-gradient-to-br from-[#e6a822] to-[#d4941a] text-black shadow-[0_8px_32px_rgba(230,168,34,0.35)] hover:-translate-y-0.5 cursor-pointer'
+                                        : 'bg-white/5 text-white/20 cursor-not-allowed'
+                                }`}
                             >
                                 BẮT ĐẦU GAME
                             </button>
                         )}
                     </div>
-                )}
+                </div>
+            )}
 
-                {/* ── VOICE CONTROLS ── */}
-                {isJoinedVoice && (
-                    <div style={{
-                        position: "fixed", bottom: 24, right: 24,
-                        display: "flex", alignItems: "center", gap: 10, zIndex: 50,
-                    }}>
-                        <div style={{
-                            display: "flex", gap: 8,
-                            background: "rgba(0,0,0,0.5)", backdropFilter: "blur(12px)",
-                            border: "1px solid rgba(255,255,255,0.08)",
-                            padding: "8px 12px", borderRadius: 99,
-                            boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-                        }}>
-                            <button
-                                onClick={toggleSpeaker}
-                                style={{
-                                    width: 42, height: 42, borderRadius: "50%", border: "none",
-                                    background: isSpeakerOn ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.06)",
-                                    color: isSpeakerOn ? "#6366f1" : "rgba(255,255,255,0.3)",
-                                    cursor: "pointer", fontSize: 18,
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    transition: "all 0.2s",
-                                }}
-                            >
-                                {isSpeakerOn ? "🔊" : "🔇"}
-                            </button>
-                            <button
-                                onClick={toggleMic}
-                                style={{
-                                    width: 42, height: 42, borderRadius: "50%", border: "none",
-                                    background: isMicOn ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.1)",
-                                    color: isMicOn ? "#ef4444" : "#22c55e",
-                                    cursor: "pointer", fontSize: 18,
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    transition: "all 0.2s",
-                                }}
-                            >
-                                {isMicOn ? "🎙️" : "🚫"}
-                            </button>
-                        </div>
-
+            {/* ── VOICE & CHAT CONTROLS ── */}
+            {isJoinedVoice && (
+                <div className="fixed bottom-6 right-6 flex items-center gap-3 z-50">
+                    <div className="flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
                         <button
-                            onClick={() => setIsChatOpen(!isChatOpen)}
-                            style={{
-                                width: 52, height: 52, borderRadius: "50%", border: "none",
-                                background: isChatOpen ? "#e6a822" : "rgba(255,255,255,0.08)",
-                                color: isChatOpen ? "#000" : "rgba(255,255,255,0.6)",
-                                cursor: "pointer", fontSize: 20,
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                                boxShadow: isChatOpen ? "0 4px 20px rgba(230,168,34,0.4)" : "0 4px 16px rgba(0,0,0,0.4)",
-                                transition: "all 0.2s",
-                            }}
+                            onClick={toggleSpeaker}
+                            className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center text-lg cursor-pointer transition-all ${
+                                isSpeakerOn ? "bg-indigo-500/20 text-indigo-400" : "bg-white/5 text-white/30 hover:bg-white/10"
+                            }`}
                         >
-                            {isChatOpen ? "✖" : "💬"}
+                            {isSpeakerOn ? "🔊" : "🔇"}
+                        </button>
+                        <button
+                            onClick={toggleMic}
+                            className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center text-lg cursor-pointer transition-all ${
+                                isMicOn ? "bg-red-500/20 text-red-500" : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
+                            }`}
+                        >
+                            {isMicOn ? "🎙️" : "🚫"}
                         </button>
                     </div>
-                )}
 
-                {!isJoinedVoice && (
-                    <div style={{
-                        position: "fixed", bottom: 24, right: 24,
-                        background: "rgba(0,0,0,0.5)", borderRadius: 99, padding: "8px 16px",
-                        color: "rgba(255,255,255,0.3)", fontSize: 12,
-                        animation: "pulse-opacity 1.5s ease-in-out infinite",
-                    }}>
-                        <style>{`@keyframes pulse-opacity { 0%,100%{opacity:0.5;} 50%{opacity:1;} }`}</style>
-                        🎤 Đang kết nối voice...
-                    </div>
-                )}
-
-                {/* Chat box */}
-                <div style={{
-                    position: "fixed", bottom: 90, right: 24, width: 340,
-                    zIndex: 55, display: isChatOpen ? "block" : "none",
-                }}>
-                    {connection && (
-                        <ChatBox
-                            connection={connection}
-                            roomId={roomId}
-                            currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
-                            playerCount={currentPlayerCount}
-                        />
-                    )}
+                    <button
+                        onClick={() => setIsChatOpen(!isChatOpen)}
+                        className={`w-[52px] h-[52px] rounded-full border-none flex items-center justify-center text-xl cursor-pointer transition-all ${
+                            isChatOpen 
+                                ? "bg-[#e6a822] text-black shadow-[0_4px_20px_rgba(230,168,34,0.4)]" 
+                                : "bg-white/10 text-white/60 hover:bg-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
+                        }`}
+                    >
+                        {isChatOpen ? "✖" : "💬"}
+                    </button>
                 </div>
+            )}
+
+            {!isJoinedVoice && (
+                <div className="fixed bottom-6 right-6 bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-yellow-500/50"></span>
+                    Đang kết nối voice...
+                </div>
+            )}
+
+            {/* Chat box */}
+            <div className={`fixed bottom-24 right-6 w-[340px] z-[55] transition-all duration-300 ${isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
+                {connection && (
+                    <ChatBox
+                        connection={connection}
+                        roomId={roomId}
+                        currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
+                        playerCount={Object.keys(roomState?.players || {}).length}
+                    />
+                )}
             </div>
         </div>
     );

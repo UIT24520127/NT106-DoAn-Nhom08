@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
 import { logout, API_URL } from "@/lib/auth";
 import { usePathname, useRouter } from "next/navigation";
-import { LogIn } from "lucide-react";
+import { LogIn, X, Check } from "lucide-react";
 import { ref, onValue, off, set, onDisconnect } from "firebase/database";
 import { realtimeDb } from "@/lib/firebase";
 
@@ -53,22 +53,24 @@ export default function SessionGuard() {
   const [showPopup, setShowPopup] = useState(false);
   const [invite, setInvite] = useState<{roomId: string, inviterName: string} | null>(null);
   const [countdown, setCountdown] = useState(10);
+  const [isClosingInvite, setIsClosingInvite] = useState(false);
   const [friendNotification, setFriendNotification] = useState<string | null>(null);
   const router = useRouter();
 
-  // Đếm ngược 10 giây cho Popup mời vào phòng
+  // Đếm ngược 30 giây cho Popup mời vào phòng
   useEffect(() => {
     if (!invite) return;
     
     // Phát âm thanh mời chơi cực ngầu
     playNotificationSound("invite");
+    setIsClosingInvite(false);
     
-    setCountdown(10);
+    setCountdown(30);
     const interval = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          setInvite(null); // Từ chối tự động
+          handleDeclineInvite(); // Từ chối tự động
           return 0;
         }
         return prev - 1;
@@ -77,6 +79,25 @@ export default function SessionGuard() {
 
     return () => clearInterval(interval);
   }, [invite]);
+
+  const handleDeclineInvite = () => {
+    setIsClosingInvite(true);
+    setTimeout(() => {
+      setInvite(null);
+      setIsClosingInvite(false);
+    }, 300);
+  };
+
+  const handleAcceptInvite = () => {
+    setIsClosingInvite(true);
+    setTimeout(() => {
+      if (invite) {
+        router.push(`/room/${invite.roomId}`);
+      }
+      setInvite(null);
+      setIsClosingInvite(false);
+    }, 300);
+  };
 
   useEffect(() => {
     // Chỉ giám sát khi không ở trang đăng nhập
@@ -110,8 +131,13 @@ export default function SessionGuard() {
           }).then(() => {
             // Khi kết nối thành công, đặt trạng thái tùy thuộc vào trang đang đứng
             const isInGame = window.location.pathname.includes("/game/");
+            const isInRoom = window.location.pathname.includes("/room/");
+            let currentStatus = "Online";
+            if (isInGame) currentStatus = "In-Match";
+            else if (isInRoom) currentStatus = "In-Room";
+            
             set(myPresenceRef, {
-              status: isInGame ? "In-Match" : "Online",
+              status: currentStatus,
               lastSeen: Date.now()
             });
           });
@@ -184,7 +210,7 @@ export default function SessionGuard() {
       unsubConnected();
       
       // Hủy trạng thái Online ngay lập tức khi component unmount / logout
-      const uid = localStorage.getItem("userId");
+      const uid = sessionStorage.getItem("userId");
       if (uid && uid !== "null" && uid !== "undefined") {
         const myPresenceRef = ref(realtimeDb, `presence/${uid}`);
         set(myPresenceRef, {
@@ -235,42 +261,42 @@ export default function SessionGuard() {
         </div>
       )}
 
-      {/* Popup Mời vào phòng có Countdown */}
+      {/* Toast Mời vào phòng có Countdown */}
       {invite && (
-        <div
-            className="fixed inset-0 bg-black/75 z-[9999] flex items-center justify-center backdrop-blur-sm"
-            onClick={() => setInvite(null)}
-        >
+        <div className="fixed bottom-6 right-6 z-[9999] pointer-events-none flex flex-col items-end">
             <div
-                className="bg-[#14161f] border-2 border-gray-800 rounded-2xl p-6 w-80 text-center shadow-2xl animate-in zoom-in-95 duration-200"
-                onClick={(e) => e.stopPropagation()}
+                className={`pointer-events-auto bg-[#14161f] border border-gray-800 rounded-xl p-4 w-80 shadow-[0_10px_40px_rgba(0,0,0,0.6)] flex flex-row items-center justify-between gap-4 transition-all duration-300 ${
+                  isClosingInvite 
+                    ? 'translate-x-[150%] opacity-0' 
+                    : 'animate-in slide-in-from-right-full'
+                }`}
             >
-                <div className="w-12 h-12 rounded-xl bg-indigo-950 flex items-center justify-center mx-auto mb-4 border border-indigo-500/20">
-                    <LogIn size={22} color="#818cf8" strokeWidth={2.5} />
+                <div className="flex-1 min-w-0">
+                    <h3 className="text-xs font-black text-white mb-1 uppercase tracking-wider flex items-center gap-2">
+                        <span>Mật thư mời phòng</span>
+                    </h3>
+                    <p className="text-[11px] text-gray-400 truncate">
+                        Đặc vụ <span className="text-[#e6a822] font-black">{invite.inviterName}</span> mời bạn.
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-1 font-bold">
+                        Tự động từ chối sau: <span className="text-red-400">{countdown}s</span>
+                    </p>
                 </div>
-                <h3 className="text-sm font-extrabold text-white mb-2 uppercase tracking-wider">Mật thư mời phòng</h3>
-                <p className="text-xs text-gray-400 leading-relaxed mb-5">
-                    Đặc vụ <span className="text-[#e6a822] font-black">{invite.inviterName}</span> đã gửi lời mời tham gia phòng tác chiến.
-                    <br />
-                    <span className="block mt-2 font-bold text-gray-500">
-                      Tự động từ chối sau: <span className="text-red-500 font-black">{countdown}s</span>
-                    </span>
-                </p>
-                <div className="flex gap-2">
+                
+                <div className="flex items-center gap-2 flex-shrink-0">
                     <button
-                        onClick={() => setInvite(null)}
-                        className="flex-1 py-2.5 rounded-xl bg-[#111317] text-gray-400 border border-gray-700 text-xs font-bold hover:bg-gray-800 transition active:scale-95"
+                        onClick={handleDeclineInvite}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#1a1c23] hover:bg-red-500/20 text-gray-400 hover:text-red-500 transition-colors border border-gray-800 hover:border-red-500/50"
+                        title="Từ chối"
                     >
-                        Từ chối
+                        <X size={16} strokeWidth={3} />
                     </button>
                     <button
-                        onClick={() => {
-                          setInvite(null);
-                          router.push(`/room/${invite.roomId}`);
-                        }}
-                        className="flex-1 py-2.5 rounded-xl bg-[#e6a822] text-black text-xs font-black hover:bg-yellow-400 transition active:scale-95 border-b-2 border-yellow-700"
+                        onClick={handleAcceptInvite}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#e6a822] hover:bg-yellow-400 text-black transition-transform hover:scale-110 shadow-[0_0_15px_rgba(230,168,34,0.3)]"
+                        title="Tham gia"
                     >
-                        Tham gia
+                        <Check size={18} strokeWidth={3} />
                     </button>
                 </div>
             </div>

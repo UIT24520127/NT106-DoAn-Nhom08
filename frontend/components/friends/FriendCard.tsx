@@ -52,6 +52,7 @@ export default function FriendCard({
 }: any) {
   const isOnline = presence === "Online";
   const isInMatch = presence === "In-Match";
+  const isInRoom = presence === "In-Room";
   
   const [showMenu, setShowMenu] = useState(false);
   const [isInvited, setIsInvited] = useState(false);
@@ -69,7 +70,7 @@ export default function FriendCard({
       onInvite(friend.id, friend.username);
     }
     // Trở lại trạng thái có thể mời sau 15 giây
-    setTimeout(() => setIsInvited(false), 15000);
+    setTimeout(() => setIsInvited(false), 30000);
   };
 
   const handleChatClick = () => {
@@ -124,9 +125,9 @@ export default function FriendCard({
             {friend.username}
           </p>
           <p className={`text-[10px] font-bold tracking-wider uppercase mt-0.5 ${
-            isOnline ? 'text-emerald-400' : isInMatch ? 'text-amber-400' : 'text-gray-400'
+            isOnline ? 'text-emerald-400' : isInMatch ? 'text-amber-400' : isInRoom ? 'text-blue-400' : 'text-gray-400'
           }`}>
-            {isOnline ? 'Đang online' : isInMatch ? 'Trong trận' : 'Ngoại tuyến'}
+            {isOnline ? 'Đang online' : isInMatch ? 'Trong trận' : isInRoom ? 'Trong phòng' : 'Ngoại tuyến'}
           </p>
         </div>
       </div>

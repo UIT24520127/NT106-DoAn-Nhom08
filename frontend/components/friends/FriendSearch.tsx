@@ -38,7 +38,7 @@ export default function FriendSearch({ token, onAvatarClick }: { token: string; 
   }, [query, token]);
 
   useEffect(() => {
-    const uid = localStorage.getItem("userId");
+    const uid = sessionStorage.getItem("userId");
     if (!uid) return;
     const friendsRef = ref(realtimeDb, `friends/${uid}`);
     const unsubscribe = onValue(friendsRef, (snapshot) => {
@@ -58,7 +58,7 @@ export default function FriendSearch({ token, onAvatarClick }: { token: string; 
       await axios.post(`${API_URL}/api/friends/request`, { targetUserId }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      const myUid = localStorage.getItem("userId");
+      const myUid = sessionStorage.getItem("userId");
       if (myUid) {
         await set(ref(realtimeDb, `friendRequests/${targetUserId}/${myUid}`), Date.now());
       }

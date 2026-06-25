@@ -162,7 +162,7 @@ export default function MainMenu() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const uid = localStorage.getItem("userId");
+        const uid = sessionStorage.getItem("userId");
         if (!uid || uid === "null" || uid === "undefined") {
           console.error("LỖI: Không tìm thấy userId trong sessionStorage!");
           return;
@@ -381,7 +381,7 @@ export default function MainMenu() {
         stats={playerStats}
         onAvatarUpdated={(newAvatar) => {
           // Xóa cache cũ khi đổi avatar mới để lần fetch tiếp theo cache lại đúng
-          const uid = localStorage.getItem("userId") || "";
+          const uid = sessionStorage.getItem("userId") || "";
           if (uid) clearAvatarCache(uid);
           setPlayerStats(prev => ({ ...prev, avatar: newAvatar }));
         }}

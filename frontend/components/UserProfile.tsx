@@ -41,7 +41,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ isOpen, onClose, stats, onAva
 
   if (!isOpen && !animate) return null;
 
-  const userId = typeof window !== "undefined" ? localStorage.getItem("userId") || "" : "";
+  const userId = typeof window !== "undefined" ? sessionStorage.getItem("userId") || "" : "";
 
   return (
     <>

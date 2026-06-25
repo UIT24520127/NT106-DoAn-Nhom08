@@ -58,12 +58,13 @@ export default function FriendChat({ friend, token, onBack }: FriendChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  const myUserId = typeof window !== "undefined" ? localStorage.getItem("userId") || "" : "";
-  const myUsername = typeof window !== "undefined" ? localStorage.getItem("username") || "Đặc vụ" : "Đặc vụ";
+  const myUserId = typeof window !== "undefined" ? sessionStorage.getItem("userId") || "" : "";
+  const myUsername = typeof window !== "undefined" ? sessionStorage.getItem("username") || "Đặc vụ" : "Đặc vụ";
   const friendshipId = friend.friendshipId;
 
   const isOnline = presence === "Online";
   const isInMatch = presence === "In-Match";
+  const isInRoom = presence === "In-Room";
 
   // Cuộn xuống tin nhắn mới nhất
   const scrollToBottom = () => {
@@ -265,7 +266,7 @@ export default function FriendChat({ friend, token, onBack }: FriendChatProps) {
                 friend.username ? friend.username.charAt(0).toUpperCase() : "?"
               )}
             </div>
-            <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border border-[#171923] ${isOnline ? 'bg-emerald-500' : isInMatch ? 'bg-amber-500' : 'bg-gray-500'
+            <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border border-[#171923] ${isOnline ? 'bg-emerald-500' : isInMatch ? 'bg-amber-500' : isInRoom ? 'bg-blue-500' : 'bg-gray-500'
               }`}></span>
           </div>
 
@@ -274,7 +275,7 @@ export default function FriendChat({ friend, token, onBack }: FriendChatProps) {
               {friend.username}
             </h4>
             <p className="text-[9px] text-gray-400 uppercase tracking-widest font-bold mt-0.5">
-              {isOnline ? 'Đang online' : isInMatch ? 'Trong trận' : 'Ngoại tuyến'}
+              {isOnline ? 'Đang online' : isInMatch ? 'Trong trận' : isInRoom ? 'Trong phòng' : 'Ngoại tuyến'}
             </p>
           </div>
         </div>
