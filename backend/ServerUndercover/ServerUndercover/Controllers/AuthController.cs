@@ -251,6 +251,22 @@ namespace ServerUndercover.Controllers
 
                 if (!snap.Exists)
                 {
+                    // TÌM TÀI KHOẢN CŨ BẰNG USERNAME ĐỂ LINK DATA (yêu cầu của người dùng)
+                    Query query = _db.Collection("users").WhereEqualTo("username", request.Username);
+                    QuerySnapshot querySnapshot = await query.GetSnapshotAsync();
+
+                    if (querySnapshot.Documents.Count > 0)
+                    {
+                        var oldDoc = querySnapshot.Documents[0];
+                        if (oldDoc.Id != request.Uid)
+                        {
+                            var oldData = oldDoc.ToDictionary();
+                            await docRef.SetAsync(oldData);
+                            return Ok(new { message = "Đã liên kết với tài khoản cũ thành công!" });
+                        }
+                    }
+
+                    // NẾU KHÔNG CÓ TÀI KHOẢN CŨ THÌ TẠO MỚI
                     await docRef.SetAsync(new
                     {
                         username = request.Username,

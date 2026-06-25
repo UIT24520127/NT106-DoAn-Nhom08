@@ -1,4 +1,5 @@
 "use client";
+const getLS = () => typeof window !== 'undefined' ? (window as any).localStorage : null;
 import { useState, useEffect, useRef } from "react";
 import { Users, Settings, LogOut, X, User } from "lucide-react";
 import { logout, API_URL } from "@/lib/auth";
@@ -24,9 +25,9 @@ function getAvatarCacheUrlKey(uid: string) {
 /** Trả về Base64 đã cache nếu URL khớp, ngược lại trả về null */
 function getAvatarFromCache(uid: string, avatarUrl: string): string | null {
   try {
-    const cachedUrl = localStorage.getItem(getAvatarCacheUrlKey(uid));
+    const cachedUrl = getLS()?.getItem(getAvatarCacheUrlKey(uid));
     if (cachedUrl !== avatarUrl) return null; // URL đổi rồi → cache không còn hợp lệ
-    return localStorage.getItem(getAvatarCacheKey(uid));
+    return getLS()?.getItem(getAvatarCacheKey(uid));
   } catch {
     return null;
   }
@@ -35,8 +36,8 @@ function getAvatarFromCache(uid: string, avatarUrl: string): string | null {
 /** Lưu Base64 avatar vào cache kèm URL tương ứng */
 function saveAvatarToCache(uid: string, avatarUrl: string, base64: string) {
   try {
-    localStorage.setItem(getAvatarCacheKey(uid), base64);
-    localStorage.setItem(getAvatarCacheUrlKey(uid), avatarUrl);
+    getLS()?.setItem(getAvatarCacheKey(uid), base64);
+    getLS()?.setItem(getAvatarCacheUrlKey(uid), avatarUrl);
   } catch {
     // Bỏ qua nếu localStorage đầy
   }
@@ -45,8 +46,8 @@ function saveAvatarToCache(uid: string, avatarUrl: string, base64: string) {
 /** Xóa cache avatar (gọi khi đổi avatar mới) */
 function clearAvatarCache(uid: string) {
   try {
-    localStorage.removeItem(getAvatarCacheKey(uid));
-    localStorage.removeItem(getAvatarCacheUrlKey(uid));
+    getLS()?.removeItem(getAvatarCacheKey(uid));
+    getLS()?.removeItem(getAvatarCacheUrlKey(uid));
   } catch {
     // Bỏ qua
   }
@@ -135,7 +136,7 @@ export default function MainMenu() {
 
     // Đọc cache avatar từ localStorage an toàn trên client sau khi component mount (tránh lỗi Hydration Mismatch)
     try {
-      const cachedData = localStorage.getItem(getAvatarCacheKey(uid));
+      const cachedData = getLS()?.getItem(getAvatarCacheKey(uid));
       if (cachedData) {
         setPlayerStats(prev => ({ ...prev, avatar: cachedData }));
       }

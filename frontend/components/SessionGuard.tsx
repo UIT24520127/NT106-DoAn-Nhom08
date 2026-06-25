@@ -1,4 +1,5 @@
 "use client";
+const getLS = () => typeof window !== 'undefined' ? (window as any).localStorage : null;
 
 import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
@@ -223,7 +224,7 @@ export default function SessionGuard() {
 
   const handleConfirmLogout = async () => {
     setShowPopup(false);
-    localStorage.removeItem("userId");
+    getLS()?.removeItem("userId");
     await logout(); // This will clear token and redirect to /login
   };
 

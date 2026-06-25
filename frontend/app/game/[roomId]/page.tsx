@@ -1,4 +1,5 @@
 "use client";
+const getLS = () => typeof window !== 'undefined' ? (window as any).localStorage : null;
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -477,7 +478,7 @@ export default function GameRoomPage() {
     // ================================
     useEffect(() => {
         let isMounted = true;
-        const storedUserId = localStorage.getItem('userId') || '';
+        const storedUserId = getLS()?.getItem('userId') || '';
         setCurrentUserId(storedUserId);
 
         const newConn = new HubConnectionBuilder()

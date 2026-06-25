@@ -25,9 +25,6 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  const [showGooglePopup, setShowGooglePopup] = useState(false);
-  const [googleUsername, setGoogleUsername] = useState("");
-  const [googleUid, setGoogleUid] = useState("");
 
   // ================= STATE CHO HỘP THOẠI (POPUP) =================
   const [popup, setPopup] = useState({
@@ -103,8 +100,22 @@ export default function LoginPage() {
       } else if (checkRes.status === 404) {
         saveToken(idToken);
         sessionStorage.setItem("userId", user.uid);
-        setGoogleUid(user.uid);
-        setShowGooglePopup(true);
+        const displayName = user.displayName || "Google User";
+        try {
+          const syncRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/auth/google-sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ uid: user.uid, username: displayName }),
+          });
+          if (syncRes.ok) {
+            showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
+          } else {
+            const data = await syncRes.json();
+            showPopup("Lỗi", data.message, false);
+          }
+        } catch (err) {
+          showPopup("Lỗi kết nối", "Không thể kết nối đến Server C#.", false);
+        }
       } else {
         showPopup("Lỗi kết nối", "Không thể kiểm tra thông tin tài khoản.", false);
       }
@@ -120,25 +131,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogleSync = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/auth/google-sync`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: googleUid, username: googleUsername }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setShowGooglePopup(false);
-        showPopup("Thành công!", "Khởi tạo hồ sơ thành công!", true, true);
-      } else {
-        showPopup("Lỗi", data.message, false);
-      }
-    } catch (err) {
-      showPopup("Lỗi kết nối", "Không thể kết nối đến Server C#.", false);
-    }
-  };
+
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -351,40 +344,7 @@ export default function LoginPage() {
         )}
       </div>
 
-      {/* ================= COMPONENT HỘP THOẠI NHẬP USERNAME GOOGLE ================= */}
-      {showGooglePopup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="bg-[#fcf8e8] w-full max-w-sm rounded-xl shadow-2xl border-2 border-[#d3b88b] p-6 text-center animate-fade-in">
-            <h2 className="text-2xl font-black mb-2 text-[#3e2723]">
-              Tạo Tên Hiển Thị
-            </h2>
-            <p className="text-[#6d4c41] font-medium text-sm mb-6">
-              Bạn cần đặt tên trong game để hoàn tất đăng nhập bằng Google.
-            </p>
 
-            <form onSubmit={handleGoogleSync} className="flex flex-col gap-4 text-left">
-              <div>
-                <label className="text-base font-bold text-[#2b1b18] mb-1 block">Tên Trong Game (Nickname)</label>
-                <input
-                  type="text"
-                  placeholder="VD: Thám tử lừng danh..."
-                  value={googleUsername}
-                  onChange={(e) => setGoogleUsername(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white border-2 border-[#e0d6c8] rounded focus:outline-none focus:border-[#9b111e] text-gray-900 font-medium"
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-[#9b111e] hover:bg-[#7a0000] text-white font-bold py-3 rounded shadow mt-2 transition-transform duration-150 active:scale-95"
-              >
-                XÁC NHẬN
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ================= COMPONENT HỘP THOẠI (POPUP) THÔNG BÁO ================= */}
       {popup.isOpen && (
