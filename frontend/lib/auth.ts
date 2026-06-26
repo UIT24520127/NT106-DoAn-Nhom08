@@ -1,6 +1,6 @@
 // lib/auth.ts
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"; // URL backend C# của bạn
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"; // URL backend C# của bạn
 
 export function isTokenExpired(token: string): boolean {
   try {
