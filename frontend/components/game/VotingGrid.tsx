@@ -21,6 +21,12 @@ interface VotingGridProps {
   canSkip: boolean;
   isHost: boolean;
   isEliminated: boolean;
+  extendVoteCount?: number;
+  extendRequiredCount?: number;
+  hasExtendedVote?: boolean;
+  skipVoteCount?: number;
+  skipRequiredCount?: number;
+  onExtendVote?: () => void;
   onVote: (targetUserId: string) => void;
   onChangeVote: (targetUserId: string) => void;
   onSkip: () => void;
@@ -31,6 +37,8 @@ interface VotingGridProps {
 export default function VotingGrid({
   players, myUserId, voteEndTime, realtimeVoteCounts,
   hasVoted, myVoteTarget, canSkip, isHost, isEliminated,
+  extendVoteCount = 0, extendRequiredCount = 0, hasExtendedVote = false,
+  skipVoteCount = 0, skipRequiredCount = 0, onExtendVote,
   onVote, onChangeVote, onSkip, onTimerExpired,
   backgroundImage,
 }: VotingGridProps) {
@@ -86,18 +94,7 @@ export default function VotingGrid({
           0%, 100% { text-shadow: 0 0 20px rgba(255,59,59,0.6), 0 0 60px rgba(255,59,59,0.2); }
           50%       { text-shadow: 0 0 40px rgba(255,59,59,0.9), 0 0 100px rgba(255,59,59,0.4); }
         }
-        @keyframes vg-scanline {
-          from { background-position: 0 0; }
-          to   { background-position: 0 100vh; }
-        }
       `}</style>
-
-      {/* Scanline */}
-      <div style={{
-        position: "fixed", inset: 0, pointerEvents: "none",
-        backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 6px)",
-        backgroundSize: "100% 6px", animation: "vg-scanline 12s linear infinite", zIndex: 0,
-      }} />
 
       {/* Ambient */}
       <div style={{
@@ -192,13 +189,11 @@ export default function VotingGrid({
               onMouseEnter={() => canVote && !isVotedByMe && setHovering(player.userId)}
               onMouseLeave={() => setHovering(null)}
               style={{
-                background: isVotedByMe
-                  ? "linear-gradient(160deg, rgba(157,78,221,0.12) 0%, rgba(255,255,255,0.02) 100%)"
-                  : isLeading
-                    ? "linear-gradient(160deg, rgba(255,59,59,0.08) 0%, rgba(255,255,255,0.02) 100%)"
-                    : isHovered
-                      ? "linear-gradient(160deg, rgba(255,59,59,0.06) 0%, rgba(255,255,255,0.02) 100%)"
-                      : "rgba(255,255,255,0.025)",
+                position: "relative",
+                borderRadius: 22,
+                padding: "24px 18px 18px",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+                cursor: canVote ? "pointer" : "default",
                 border: isVotedByMe
                   ? "2px solid rgba(157,78,221,0.55)"
                   : isLeading
@@ -206,20 +201,33 @@ export default function VotingGrid({
                     : isHovered
                       ? "1.5px solid rgba(255,59,59,0.25)"
                       : "1.5px solid rgba(255,255,255,0.06)",
-                borderRadius: 22,
-                padding: "24px 18px 18px",
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
-                cursor: canVote ? "pointer" : "default",
-                transition: "all 0.2s ease",
+                transition: "border 0.2s ease",
+                zIndex: 1,
+              }}
+            >
+              {/* GLASS BACKGROUND LAYER */}
+              <div style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: -1,
+                borderRadius: "inherit",
+                background: isVotedByMe
+                  ? "linear-gradient(160deg, rgba(157,78,221,0.12) 0%, rgba(255,255,255,0.02) 100%)"
+                  : isLeading
+                    ? "linear-gradient(160deg, rgba(255,59,59,0.08) 0%, rgba(255,255,255,0.02) 100%)"
+                    : isHovered
+                      ? "linear-gradient(160deg, rgba(255,59,59,0.06) 0%, rgba(255,255,255,0.02) 100%)"
+                      : "rgba(255,255,255,0.025)",
                 backdropFilter: "blur(16px)",
+                WebkitBackdropFilter: "blur(16px)",
+                transition: "background 0.2s ease, box-shadow 0.2s ease",
                 animation: isVotedByMe
                   ? "vg-voted-glow 2.5s ease-in-out infinite"
                   : isHovered && canVote
                     ? "vg-card-hover 0.2s ease forwards"
                     : "none",
-                position: "relative",
-              }}
-            >
+              }} />
+
               {/* Top badges */}
               {isMe && (
                 <div style={{
@@ -369,11 +377,28 @@ export default function VotingGrid({
         </div>
       )}
 
-      {/* ── HOST SKIP / SKIP VOTE ── */}
+      {/* ── EXTEND VOTE / SKIP VOTE ── */}
       <div style={{
         position: "fixed", bottom: 24, right: 24, zIndex: 50,
         display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10,
       }}>
+        {/* Kéo dài thời gian */}
+        {!isEliminated && onExtendVote && (
+          <button onClick={onExtendVote} disabled={hasExtendedVote} style={{
+            padding: "10px 20px", borderRadius: 12,
+            background: hasExtendedVote ? "rgba(255,255,255,0.03)" : "rgba(16,185,129,0.12)",
+            border: `1px solid ${hasExtendedVote ? "rgba(255,255,255,0.06)" : "rgba(16,185,129,0.35)"}`,
+            color: hasExtendedVote ? "rgba(255,255,255,0.18)" : "#10B981",
+            fontSize: 13, fontWeight: 700, cursor: hasExtendedVote ? "not-allowed" : "pointer",
+            letterSpacing: "0.06em", transition: "all 0.2s",
+            fontFamily: "'Nunito', 'Inter', sans-serif",
+            display: "flex", alignItems: "center", gap: 6,
+          }}>
+            {hasExtendedVote ? "Đã gia hạn" : `⏳ Kéo dài thời gian (+1m) ${extendRequiredCount > 0 ? `(${extendVoteCount}/${extendRequiredCount})` : ""}`}
+          </button>
+        )}
+
+        {/* Bỏ qua lượt */}
         {!hasVoted && !isEliminated && !changingVote && (
           <button onClick={onSkip} style={{
             padding: "10px 20px", borderRadius: 12,
@@ -382,22 +407,12 @@ export default function VotingGrid({
             color: "rgba(255,255,255,0.4)", fontSize: 13, fontWeight: 700,
             cursor: "pointer", letterSpacing: "0.06em", transition: "all 0.2s",
             fontFamily: "'Nunito', 'Inter', sans-serif",
+            display: "flex", alignItems: "center", gap: 6,
           }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#fff"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.09)"; }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.4)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; }}
-          >⏭ Bỏ qua</button>
-        )}
-        {isHost && (
-          <button onClick={onSkip} disabled={!canSkip} style={{
-            padding: "10px 20px", borderRadius: 12,
-            background: canSkip ? "rgba(157,78,221,0.12)" : "rgba(255,255,255,0.03)",
-            border: `1px solid ${canSkip ? "rgba(157,78,221,0.35)" : "rgba(255,255,255,0.06)"}`,
-            color: canSkip ? "#9D4EDD" : "rgba(255,255,255,0.18)",
-            fontSize: 13, fontWeight: 700, cursor: canSkip ? "pointer" : "not-allowed",
-            letterSpacing: "0.06em", transition: "all 0.2s",
-            fontFamily: "'Nunito', 'Inter', sans-serif",
-          }}>
-            {canSkip ? "⏭️ Kết thúc vote sớm" : "⏳ Chờ..."}
+          >
+            ⏭ Bỏ qua {skipRequiredCount > 0 ? `(${skipVoteCount}/${skipRequiredCount})` : ""}
           </button>
         )}
       </div>

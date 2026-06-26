@@ -135,6 +135,7 @@ export default function RoundTransitionScreen({
           position: "relative", overflow: "hidden",
           boxShadow: `0 0 60px ${accentGlow}15, 0 24px 60px rgba(0,0,0,0.7)`,
           animation: phase === "reveal" || phase === "next" ? "rt-spot-in 0.5s cubic-bezier(0.34,1.56,0.64,1) both" : "none",
+          opacity: phase === "reveal" || phase === "next" ? 1 : 0,
         }}>
           {/* Top accent line */}
           <div style={{
@@ -201,6 +202,8 @@ export default function RoundTransitionScreen({
                   background: `${roleInfo.color}0D`,
                   border: `1.5px solid ${roleInfo.color}35`,
                   animation: phase === "next" ? "rt-role-glow 2.5s ease-in-out infinite, rt-reveal 0.5s ease 0.3s both" : "none",
+                  opacity: phase === "next" ? 1 : 0,
+                  transition: "opacity 0.4s ease",
                 }}>
                   <span style={{ fontSize: 28 }}>{roleInfo.icon}</span>
                   <div style={{ textAlign: "left" }}>
@@ -223,6 +226,9 @@ export default function RoundTransitionScreen({
                   border: "1px solid rgba(255,255,255,0.08)",
                   borderRadius: 14, padding: "10px 20px",
                   color: "rgba(255,255,255,0.3)", fontSize: 14, fontStyle: "italic",
+                  animation: phase === "next" ? "rt-reveal 0.5s ease 0.3s both" : "none",
+                  opacity: phase === "next" ? 1 : 0,
+                  transition: "opacity 0.4s ease",
                 }}>
                   🔒 Vai trò được giữ bí mật
                 </div>

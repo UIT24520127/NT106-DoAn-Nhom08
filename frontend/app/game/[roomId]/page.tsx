@@ -171,6 +171,11 @@ export default function GameRoomPage() {
     const [voteCounts, setVoteCounts] = useState<VoteCounts>({});
     const [hasVoted, setHasVoted] = useState(false);
     const [myVoteTarget, setMyVoteTarget] = useState<string | null>(null);
+    const [extendVoteCount, setExtendVoteCount] = useState(0);
+    const [extendRequiredCount, setExtendRequiredCount] = useState(0);
+    const [hasExtendedVote, setHasExtendedVote] = useState(false);
+    const [skipVoteCount, setSkipVoteCount] = useState(0);
+    const [skipRequiredCount, setSkipRequiredCount] = useState(0);
 
     // ── Round Transition ────────────────────
     const [transitionData, setTransitionData] = useState<RoundTransitionData | null>(null);
@@ -180,6 +185,8 @@ export default function GameRoomPage() {
 
     // ── White Hat ───────────────────────────
     const [showWhiteHatGuess, setShowWhiteHatGuess] = useState(false);
+    const [whiteHatTimeLeft, setWhiteHatTimeLeft] = useState(20);
+    const [whiteHatInfo, setWhiteHatInfo] = useState<{ userId: string, displayName: string } | null>(null);
     const [pendingWinner, setPendingWinner] = useState<string | null>(null);
 
     // ── Voice ────────────────────────────────
@@ -317,8 +324,14 @@ export default function GameRoomPage() {
 
     const handleSkipVoting = async () => {
         if (!connection) return;
-        try { await connection.invoke("SkipVoting"); }
-        catch (e) { console.error("SkipVoting error:", e); }
+        try { await connection.invoke("SkipVote"); }
+        catch (e) { console.error("SkipVote error:", e); }
+    };
+
+    const handleExtendVote = async () => {
+        if (!connection) return;
+        try { await connection.invoke("ExtendVote"); }
+        catch (e) { console.error("ExtendVote error:", e); }
     };
 
     const handleWhiteHatGuess = async (word: string) => {
@@ -675,6 +688,7 @@ export default function GameRoomPage() {
             setIsWaitingForTurnOrder(false);
             setLoadingSync(null);
             setGamePhase('describing');
+            setShowWhiteHatGuess(false);
             addNotif(`Vòng ${data.roundNumber} bắt đầu! Thứ tự đã được random.`, 'info');
         });
 
@@ -733,6 +747,9 @@ export default function GameRoomPage() {
             setHasVoted(false);
             setMyVoteTarget(null);
             setVoteCounts({});
+            setExtendVoteCount(0);
+            setSkipVoteCount(0);
+            setHasExtendedVote(false);
             setLoadingSync(null);
             setGamePhase('voting');
             addNotif('Vòng bình chọn bắt đầu!', 'result');
@@ -741,6 +758,22 @@ export default function GameRoomPage() {
         // 6. Vote count update realtime
         newConn.on("VoteUpdated", (data: { voteCounts: VoteCounts }) => {
             setVoteCounts(data.voteCounts);
+        });
+
+        newConn.on("ExtendVoteCountUpdated", (data: { extendCount: number; requiredCount: number }) => {
+            setExtendVoteCount(data.extendCount);
+            setExtendRequiredCount(data.requiredCount);
+        });
+
+        newConn.on("SkipVoteCountUpdated", (data: { skipCount: number; requiredCount: number }) => {
+            setSkipVoteCount(data.skipCount);
+            setSkipRequiredCount(data.requiredCount);
+        });
+
+        newConn.on("VoteTimeExtended", (data: { newEndTime: number }) => {
+            setVoteEndTime(data.newEndTime);
+            setHasExtendedVote(true);
+            addNotif('Thời gian vote đã được gia hạn thêm 1 phút!', 'info');
         });
 
         newConn.on("PhaseChanged", (data: any) => {
@@ -752,12 +785,16 @@ export default function GameRoomPage() {
                 if (typeof data.currentTurnIndex === 'number') setCurrentTurnIndex(data.currentTurnIndex);
                 setLoadingSync(null);
                 setGamePhase('describing');
+                setShowWhiteHatGuess(false);
             }
             if (phase === 'voting') {
                 setVoteEndTime(data.voteEndTime ?? Date.now() + 60000);
                 setHasVoted(false);
                 setMyVoteTarget(null);
                 setVoteCounts({});
+                setExtendVoteCount(0);
+                setSkipVoteCount(0);
+                setHasExtendedVote(false);
                 setLoadingSync(null);
                 setGamePhase('voting');
             }
@@ -835,6 +872,7 @@ export default function GameRoomPage() {
         }) => {
             setGameEndedData(data);
             setGamePhase('gameEnded');
+            setShowWhiteHatGuess(false);
         });
 
         // 10. Error
@@ -843,9 +881,19 @@ export default function GameRoomPage() {
         });
 
         // 11. White Hat opportunity
-        newConn.on("WhiteHatOpportunity", (data: { pendingWinner: string }) => {
+        newConn.on("WhiteHatOpportunity", (data: { pendingWinner: string, timeLeft: number, whiteHatDisplayName: string, whiteHatUserId: string }) => {
             setPendingWinner(data.pendingWinner);
+            setWhiteHatTimeLeft(data.timeLeft || 20);
+            setWhiteHatInfo({ userId: data.whiteHatUserId, displayName: data.whiteHatDisplayName });
             setShowWhiteHatGuess(true);
+        });
+
+        // 11b. White Hat Guess Result
+        newConn.on("WhiteHatGuessResult", (data: { isCorrect: boolean, displayName: string }) => {
+            setShowWhiteHatGuess(false);
+            if (!data.isCorrect) {
+                addNotif(`Mũ Trắng ${data.displayName} đã đoán sai từ khóa và bị loại!`, 'error');
+            }
         });
 
         // 12. Compat: RoundStarted (old event)
@@ -1206,6 +1254,8 @@ export default function GameRoomPage() {
                         isWhiteHat={mySecret?.role === 'WhiteHat'}
                         onGuess={handleWhiteHatGuess}
                         onCancel={() => setShowWhiteHatGuess(false)}
+                        initialTimeLeft={whiteHatTimeLeft}
+                        whiteHatInfo={whiteHatInfo}
                     />
                 )}
                 {mySecret?.role === 'WhiteHat' && !isEliminated && !showWhiteHatGuess && (
@@ -1238,6 +1288,12 @@ export default function GameRoomPage() {
                     canSkip={canSkip()}
                     isHost={isHost}
                     isEliminated={isEliminated}
+                    extendVoteCount={extendVoteCount}
+                    extendRequiredCount={extendRequiredCount}
+                    hasExtendedVote={hasExtendedVote}
+                    skipVoteCount={skipVoteCount}
+                    skipRequiredCount={skipRequiredCount}
+                    onExtendVote={handleExtendVote}
                     onVote={handleVote}
                     onChangeVote={handleChangeVote}
                     onSkip={handleSkipVoting}

@@ -548,6 +548,10 @@ namespace ServerUndercover.Services
             room.Votes.Clear();
             foreach (var p in room.Players.Values)
                 p.VoteCount = 0;
+                
+            room.ExtendVoteRequests.Clear();
+            room.HasExtendedVote = false;
+            room.SkipVoteRequests.Clear();
 
             room.Phase = GamePhase.Voting;
             // Dùng Unix milliseconds để client dễ đồng bộ
@@ -625,6 +629,8 @@ namespace ServerUndercover.Services
             if (!_rooms.TryGetValue(roomId, out Room? room))
                 return new VoteResolution(true, null, null);
 
+            room.RoundNumber++; // Tăng vòng chơi bất kể có ai bị loại hay không
+
             // Đếm phiếu
             var voteCounts = room.Votes.Values
                 .GroupBy(v => v)
@@ -645,7 +651,6 @@ namespace ServerUndercover.Services
                 return new VoteResolution(true, null, null);
 
             eliminatedPlayer.IsEliminated = true;
-            room.RoundNumber++;
 
             return new VoteResolution(false, eliminatedId, eliminatedPlayer.DisplayName);
         }

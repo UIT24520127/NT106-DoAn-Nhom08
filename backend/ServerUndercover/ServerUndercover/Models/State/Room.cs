@@ -76,5 +76,15 @@ namespace ServerUndercover.Models.State
 
         /// <summary>Số vòng đã chơi (tăng mỗi lần sau vote)</summary>
         public int RoundNumber { get; set; } = 0;
+
+        public long WhiteHatEndTime { get; set; } = 0;
+
+        // ============================================================
+        // VOTE EXTENSION & SKIP STATE
+        // ============================================================
+
+        public ConcurrentDictionary<string, bool> ExtendVoteRequests { get; set; } = new();
+        public bool HasExtendedVote { get; set; } = false;
+        public ConcurrentDictionary<string, bool> SkipVoteRequests { get; set; } = new();
     }
 }
