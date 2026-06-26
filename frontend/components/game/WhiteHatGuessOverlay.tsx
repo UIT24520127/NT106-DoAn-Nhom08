@@ -20,13 +20,19 @@ export default function WhiteHatGuessOverlay({
   const [submitted, setSubmitted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(initialTimeLeft);
 
+  const [endTime] = useState(() => Date.now() + initialTimeLeft * 1000);
+
   useEffect(() => {
     if (timeLeft <= 0) return;
     const timer = setInterval(() => {
-      setTimeLeft(prev => prev - 1);
+      const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+      setTimeLeft(remaining);
+      if (remaining === 0) {
+        clearInterval(timer);
+      }
     }, 1000);
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, [endTime, timeLeft]);
 
   if (!isWhiteHat) {
     return (

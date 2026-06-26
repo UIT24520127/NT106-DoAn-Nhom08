@@ -242,7 +242,7 @@ namespace ServerUndercover.Hubs
                 currentSpeakerId = room.TurnOrder[room.CurrentTurnIndex],
                 currentTurnIndex = room.CurrentTurnIndex,
                 duration = room.Settings.DescribeDuration,
-                endTime = room.CurrentTurnEndTime
+                remainingMs = Math.Max(0, room.CurrentTurnEndTime - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
             });
         }
 
@@ -305,7 +305,7 @@ namespace ServerUndercover.Hubs
                 currentSpeakerId = room.TurnOrder[room.CurrentTurnIndex],
                 currentTurnIndex = room.CurrentTurnIndex,
                 duration = room.Settings.DescribeDuration,
-                endTime = room.CurrentTurnEndTime
+                remainingMs = Math.Max(0, room.CurrentTurnEndTime - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
             });
         }
 
@@ -998,6 +998,28 @@ namespace ServerUndercover.Hubs
                 });
                 await BroadcastTurnStarted(roomId, room);
             }
+        }
+
+        /// <summary>
+        /// Đồng bộ text đang gõ của người chơi
+        /// </summary>
+        public async Task SyncTyping(string text)
+        {
+            string userId = GetUserId();
+            string? roomId = _roomManager.GetUserRoomId(userId);
+            if (roomId == null) return;
+
+            var room = _roomManager.GetRoom(roomId);
+            if (room == null || room.Phase != GamePhase.Describing) return;
+
+            if (room.CurrentTurnIndex >= room.TurnOrder.Count) return;
+            if (room.TurnOrder[room.CurrentTurnIndex] != userId) return;
+
+            await Clients.Group(roomId).SendAsync("TypingSynchronized", new
+            {
+                userId,
+                text
+            });
         }
 
         // =========================

@@ -262,13 +262,12 @@ export default function RoomPage() {
           </button>
         </div>
       </div>
-
       {/* ====== MAIN LAYOUT ====== */}
       <div className="flex flex-col lg:flex-row gap-6 w-full max-w-5xl z-10 items-start px-4 sm:px-0">
         
         {/* PLAYER GRID */}
         <div className="flex-1 w-full">
-          <div className={`grid ${gridColsClass} gap-3.5 max-h-[55vh] overflow-y-auto pr-2 custom-scrollbar`}>
+          <div className={`grid ${gridColsClass} gap-3.5 pt-5 pb-2 max-h-[55vh] overflow-y-auto pr-2 custom-scrollbar`}>
             {/* Render actual players */}
             {players.map((player: any) => {
               const isMe = player.userId === userId;

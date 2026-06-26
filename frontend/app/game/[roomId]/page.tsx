@@ -166,6 +166,7 @@ export default function GameRoomPage() {
     const [roundNumber, setRoundNumber] = useState(1);
     const [turnEndTime, setTurnEndTime] = useState<number | undefined>(undefined);
     const [describeDuration, setDescribeDuration] = useState(30);
+    const [typingSync, setTypingSync] = useState<Record<string, { text: string; isFinal: boolean }>>({});
 
     // ── Voting ──────────────────────────────
     const [voteEndTime, setVoteEndTime] = useState(Date.now() + 60000);
@@ -683,12 +684,14 @@ export default function GameRoomPage() {
 
         // 2. Thứ tự lượt nói
         newConn.on("TurnOrderGenerated", (data: { roundNumber: number; turnOrder: string[] }) => {
+            setTypingSync({});
             setTurnOrder(data.turnOrder);
             setCurrentTurnIndex(0);
             setRoundNumber(data.roundNumber);
             setIsWaitingForTurnOrder(false);
             setLoadingSync(null);
             setGamePhase('describing');
+            setTurnEndTime(0); // Đặt về 0 để DescribingPhase biết là chưa bắt đầu đếm
             setShowWhiteHatGuess(false);
             addNotif(`Vòng ${data.roundNumber} bắt đầu! Thứ tự đã được random.`, 'info');
         });
@@ -698,12 +701,14 @@ export default function GameRoomPage() {
             currentSpeakerId: string;
             currentTurnIndex: number;
             duration: number;
-            endTime?: number;
+            remainingMs?: number;
         }) => {
             setCurrentTurnIndex(data.currentTurnIndex);
             setDescribeDuration(data.duration ?? 30);
-            if (data.endTime) setTurnEndTime(data.endTime);
-            else setTurnEndTime(Date.now() + (data.duration ?? 30) * 1000);
+            
+            // Lấy thời gian còn lại do server gửi (hoặc fallback mặc định) cộng vào Date.now() của máy khách
+            const remaining = data.remainingMs ?? ((data.duration ?? 30) * 1000);
+            setTurnEndTime(Date.now() + remaining);
 
             const players = roomStateRef.current ? Object.values(roomStateRef.current.players) : [];
             const speaker = players.find((p: any) => p.userId === data.currentSpeakerId) as any;
@@ -725,7 +730,18 @@ export default function GameRoomPage() {
         });
 
         // 5. Bắt đầu vote
+        newConn.on("TypingSynchronized", (data: { userId: string; text: string }) => {
+            setTypingSync(prev => ({
+                ...prev,
+                [data.userId]: { text: data.text, isFinal: false }
+            }));
+        });
+
         newConn.on("DescriptionSubmitted", (data: { userId: string; word: string }) => {
+            setTypingSync(prev => ({
+                ...prev,
+                [data.userId]: { text: data.word, isFinal: true }
+            }));
             setRoomState(prev => {
                 if (!prev || !prev.players[data.userId]) return prev;
 
@@ -744,6 +760,7 @@ export default function GameRoomPage() {
         });
 
         newConn.on("VotingStarted", (data: { endTime: number; duration?: number }) => {
+            setTypingSync({});
             setVoteEndTime(data.endTime ?? Date.now() + (data.duration ?? 60) * 1000);
             setHasVoted(false);
             setMyVoteTarget(null);
@@ -1211,6 +1228,8 @@ export default function GameRoomPage() {
                     onSkipTurn={handleSkipTurn}
                     onSubmitDescription={handleSubmitDescription}
                     backgroundImage={backgroundImage}
+                    typingSync={typingSync}
+                    onTyping={(text) => connection?.invoke("SyncTyping", text)}
                 />
                 {/* Chat overlay */}
                 <button

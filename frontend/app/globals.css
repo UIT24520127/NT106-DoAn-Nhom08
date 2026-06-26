@@ -22,3 +22,28 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* Custom Scrollbar Styles */
+@utility custom-scrollbar {
+  scrollbar-width: thin; /* For Firefox */
+  scrollbar-color: rgba(230, 168, 34, 0.5) rgba(255, 255, 255, 0.05); /* thumb track */
+
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(230, 168, 34, 0.5);
+    border-radius: 10px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(230, 168, 34, 0.8);
+  }
+}

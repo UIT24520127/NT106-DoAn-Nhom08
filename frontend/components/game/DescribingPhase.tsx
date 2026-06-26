@@ -23,6 +23,8 @@ interface DescribingPhaseProps {
   onSkipTurn: () => void;
   onSubmitDescription: (text: string, source: "typed" | "speech") => void;
   backgroundImage?: string;
+  typingSync?: Record<string, { text: string; isFinal: boolean }>;
+  onTyping?: (text: string) => void;
 }
 
 const ROLE_COLOR: Record<string, string> = {
@@ -65,6 +67,8 @@ export default function DescribingPhase({
   onSkipTurn,
   onSubmitDescription,
   backgroundImage,
+  typingSync,
+  onTyping,
 }: DescribingPhaseProps) {
   const [timeLeft, setTimeLeft] = useState(describeDuration);
   const [wordVisible, setWordVisible] = useState(false);
@@ -74,6 +78,7 @@ export default function DescribingPhase({
   const [speechError, setSpeechError] = useState("");
   const skipCooldown = useRef(false);
   const recognitionRef = useRef<any>(null);
+  const typingTimeoutRef = useRef<number | null>(null);
 
   const alivePlayers = useMemo(() => players.filter(p => !p.isEliminated), [players]);
   const eliminatedPlayers = useMemo(() => players.filter(p => p.isEliminated), [players]);
@@ -98,31 +103,56 @@ export default function DescribingPhase({
     isMyTurnRef.current = isMyTurn;
   }, [descriptionText, descriptionSource, isMyTurn]);
 
+  const onSkipTurnRef = useRef(onSkipTurn);
+  const onSubmitDescriptionRef = useRef(onSubmitDescription);
   useEffect(() => {
-    setTimeLeft(describeDuration);
-    const start = Date.now();
+    onSkipTurnRef.current = onSkipTurn;
+    onSubmitDescriptionRef.current = onSubmitDescription;
+  }, [onSkipTurn, onSubmitDescription]);
+
+  const hasAutoSubmitted = useRef(false);
+  useEffect(() => {
+    hasAutoSubmitted.current = false;
+  }, [currentTurnIndex]);
+
+  useEffect(() => {
+    let initialRemaining = describeDuration;
+    if (turnEndTime) {
+      initialRemaining = Math.max(0, Math.floor((turnEndTime - Date.now()) / 1000));
+    }
+    setTimeLeft(initialRemaining);
+
     const interval = window.setInterval(() => {
-      const elapsed = Math.floor((Date.now() - start) / 1000);
-      const remaining = Math.max(0, describeDuration - elapsed);
+      let remaining = describeDuration;
+      if (turnEndTime) {
+        remaining = Math.max(0, Math.floor((turnEndTime - Date.now()) / 1000));
+      } else {
+        // Fallback if turnEndTime is somehow not provided (e.g. waiting for TurnStarted)
+        // Just keep showing the describeDuration, don't tick down yet
+        return;
+      }
+      
       setTimeLeft(remaining);
+      
       if (remaining === 0) {
         window.clearInterval(interval);
         
         // Auto-submit logic when timer naturally hits 0
-        if (isMyTurnRef.current) {
+        if (isMyTurnRef.current && !hasAutoSubmitted.current) {
+          hasAutoSubmitted.current = true;
           window.setTimeout(() => {
             const text = descriptionTextRef.current.trim();
             if (!text) {
-              onSkipTurn();
+              onSkipTurnRef.current();
             } else {
-              onSubmitDescription(text, descriptionSourceRef.current);
+              onSubmitDescriptionRef.current(text, descriptionSourceRef.current);
             }
           }, 100);
         }
       }
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [currentTurnIndex, describeDuration, onSkipTurn, onSubmitDescription]);
+  }, [currentTurnIndex, describeDuration, turnEndTime]);
 
   useEffect(() => {
     setDescriptionText("");
@@ -199,6 +229,7 @@ export default function DescribingPhase({
 
       setDescriptionText(transcript);
       setDescriptionSource("speech");
+      onTyping?.(transcript);
     };
 
     recognition.onerror = () => {
@@ -248,6 +279,10 @@ export default function DescribingPhase({
         @keyframes dp-card-glow {
           0%, 100% { box-shadow: 0 0 34px rgba(34,211,238,0.26), 0 22px 80px rgba(0,0,0,0.42); }
           50% { box-shadow: 0 0 68px rgba(34,211,238,0.46), 0 22px 80px rgba(0,0,0,0.42); }
+        }
+        @keyframes dp-blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
         }
         @media (max-width: 680px) {
           .describe-topbar { padding-top: 62px !important; gap: 10px !important; }
@@ -439,6 +474,35 @@ export default function DescribingPhase({
                 transition: "all 0.48s cubic-bezier(0.34,1.56,0.64,1)",
               }}
             >
+              {typingSync?.[player.userId]?.text && (
+                 <div style={{
+                    position: 'absolute',
+                    bottom: '90%',
+                    left: '75%',
+                    background: typingSync[player.userId].isFinal 
+                        ? 'linear-gradient(135deg, rgba(34,197,94,0.9), rgba(22,163,74,0.95))' 
+                        : 'linear-gradient(135deg, rgba(14,23,38,0.95), rgba(8,14,24,0.98))',
+                    color: typingSync[player.userId].isFinal ? '#000' : '#22d3ee',
+                    border: `1px solid ${typingSync[player.userId].isFinal ? '#4ade80' : 'rgba(34,211,238,0.4)'}`,
+                    padding: '10px 18px',
+                    borderRadius: '16px 16px 16px 4px',
+                    fontWeight: 800,
+                    fontSize: 14,
+                    pointerEvents: 'none',
+                    boxShadow: typingSync[player.userId].isFinal 
+                        ? '0 8px 24px rgba(34,197,94,0.3)' 
+                        : '0 8px 24px rgba(34,211,238,0.2)',
+                    zIndex: 20,
+                    transition: 'all 0.2s',
+                    width: 'max-content',
+                    maxWidth: 220,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                 }}>
+                   {typingSync[player.userId].text}
+                   {!typingSync[player.userId].isFinal && <span style={{ animation: 'dp-blink 1s infinite', marginLeft: 2, color: '#fff' }}>|</span>}
+                 </div>
+              )}
               <div
                 style={{
                   width: isActive ? 210 : 150,
@@ -590,9 +654,14 @@ export default function DescribingPhase({
                 <input
                   value={descriptionText}
                   onChange={e => {
-                    setDescriptionText(e.target.value);
+                    const val = e.target.value;
+                    setDescriptionText(val);
                     setDescriptionSource("typed");
                     setSpeechError("");
+                    if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
+                    typingTimeoutRef.current = window.setTimeout(() => {
+                        onTyping?.(val);
+                    }, 150);
                   }}
                   onKeyDown={e => {
                     if (e.key === "Enter") handleSubmit();
