@@ -217,7 +217,7 @@ namespace ServerUndercover.Hubs
         private async Task CloseLoadingAfterTimeout(string roomId, DateTime loadingStartedAt)
         {
             var room = _roomManager.GetRoom(roomId);
-            var delaySeconds = room?.LoadingTimeoutSeconds ?? 10;
+            var delaySeconds = room?.LoadingTimeoutSeconds ?? 30;
             await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
 
             room = _roomManager.GetRoom(roomId);
@@ -692,7 +692,7 @@ namespace ServerUndercover.Hubs
                 room.Phase = GamePhase.Loading;
                 room.RoundNumber = 1;
                 room.LoadingStartedAt = DateTime.UtcNow;
-                room.LoadingTimeoutSeconds = 10;
+                room.LoadingTimeoutSeconds = 30;
                 room.LoadingClosed = false;
                 room.LoadingReadyPlayerIds.Clear();
                 await _roomManager.CreateGameSessionAsync(room);
