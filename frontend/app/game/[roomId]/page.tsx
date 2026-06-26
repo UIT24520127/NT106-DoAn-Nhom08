@@ -576,7 +576,7 @@ export default function GameRoomPage() {
         });
 
         newConn.on("LoadingPhaseStarted", async (data: { timeoutSeconds?: number; totalCount?: number; startedAt?: number; readyCount?: number; readyPlayerIds?: string[] }) => {
-            const timeoutSeconds = data.timeoutSeconds ?? 30;
+            const timeoutSeconds = data.timeoutSeconds ?? 60;
             const startedAt = data.startedAt ?? Date.now();
             const elapsed = Math.floor((Date.now() - startedAt) / 1000);
             const hash = roomId.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
@@ -623,7 +623,7 @@ export default function GameRoomPage() {
                 readyCount: data.readyCount,
                 totalCount: data.totalCount,
                 readyPlayerIds: data.readyPlayerIds ?? prev?.readyPlayerIds ?? [],
-                timeoutSeconds: prev?.timeoutSeconds ?? 30,
+                timeoutSeconds: prev?.timeoutSeconds ?? 60,
                 startedAt: prev?.startedAt ?? Date.now(),
                 secondsLeft: prev?.secondsLeft ?? 10,
                 isMeReady: Boolean(data.readyPlayerIds?.includes(storedUserId)) || prev?.isMeReady || false,
@@ -639,7 +639,7 @@ export default function GameRoomPage() {
                 readyCount: prev?.readyCount ?? 0,
                 totalCount: prev?.totalCount ?? Object.keys(roomStateRef.current?.players ?? {}).length,
                 readyPlayerIds: prev?.readyPlayerIds ?? [],
-                timeoutSeconds: prev?.timeoutSeconds ?? 30,
+                timeoutSeconds: prev?.timeoutSeconds ?? 60,
                 startedAt: prev?.startedAt ?? Date.now(),
                 secondsLeft: prev?.secondsLeft ?? 0,
                 isMeReady: prev?.isMeReady ?? false,
@@ -938,7 +938,7 @@ export default function GameRoomPage() {
                     if (pendingLoading) {
                         sessionStorage.removeItem(`loading:${roomId}`);
                         const parsed = JSON.parse(pendingLoading) as { timeoutSeconds?: number; totalCount?: number; startedAt?: number };
-                        const timeoutSeconds = parsed.timeoutSeconds ?? 30;
+                        const timeoutSeconds = parsed.timeoutSeconds ?? 60;
                         const startedAt = parsed.startedAt ?? Date.now();
                         const elapsed = Math.floor((Date.now() - startedAt) / 1000);
                         const hash = roomId.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
