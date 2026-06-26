@@ -89,11 +89,12 @@ const GAME_BACKGROUNDS = ['/bg1.jpg', '/bg2.jpg', '/bg3.jpg', '/bg4.png'];
 // ================================
 // Notification toast
 // ================================
-function Notification({ messages }: { messages: { id: string; type: 'info' | 'warning' | 'result'; text: string }[] }) {
+function Notification({ messages }: { messages: { id: string; type: 'info' | 'warning' | 'result' | 'error'; text: string }[] }) {
     const typeStyle = {
         info: { bg: "rgba(99,102,241,0.12)", border: "rgba(99,102,241,0.3)", color: "#818cf8", prefix: "ℹ️" },
         warning: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", color: "#fbbf24", prefix: "⚠️" },
         result: { bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", color: "#f87171", prefix: "📢" },
+        error: { bg: "rgba(220,38,38,0.15)", border: "rgba(220,38,38,0.4)", color: "#ef4444", prefix: "❌" },
     };
     if (messages.length === 0) return null;
     return (
@@ -214,9 +215,9 @@ export default function GameRoomPage() {
     });
 
     // ── Notifications ───────────────────────
-    const [notifications, setNotifications] = useState<{ id: string; type: 'info' | 'warning' | 'result'; text: string }[]>([]);
+    const [notifications, setNotifications] = useState<{ id: string; type: 'info' | 'warning' | 'result' | 'error'; text: string }[]>([]);
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
-    const addNotif = (text: string, type: 'info' | 'warning' | 'result' = 'info') => {
+    const addNotif = (text: string, type: 'info' | 'warning' | 'result' | 'error' = 'info') => {
         const id = Math.random().toString(36).slice(2);
         setNotifications(prev => [...prev.slice(-3), { id, type, text }]);
         setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);

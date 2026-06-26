@@ -250,7 +250,7 @@ export default function RoundTransitionScreen({
             <div>
               <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 4px" }}>Vòng tiếp theo</p>
               <p style={{ color: "#fff", fontWeight: 900, fontSize: 20, margin: 0 }}>
-                Vòng <span style={{ color: "#00F2FE", textShadow: "0 0 12px rgba(0,242,254,0.6)" }}>{roundNumber + 1}</span>
+                Vòng <span style={{ color: "#00F2FE", textShadow: "0 0 12px rgba(0,242,254,0.6)" }}>{roundNumber}</span>
               </p>
             </div>
             <div style={{ textAlign: "right" }}>
