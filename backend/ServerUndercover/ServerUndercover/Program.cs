@@ -48,7 +48,11 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowNextJs", policy =>
     {
-        policy.SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost" || new Uri(origin).Host == "127.0.0.1") // Cho phép tất cả các cổng localhost
+        policy.SetIsOriginAllowed(origin => 
+                  new Uri(origin).Host == "localhost" || 
+                  new Uri(origin).Host == "127.0.0.1" ||
+                  new Uri(origin).Host == "doanuit.online" ||
+                  new Uri(origin).Host == "www.doanuit.online") // Cho phép localhost và tên miền thật
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials(); // Bắt buộc phải có dòng này cho SignalR

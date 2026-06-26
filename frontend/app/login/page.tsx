@@ -52,7 +52,7 @@ export default function LoginPage() {
     if (isLoggingIn) return;
     setIsLoggingIn(true);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/auth/login`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -91,7 +91,7 @@ export default function LoginPage() {
       const user = result.user;
       const idToken = await user.getIdToken();
 
-      const checkRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/user/profile/${user.uid}`);
+      const checkRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/user/profile/${user.uid}`);
       if (checkRes.ok) {
         saveToken(idToken);
         sessionStorage.setItem("userId", user.uid);
@@ -102,7 +102,7 @@ export default function LoginPage() {
         sessionStorage.setItem("userId", user.uid);
         const displayName = user.displayName || "Google User";
         try {
-          const syncRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/auth/google-sync`, {
+          const syncRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/auth/google-sync`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ uid: user.uid, username: displayName }),
@@ -136,7 +136,7 @@ export default function LoginPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/auth/register`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, username, password }),
@@ -162,7 +162,7 @@ export default function LoginPage() {
     }
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5120"}/api/auth/forgot-password`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
