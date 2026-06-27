@@ -25,6 +25,13 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
+  // ================= STATE CHO HỘP THOẠI GOOGLE NAME =================
+  const [googleNamePrompt, setGoogleNamePrompt] = useState({
+    isOpen: false,
+    uid: "",
+    defaultName: ""
+  });
+  const [googleNewName, setGoogleNewName] = useState("");
 
   // ================= STATE CHO HỘP THOẠI (POPUP) =================
   const [popup, setPopup] = useState({
@@ -107,6 +114,17 @@ export default function LoginPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ uid: user.uid, username: displayName }),
           });
+
+          if (syncRes.status === 409) {
+            setGoogleNamePrompt({
+              isOpen: true,
+              uid: user.uid,
+              defaultName: displayName
+            });
+            setGoogleNewName(displayName);
+            return;
+          }
+
           if (syncRes.ok) {
             showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
           } else {
@@ -131,6 +149,35 @@ export default function LoginPage() {
     }
   };
 
+  const handleGoogleNameSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!googleNewName.trim()) {
+      showPopup("Lỗi", "Vui lòng nhập tên hiển thị mới!", false);
+      return;
+    }
+    
+    try {
+      const syncRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/auth/google-sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid: googleNamePrompt.uid, username: googleNewName.trim() }),
+      });
+      
+      const data = await syncRes.json();
+      
+      if (syncRes.status === 409) {
+        showPopup("Lỗi", data.message, false);
+      } else if (syncRes.ok) {
+        setGoogleNamePrompt({ isOpen: false, uid: "", defaultName: "" });
+        sessionStorage.setItem("username", googleNewName.trim());
+        showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
+      } else {
+        showPopup("Lỗi", data.message, false);
+      }
+    } catch (err) {
+      showPopup("Lỗi kết nối", "Không thể kết nối đến Server C#.", false);
+    }
+  };
 
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -370,6 +417,43 @@ export default function LoginPage() {
             >
               Đã hiểu
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================= GOOGLE NAME PROMPT POPUP ================= */}
+      {googleNamePrompt.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#fcf8e8] w-full max-w-sm rounded-xl shadow-2xl p-6 border-2 border-[#d3b88b] animate-scale-in">
+            <h2 className="text-xl font-bold text-[#3e2723] text-center mb-4">Nhập Tên Hiển Thị</h2>
+            <p className="text-sm text-[#6d4c41] text-center mb-4">
+              Tên hiển thị mặc định của bạn đã bị trùng. Vui lòng chọn một tên khác để tiếp tục đăng nhập!
+            </p>
+            <form onSubmit={handleGoogleNameSubmit} className="flex flex-col gap-4">
+              <input
+                type="text"
+                placeholder="Tên hiển thị mới..."
+                value={googleNewName}
+                onChange={(e) => setGoogleNewName(e.target.value)}
+                className="w-full px-4 py-2 bg-white border-2 border-[#e0d6c8] rounded focus:outline-none focus:border-[#9b111e] text-gray-900 font-medium"
+                required
+              />
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setGoogleNamePrompt({ isOpen: false, uid: "", defaultName: "" })}
+                  className="flex-1 font-bold py-2.5 rounded bg-gray-300 hover:bg-gray-400 text-gray-800 transition-colors"
+                >
+                  HỦY
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 font-bold py-2.5 rounded bg-[#9b111e] hover:bg-[#7a0000] text-white transition-colors"
+                >
+                  XÁC NHẬN
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -40,6 +40,14 @@ namespace ServerUndercover.Controllers
 
             try
             {
+                // KIỂM TRA TRÙNG TÊN HIỂN THỊ
+                Query nameQuery = _db.Collection("users").WhereEqualTo("username", request.Username);
+                QuerySnapshot nameQuerySnapshot = await nameQuery.GetSnapshotAsync();
+                if (nameQuerySnapshot.Documents.Count > 0)
+                {
+                    return Conflict(new { message = "Tên hiển thị này đã tồn tại. Vui lòng chọn tên khác!" });
+                }
+
                 // 1. Tạo user trong Firebase Auth (Điều này sẽ tự động check user tồn tại trong authentication chính)
                 var userCredential = await _client.CreateUserWithEmailAndPasswordAsync(request.Email, request.Password);
                 string uid = userCredential.User.Info.Uid;
@@ -251,19 +259,13 @@ namespace ServerUndercover.Controllers
 
                 if (!snap.Exists)
                 {
-                    // TÌM TÀI KHOẢN CŨ BẰNG USERNAME ĐỂ LINK DATA (yêu cầu của người dùng)
+                    // KIỂM TRA TRÙNG TÊN HIỂN THỊ (Ngăn chặn tạo tài khoản trùng tên)
                     Query query = _db.Collection("users").WhereEqualTo("username", request.Username);
                     QuerySnapshot querySnapshot = await query.GetSnapshotAsync();
 
                     if (querySnapshot.Documents.Count > 0)
                     {
-                        var oldDoc = querySnapshot.Documents[0];
-                        if (oldDoc.Id != request.Uid)
-                        {
-                            var oldData = oldDoc.ToDictionary();
-                            await docRef.SetAsync(oldData);
-                            return Ok(new { message = "Đã liên kết với tài khoản cũ thành công!" });
-                        }
+                        return Conflict(new { message = "Tên hiển thị này đã tồn tại. Vui lòng chọn tên khác!" });
                     }
 
                     // NẾU KHÔNG CÓ TÀI KHOẢN CŨ THÌ TẠO MỚI

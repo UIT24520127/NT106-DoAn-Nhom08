@@ -460,14 +460,8 @@ namespace ServerUndercover.Hubs
             string userId = GetUserId();
             if (!string.IsNullOrEmpty(userId))
             {
-                // Register session and check if there's an old connection
-                string? oldConnectionId = _roomManager.RegisterConnection(userId, Context.ConnectionId);
-                
-                if (!string.IsNullOrEmpty(oldConnectionId) && oldConnectionId != Context.ConnectionId)
-                {
-                    // Kick old tab
-                    await Clients.Client(oldConnectionId).SendAsync("ForceLogout", "Tài khoản của bạn đã được đăng nhập ở nơi khác.");
-                }
+                // Register session
+                _roomManager.RegisterConnection(userId, Context.ConnectionId);
 
                 // If user is in a room, re-join the SignalR group
                 string? roomId = _roomManager.GetUserRoomId(userId);
@@ -901,11 +895,6 @@ namespace ServerUndercover.Hubs
             if (roomId == null) return;
 
             var room = _roomManager.GetRoom(roomId);
-            if (!IsRoomHost(room, userId))
-            {
-                await Clients.Caller.SendAsync("RoomError", "Bạn không phải chủ phòng.");
-                return;
-            }
 
             // Reset room to Waiting state
             room.State = RoomState.Waiting;
