@@ -940,8 +940,10 @@ export default function GameRoomPage() {
 
         // 11b. White Hat Guess Result
         newConn.on("WhiteHatGuessResult", (data: { isCorrect: boolean, displayName: string }) => {
-            setWhiteHatGuessResult(data.isCorrect);
             setShowWhiteHatGuess(false);
+            if (!data.isCorrect) {
+                addNotif(`${data.displayName} đã đoán sai từ khóa và bị loại!`, 'warning');
+            }
         });
 
         // 12. Compat: RoundStarted (old event)
