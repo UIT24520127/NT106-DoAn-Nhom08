@@ -86,5 +86,8 @@ namespace ServerUndercover.Models.State
         public ConcurrentDictionary<string, bool> ExtendVoteRequests { get; set; } = new();
         public bool HasExtendedVote { get; set; } = false;
         public ConcurrentDictionary<string, bool> SkipVoteRequests { get; set; } = new();
+
+        /// <summary>Đã ghi thống kê (số trận/số thắng) cho ván này chưa - chống ghi trùng.</summary>
+        public bool StatsRecorded { get; set; } = false;
     }
 }

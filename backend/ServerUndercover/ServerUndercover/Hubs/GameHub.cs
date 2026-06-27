@@ -373,6 +373,7 @@ namespace ServerUndercover.Hubs
                 room.Phase = GamePhase.GameEnd;
                 room.State = RoomState.Finished;
                 await _roomManager.DeleteGameSessionAsync(room);
+                await UpdatePlayerStatsAsync(room, winCheck.WinnerRole);
                 await _hubContext.Clients.Group(roomId).SendAsync("GameEnded", new
                 {
                     winner = winCheck.WinnerRole,
@@ -475,6 +476,10 @@ namespace ServerUndercover.Hubs
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
+            // Dọn khỏi voice + báo các peer còn lại để họ huỷ kết nối P2P
+            _roomManager.RemoveVoiceMemberEverywhere(Context.ConnectionId);
+            await Clients.Others.SendAsync("PlayerDisconnected", Context.ConnectionId);
+
             string userId = GetUserId();
             if (!string.IsNullOrEmpty(userId))
             {
@@ -685,6 +690,7 @@ namespace ServerUndercover.Hubs
                 room.State = RoomState.Playing;
                 room.Phase = GamePhase.Loading;
                 room.RoundNumber = 1;
+                room.StatsRecorded = false; // Cho phép ghi thống kê cho ván mới
                 room.LoadingStartedAt = DateTime.UtcNow;
                 room.LoadingTimeoutSeconds = 60;
                 room.LoadingClosed = false;
@@ -1256,6 +1262,7 @@ namespace ServerUndercover.Hubs
                     room.Phase = GamePhase.GameEnd;
                     room.State = RoomState.Finished;
                     await _roomManager.DeleteGameSessionAsync(room);
+                    await UpdatePlayerStatsAsync(room, winCheck.WinnerRole);
                     await _hubContext.Clients.Group(roomId).SendAsync("GameEnded", new
                     {
                         winner = winCheck.WinnerRole,
@@ -1331,6 +1338,7 @@ namespace ServerUndercover.Hubs
                 room.Phase = GamePhase.GameEnd;
                 room.State = RoomState.Finished;
                 await _roomManager.DeleteGameSessionAsync(room);
+                await UpdatePlayerStatsAsync(room, "WhiteHat");
                 await Clients.Group(roomId).SendAsync("GameEnded", new
                 {
                     winner = "WhiteHat",
@@ -1367,6 +1375,7 @@ namespace ServerUndercover.Hubs
                     room.Phase = GamePhase.GameEnd;
                     room.State = RoomState.Finished;
                     await _roomManager.DeleteGameSessionAsync(room);
+                    await UpdatePlayerStatsAsync(room, winCheck.WinnerRole);
                     await Clients.Group(roomId).SendAsync("GameEnded", new
                     {
                         winner = winCheck.WinnerRole,
@@ -1403,6 +1412,93 @@ namespace ServerUndercover.Hubs
                             await SkipTurn();
                         }
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Cập nhật thống kê (số trận, số thắng theo vai) lên Firestore khi ván kết thúc.
+        /// Có cờ StatsRecorded chống ghi trùng nếu hàm bị gọi nhiều lần cho cùng 1 ván.
+        /// </summary>
+        private async Task UpdatePlayerStatsAsync(Room room, string? winnerRole)
+        {
+            if (room == null) return;
+
+            // Chỉ ghi MỘT lần cho mỗi ván
+            lock (room)
+            {
+                if (room.StatsRecorded) return;
+                room.StatsRecorded = true;
+            }
+
+            foreach (var player in room.Players.Values)
+            {
+                if (string.IsNullOrEmpty(player.UserId)) continue;
+
+                try
+                {
+                    var docRef = _db.Collection("users").Document(player.UserId);
+                    var snap = await docRef.GetSnapshotAsync();
+
+                    // Đọc giá trị hiện tại (mặc định 0 nếu chưa có)
+                    long Cur(string f) =>
+                        snap.Exists && snap.ContainsField(f) ? snap.GetValue<long>(f) : 0L;
+
+                    long totalGames      = Cur("totalGames") + 1;
+                    long civilianGames   = Cur("civilianGames");
+                    long undercoverGames = Cur("undercoverGames");
+                    long mrWhiteGames    = Cur("mrWhiteGames");
+                    long civilianWins    = Cur("civilianWins");
+                    long undercoverWins  = Cur("undercoverWins");
+                    long mrWhiteWins     = Cur("mrWhiteWins");
+                    long totalWins       = Cur("totalWins");
+
+                    // Tăng số lần chơi theo vai vừa chơi
+                    switch (player.Role)
+                    {
+                        case "Civilian": civilianGames++; break;
+                        case "BlackHat": undercoverGames++; break;
+                        case "WhiteHat": mrWhiteGames++; break;
+                    }
+
+                    // Cộng thắng nếu phe của người chơi này thắng
+                    if (winnerRole == player.Role)
+                    {
+                        totalWins++;
+                        switch (player.Role)
+                        {
+                            case "Civilian": civilianWins++; break;
+                            case "BlackHat": undercoverWins++; break;
+                            case "WhiteHat": mrWhiteWins++; break;
+                        }
+                    }
+
+                    // Xác định vai chơi nhiều nhất
+                    string mostPlayedRole = "Tân binh";
+                    long maxGames = 0;
+                    if (civilianGames   > maxGames) { maxGames = civilianGames;   mostPlayedRole = "Dân thường"; }
+                    if (undercoverGames > maxGames) { maxGames = undercoverGames; mostPlayedRole = "Mũ đen"; }
+                    if (mrWhiteGames    > maxGames) { maxGames = mrWhiteGames;    mostPlayedRole = "Mũ trắng"; }
+
+                    var updates = new Dictionary<string, object>
+                    {
+                        { "totalGames",      totalGames },
+                        { "civilianGames",   civilianGames },
+                        { "undercoverGames", undercoverGames },
+                        { "mrWhiteGames",    mrWhiteGames },
+                        { "civilianWins",    civilianWins },
+                        { "undercoverWins",  undercoverWins },
+                        { "mrWhiteWins",     mrWhiteWins },
+                        { "totalWins",       totalWins },
+                        { "mostPlayedRole",  mostPlayedRole },
+                    };
+
+                    // MergeAll: tự tạo field còn thiếu, không ghi đè các field khác (avatar, username...)
+                    await docRef.SetAsync(updates, SetOptions.MergeAll);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[STATS-ERROR] Không cập nhật được thống kê cho {player.UserId}: {ex.Message}");
                 }
             }
         }
@@ -1478,8 +1574,16 @@ namespace ServerUndercover.Hubs
 
         public async Task StartVoiceChat(string roomId)
         {
+            // Lấy danh sách người ĐANG trong voice (trước khi thêm mình)
+            var existing = _roomManager.GetVoiceMembers(roomId);
+            _roomManager.AddVoiceMember(roomId, Context.ConnectionId);
+
             // join group voice riêng
             await Groups.AddToGroupAsync(Context.ConnectionId,$"voice-{roomId}");
+
+            // Gửi cho NGƯỜI MỚI: id của chính họ (selfId) + danh sách người đang có
+            // -> client tự chọn initiator theo so sánh id, tránh đua tạo offer 2 chiều
+            await Clients.Caller.SendAsync("ExistingVoiceUsers", new { selfId = Context.ConnectionId, users = existing });
 
             // báo cho người cũ biết có user mới vào voice
             await Clients.OthersInGroup($"voice-{roomId}").SendAsync("UserJoinedVoice",Context.ConnectionId);
@@ -1487,6 +1591,7 @@ namespace ServerUndercover.Hubs
 
         public async Task LeaveVoiceChat(string roomId)
         {
+            _roomManager.RemoveVoiceMember(roomId, Context.ConnectionId);
             await Groups.RemoveFromGroupAsync(Context.ConnectionId,$"voice-{roomId}");
             await Clients.Group($"voice-{roomId}").SendAsync("PlayerDisconnected",Context.ConnectionId);
         }

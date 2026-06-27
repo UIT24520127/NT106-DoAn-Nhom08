@@ -683,35 +683,7 @@ export default function DescribingPhase({
                   }}
                 />
 
-                <button
-                  onClick={startSpeechToText}
-                  title="Voice to text"
-                  style={{
-                    height: 48,
-                    padding: "0 18px",
-                    borderRadius: 14,
-                    border: `1px solid ${isListening ? "rgba(239,68,68,0.46)" : "rgba(34,211,238,0.32)"}`,
-                    background: isListening ? "rgba(239,68,68,0.14)" : "rgba(34,211,238,0.1)",
-                    color: isListening ? "#ef4444" : "#22d3ee",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    cursor: "pointer",
-                    fontWeight: 800,
-                    fontSize: 14,
-                    transition: "all 0.2s"
-                  }}
-                >
-                  {isListening ? (
-                    <>
-                      <MicOff size={18} /> Đang nghe...
-                    </>
-                  ) : (
-                    <>
-                      <Mic size={18} /> Nói (Voice)
-                    </>
-                  )}
-                </button>
+
 
                 <button
                   onClick={handleSkip}
