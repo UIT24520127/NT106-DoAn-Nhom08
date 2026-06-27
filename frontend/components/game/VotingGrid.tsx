@@ -26,7 +26,8 @@ interface VotingGridProps {
   isEliminated: boolean;
   extendVoteCount?: number;
   extendRequiredCount?: number;
-  hasExtendedVote?: boolean;
+  hasRequestedExtend?: boolean;
+  isTimeExtended?: boolean;
   skipVoteCount?: number;
   skipRequiredCount?: number;
   hasSkippedVote?: boolean;
@@ -45,7 +46,7 @@ interface VotingGridProps {
 export default function VotingGrid({
   players, myUserId, voteEndTime, realtimeVoteCounts, realtimeVotes = {}, totalVotesCast = 0,
   hasVoted, myVoteTarget, canSkip, isHost, isEliminated,
-  extendVoteCount = 0, extendRequiredCount = 0, hasExtendedVote = false,
+  extendVoteCount = 0, extendRequiredCount = 0, hasRequestedExtend = false, isTimeExtended = false,
   skipVoteCount = 0, skipRequiredCount = 0, hasSkippedVote = false, onExtendVote,
   onVote, onChangeVote, onRevokeVote, onSkip, onTimerExpired,
   backgroundImage,
@@ -499,7 +500,7 @@ export default function VotingGrid({
         display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10,
       }}>
         {/* Kéo dài thời gian */}
-        {!isEliminated && onExtendVote && !hasExtendedVote && (
+        {!isEliminated && onExtendVote && !isTimeExtended && (
           <button onClick={onExtendVote} style={{
             padding: "10px 20px", borderRadius: 12,
             background: extendVoteCount > 0 ? "rgba(16,185,129,0.2)" : "rgba(16,185,129,0.12)",
@@ -511,7 +512,7 @@ export default function VotingGrid({
             onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(16,185,129,0.25)"}
             onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = extendVoteCount > 0 ? "rgba(16,185,129,0.2)" : "rgba(16,185,129,0.12)"}
           >
-            ⏳ {hasExtendedVote 
+            ⏳ {hasRequestedExtend 
                   ? `Đã xin thêm phút (${extendVoteCount}/${extendRequiredCount}) - Nhấn để hủy` 
                   : extendVoteCount > 0 
                     ? `Thêm một phút (${extendVoteCount}/${extendRequiredCount})`

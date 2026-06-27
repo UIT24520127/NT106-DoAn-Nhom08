@@ -20,21 +20,21 @@ const WINNER_CFG: Record<string, {
 }> = {
   Civilian: {
     title: "PHE DÂN THẮNG!", subtitle: "Toàn bộ nội gián đã bị loại.",
-    banner: "linear-gradient(135deg, #00FF94, #00CC76)",
+    banner: "linear-gradient(135deg, rgba(0,255,148,0.25), rgba(0,204,118,0.25))",
     icon: "🏛️", color: "#00FF94", glow: "rgba(0,255,148,0.6)",
     bg: "radial-gradient(ellipse 80% 55% at 50% 25%, rgba(0,255,148,0.12) 0%, transparent 70%)",
     particles: ["#00FF94", "#00F2FE", "#fff", "#00CC76"],
   },
   BlackHat: {
     title: "NỘI GIÁN XÂM CHIẾM!", subtitle: "Họ đã kiểm soát phòng chơi.",
-    banner: "linear-gradient(135deg, #FF3B3B, #CC0000)",
+    banner: "linear-gradient(135deg, rgba(255,59,59,0.25), rgba(204,0,0,0.25))",
     icon: "🎭", color: "#FF3B3B", glow: "rgba(255,59,59,0.6)",
     bg: "radial-gradient(ellipse 80% 55% at 50% 25%, rgba(255,59,59,0.12) 0%, transparent 70%)",
     particles: ["#FF3B3B", "#9D4EDD", "#FF9800", "#fff"],
   },
   WhiteHat: {
     title: "MŨ TRẮNG THẮNG!", subtitle: "Đã đoán đúng từ khóa của Dân Thường.",
-    banner: "linear-gradient(135deg, #FFD700, #FF9800)",
+    banner: "linear-gradient(135deg, rgba(255,215,0,0.25), rgba(255,152,0,0.25))",
     icon: "🤍", color: "#FFD700", glow: "rgba(255,215,0,0.6)",
     bg: "radial-gradient(ellipse 80% 55% at 50% 25%, rgba(255,215,0,0.10) 0%, transparent 70%)",
     particles: ["#FFD700", "#fff", "#FF9800", "#00F2FE"],
@@ -107,7 +107,7 @@ export default function GameEndedScreen({
   const displayWord = civilianWord ?? myWord ?? "???";
 
   return (
-    <div style={{
+    <div className="custom-scrollbar" style={{
       position: "fixed", inset: 0,
       backgroundImage: `linear-gradient(180deg, rgba(6,6,16,0.92), rgba(10,8,18,0.44)), url(${backgroundImage ?? '/bg1.jpg'})`,
       backgroundSize: "cover",
@@ -162,6 +162,8 @@ export default function GameEndedScreen({
       }}>
         <div style={{
           background: cfg.banner,
+          backdropFilter: "blur(24px)",
+          border: `1px solid ${cfg.color}40`,
           borderRadius: 24, padding: "28px 36px",
           display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
           position: "relative", overflow: "hidden",
@@ -170,15 +172,15 @@ export default function GameEndedScreen({
           {/* Shimmer overlay */}
           <div style={{
             position: "absolute", inset: 0,
-            background: "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.15) 50%, transparent 70%)",
+            background: "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.06) 50%, transparent 70%)",
             backgroundSize: "300% auto",
-            animation: "ge-shimmer 3s linear infinite",
+            animation: "ge-shimmer 8s linear infinite",
           }} />
 
           {/* Icon */}
           <div style={{
             fontSize: 80, lineHeight: 1,
-            animation: phase === "full" ? "ge-icon-pulse 2.5s ease-in-out infinite" : "none",
+            animation: phase === "full" ? "ge-icon-pulse 4s ease-in-out infinite" : "none",
           }}>
             {cfg.icon}
           </div>

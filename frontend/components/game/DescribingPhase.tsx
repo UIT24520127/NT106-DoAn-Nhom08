@@ -131,12 +131,12 @@ export default function DescribingPhase({
         // Just keep showing the describeDuration, don't tick down yet
         return;
       }
-      
+
       setTimeLeft(remaining);
-      
+
       if (remaining === 0) {
         window.clearInterval(interval);
-        
+
         // Auto-submit logic when timer naturally hits 0
         if (isMyTurnRef.current && !hasAutoSubmitted.current) {
           hasAutoSubmitted.current = true;
@@ -475,33 +475,33 @@ export default function DescribingPhase({
               }}
             >
               {typingSync?.[player.userId]?.text && (
-                 <div style={{
-                    position: 'absolute',
-                    bottom: '90%',
-                    left: '75%',
-                    background: typingSync[player.userId].isFinal 
-                        ? 'linear-gradient(135deg, rgba(34,197,94,0.9), rgba(22,163,74,0.95))' 
-                        : 'linear-gradient(135deg, rgba(14,23,38,0.95), rgba(8,14,24,0.98))',
-                    color: typingSync[player.userId].isFinal ? '#000' : '#22d3ee',
-                    border: `1px solid ${typingSync[player.userId].isFinal ? '#4ade80' : 'rgba(34,211,238,0.4)'}`,
-                    padding: '10px 18px',
-                    borderRadius: '16px 16px 16px 4px',
-                    fontWeight: 800,
-                    fontSize: 14,
-                    pointerEvents: 'none',
-                    boxShadow: typingSync[player.userId].isFinal 
-                        ? '0 8px 24px rgba(34,197,94,0.3)' 
-                        : '0 8px 24px rgba(34,211,238,0.2)',
-                    zIndex: 20,
-                    transition: 'all 0.2s',
-                    width: 'max-content',
-                    maxWidth: 220,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                 }}>
-                   {typingSync[player.userId].text}
-                   {!typingSync[player.userId].isFinal && <span style={{ animation: 'dp-blink 1s infinite', marginLeft: 2, color: '#fff' }}>|</span>}
-                 </div>
+                <div style={{
+                  position: 'absolute',
+                  bottom: '90%',
+                  left: '75%',
+                  background: typingSync[player.userId].isFinal
+                    ? 'linear-gradient(135deg, rgba(34,197,94,0.9), rgba(22,163,74,0.95))'
+                    : 'linear-gradient(135deg, rgba(14,23,38,0.95), rgba(8,14,24,0.98))',
+                  color: typingSync[player.userId].isFinal ? '#000' : '#22d3ee',
+                  border: `1px solid ${typingSync[player.userId].isFinal ? '#4ade80' : 'rgba(34,211,238,0.4)'}`,
+                  padding: '10px 18px',
+                  borderRadius: '16px 16px 16px 4px',
+                  fontWeight: 800,
+                  fontSize: 14,
+                  pointerEvents: 'none',
+                  boxShadow: typingSync[player.userId].isFinal
+                    ? '0 8px 24px rgba(34,197,94,0.3)'
+                    : '0 8px 24px rgba(34,211,238,0.2)',
+                  zIndex: 20,
+                  transition: 'all 0.2s',
+                  width: 'max-content',
+                  maxWidth: 220,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}>
+                  {typingSync[player.userId].text}
+                  {!typingSync[player.userId].isFinal && <span style={{ animation: 'dp-blink 1s infinite', marginLeft: 2, color: '#fff' }}>|</span>}
+                </div>
               )}
               <div
                 style={{
@@ -595,32 +595,7 @@ export default function DescribingPhase({
         })}
       </div>
 
-      {eliminatedPlayers.length > 0 && (
-        <div style={{ width: "min(100%, 860px)", marginTop: 20, zIndex: 1 }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-            {eliminatedPlayers.map(player => (
-              <div
-                key={player.userId}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  borderRadius: 999,
-                  padding: "6px 12px",
-                  background: "rgba(239,68,68,0.08)",
-                  border: "1px solid rgba(239,68,68,0.18)",
-                  color: "rgba(255,255,255,0.42)",
-                  fontSize: 12,
-                  filter: "grayscale(100%)",
-                }}
-              >
-                <span>{player.displayName}</span>
-                <span>Đã bị loại</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       <div
         style={{
@@ -649,13 +624,13 @@ export default function DescribingPhase({
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, color: "rgba(255,255,255,0.42)", fontSize: 12, fontWeight: 800 }}>
                 <Keyboard size={14} />
-                <span>Nhap mo ta ngan gon, hoac dung voice-to-text roi gui.</span>
+                <span>Nhập mô tả ngắn gọn, hoặc dùng voice-to-text rồi gửi.</span>
                 <span style={{ marginLeft: "auto", color: descriptionSource === "speech" ? "#22d3ee" : "rgba(255,255,255,0.3)" }}>
                   {descriptionSource === "speech" ? "VOICE" : "TYPED"}
                 </span>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 10, alignItems: "center" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center" }}>
                 <input
                   value={descriptionText}
                   onChange={e => {
@@ -665,14 +640,14 @@ export default function DescribingPhase({
                     setSpeechError("");
                     if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
                     typingTimeoutRef.current = window.setTimeout(() => {
-                        onTyping?.(val);
+                      onTyping?.(val);
                     }, 150);
                   }}
                   onKeyDown={e => {
                     if (e.key === "Enter") handleSubmit();
                   }}
                   maxLength={80}
-                  placeholder="Nhap tu/cum tu mo ta..."
+                  placeholder="Nhập từ/cụm từ mô tả..."
                   style={{
                     height: 48,
                     minWidth: 0,
@@ -718,24 +693,7 @@ export default function DescribingPhase({
                   )}
                 </button>
 
-                <button
-                  onClick={handleSkip}
-                  title="Bỏ lượt"
-                  style={{
-                    height: 48,
-                    padding: "0 16px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "rgba(255,255,255,0.42)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                  }}
-                >
-                  <SkipForward size={18} />
-                </button>
+
 
                 <button
                   onClick={handleSubmit}
@@ -757,7 +715,7 @@ export default function DescribingPhase({
                     boxShadow: "0 10px 28px rgba(34,197,94,0.28)",
                   }}
                 >
-                  <Send size={16} /> GUI
+                  <Send size={16} /> GỬI
                 </button>
               </div>
 
