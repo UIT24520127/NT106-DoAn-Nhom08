@@ -468,7 +468,7 @@ export default function DescribingPhase({
                 ["--offset" as any]: offset,
                 ["--scale" as any]: scale,
                 position: "absolute",
-                transform: `translateX(${offset * 168}px) scale(${scale})`,
+                transform: `translateX(${offset * 200}px) scale(${scale})`,
                 opacity,
                 zIndex: isActive ? 10 : 5 - abs,
                 transition: "all 0.48s cubic-bezier(0.34,1.56,0.64,1)",
@@ -505,10 +505,10 @@ export default function DescribingPhase({
               )}
               <div
                 style={{
-                  width: isActive ? 210 : 150,
-                  minHeight: isActive ? 244 : 156,
-                  borderRadius: 24,
-                  padding: isActive ? "28px 24px" : "18px 16px",
+                  width: isActive ? 280 : 180,
+                  minHeight: isActive ? 320 : 180,
+                  borderRadius: 32,
+                  padding: isActive ? "36px 24px" : "20px 16px",
                   background: isActive
                     ? "linear-gradient(160deg, rgba(12,25,34,0.78), rgba(8,10,20,0.82))"
                     : "rgba(13,16,28,0.46)",
@@ -518,7 +518,7 @@ export default function DescribingPhase({
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: 14,
+                  gap: 18,
                   animation: isActive ? "dp-card-glow 2.8s ease-in-out infinite" : "none",
                 }}
               >
@@ -526,8 +526,8 @@ export default function DescribingPhase({
                   {isSpeaking && <SpeakingRipple color={isMyTurn ? "#22c55e" : "#22d3ee"} />}
                   <div
                     style={{
-                      width: isActive ? 98 : 60,
-                      height: isActive ? 98 : 60,
+                      width: isActive ? 120 : 70,
+                      height: isActive ? 120 : 70,
                       borderRadius: "50%",
                       background: `radial-gradient(circle at 35% 35%, ${pColor}35, #0b1020)`,
                       border: `3px solid ${pColor}`,
@@ -535,12 +535,17 @@ export default function DescribingPhase({
                       alignItems: "center",
                       justifyContent: "center",
                       color: pColor,
-                      fontSize: isActive ? 38 : 20,
+                      fontSize: isActive ? 48 : 24,
                       fontWeight: 900,
                       boxShadow: isActive ? `0 0 28px ${pColor}66` : "none",
+                      overflow: "hidden",
                     }}
                   >
-                    {player.displayName.charAt(0).toUpperCase()}
+                    {player.avatar ? (
+                      <img src={player.avatar} alt={player.displayName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      player.displayName.charAt(0).toUpperCase()
+                    )}
                   </div>
                 </div>
 
@@ -549,7 +554,7 @@ export default function DescribingPhase({
                     style={{
                       color: "#fff",
                       fontWeight: 900,
-                      fontSize: isActive ? 16 : 12,
+                      fontSize: isActive ? 18 : 13,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
@@ -567,12 +572,12 @@ export default function DescribingPhase({
                 {isActive ? (
                   <div
                     style={{
-                      padding: "6px 15px",
+                      padding: "8px 20px",
                       borderRadius: 999,
                       background: "rgba(34,211,238,0.12)",
                       border: "1px solid rgba(34,211,238,0.32)",
                       color: "#22d3ee",
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: 900,
                       letterSpacing: "0.08em",
                     }}

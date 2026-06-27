@@ -1395,7 +1395,7 @@ namespace ServerUndercover.Hubs
                 {
                     if (room.Phase == GamePhase.WhiteHatGuess)
                     {
-                        // Đoán thất bại sau khi bị vote out -> Trình chiếu RoundTransitionScreen cho người vừa chết (Mũ Trắng)
+                        room.Phase = GamePhase.Loading; // Prevent EndWhiteHatGuessAfterTimeout from double-executing
                         var res = new RoomManagerService.VoteResolution(false, player.UserId, player.DisplayName);
                         await BroadcastRoundTransition(roomId, room, res);
                         await Task.Delay((room.Settings.RoundTransitionDuration * 1000) + 1000);

@@ -5,6 +5,7 @@ import CountdownTimer from "./CountdownTimer";
 interface VotePlayer {
   userId: string;
   displayName: string;
+  avatar?: string;
   role: string;
   isEliminated: boolean;
   voteCount: number;
@@ -32,6 +33,9 @@ interface VotingGridProps {
   onSkip: () => void;
   onTimerExpired: () => void;
   backgroundImage?: string;
+  isWhiteHatGuessing?: boolean;
+  whiteHatId?: string | null;
+  whiteHatTimeLeft?: number;
 }
 
 export default function VotingGrid({
@@ -41,15 +45,27 @@ export default function VotingGrid({
   skipVoteCount = 0, skipRequiredCount = 0, onExtendVote,
   onVote, onChangeVote, onSkip, onTimerExpired,
   backgroundImage,
+  isWhiteHatGuessing = false, whiteHatId, whiteHatTimeLeft = 0,
 }: VotingGridProps) {
   const [historyPlayer, setHistoryPlayer] = useState<VotePlayer | null>(null);
+  const [whiteHatEndTime, setWhiteHatEndTime] = useState<number>(0);
+
+  useEffect(() => {
+    if (isWhiteHatGuessing && whiteHatTimeLeft > 0) {
+      setWhiteHatEndTime(Date.now() + whiteHatTimeLeft * 1000);
+    }
+  }, [isWhiteHatGuessing, whiteHatTimeLeft]);
   const [changingVote, setChangingVote] = useState(false);
   const prevCounts = useRef<Record<string, number>>({});
   const [pulsing, setPulsing] = useState<Record<string, boolean>>({});
   const [hovering, setHovering] = useState<string | null>(null);
 
-  const alivePlayers = players.filter(p => !p.isEliminated);
-  const deadPlayers = players.filter(p => p.isEliminated);
+  const alivePlayers = isWhiteHatGuessing 
+    ? players // In White Hat guess, show all players (including WhiteHat)
+    : players.filter(p => !p.isEliminated);
+  const deadPlayers = isWhiteHatGuessing 
+    ? [] // Hide dead players list during White Hat guess to focus on the spotlight
+    : players.filter(p => p.isEliminated);
   const maxVotes = Math.max(0, ...alivePlayers.map(p => realtimeVoteCounts[p.userId] ?? p.voteCount ?? 0));
 
   useEffect(() => {
@@ -107,22 +123,33 @@ export default function VotingGrid({
         textAlign: "center", padding: "32px 0 20px",
         zIndex: 1, width: "100%", maxWidth: 860,
       }}>
-        <p style={{ color: "rgba(255,59,59,0.5)", fontSize: 10, letterSpacing: "0.4em", textTransform: "uppercase", margin: "0 0 8px" }}>
-          — Vòng Bình Chọn —
+        <p style={{ color: isWhiteHatGuessing ? "rgba(255,215,0,0.5)" : "rgba(255,59,59,0.5)", fontSize: 10, letterSpacing: "0.4em", textTransform: "uppercase", margin: "0 0 8px" }}>
+          — {isWhiteHatGuessing ? "Cơ Hội Cuối Cùng" : "Vòng Bình Chọn"} —
         </p>
         <h1 style={{
-          fontSize: 30, fontWeight: 900, color: "#FF3B3B",
-          animation: "vg-header-glow 2.5s ease-in-out infinite",
+          fontSize: 30, fontWeight: 900, color: isWhiteHatGuessing ? "#FFD700" : "#FF3B3B",
+          animation: isWhiteHatGuessing ? "none" : "vg-header-glow 2.5s ease-in-out infinite",
+          textShadow: isWhiteHatGuessing ? "0 0 20px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 215, 0, 0.2)" : undefined,
           margin: "0 0 20px", letterSpacing: "0.06em", textTransform: "uppercase",
         }}>
-          🎯 AI LÀ KẺ ĐÁNG NGHI?
+          {isWhiteHatGuessing ? "MŨ TRẮNG ĐANG ĐOÁN TỪ KHÓA" : "🎯 AI LÀ KẺ ĐÁNG NGHI?"}
         </h1>
 
-        <CountdownTimer endTime={voteEndTime} onExpired={onTimerExpired} />
+        <CountdownTimer 
+          endTime={isWhiteHatGuessing ? whiteHatEndTime : voteEndTime} 
+          onExpired={isWhiteHatGuessing ? () => {} : onTimerExpired} 
+        />
 
         {/* Status pill */}
         <div style={{ marginTop: 14 }}>
-          {isEliminated ? (
+          {isWhiteHatGuessing ? (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              background: "rgba(255,215,0,0.07)", border: "1px solid rgba(255,215,0,0.2)",
+              borderRadius: 99, padding: "7px 18px",
+              color: "#FFD700", fontSize: 13, fontWeight: 700,
+            }}>⏳ Chờ mũ trắng đưa ra quyết định...</div>
+          ) : isEliminated ? (
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               background: "rgba(255,59,59,0.07)", border: "1px solid rgba(255,59,59,0.2)",
@@ -172,12 +199,13 @@ export default function VotingGrid({
       }}>
         {alivePlayers.map(player => {
           const isMe = player.userId === myUserId;
+          const isSpotlight = isWhiteHatGuessing && player.userId === whiteHatId;
           const isVotedByMe = myVoteTarget === player.userId;
           const votes = realtimeVoteCounts[player.userId] ?? player.voteCount ?? 0;
           const isLeading = votes > 0 && votes === maxVotes && maxVotes > 0;
           const isPulsing = pulsing[player.userId];
           const isHovered = hovering === player.userId;
-          const canVote = !isMe && !isEliminated && (!hasVoted || changingVote);
+          const canVote = !isWhiteHatGuessing && !isMe && !isEliminated && (!hasVoted || changingVote);
 
           return (
             <div key={player.userId}
@@ -194,15 +222,21 @@ export default function VotingGrid({
                 padding: "24px 18px 18px",
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
                 cursor: canVote ? "pointer" : "default",
-                border: isVotedByMe
-                  ? "2px solid rgba(157,78,221,0.55)"
-                  : isLeading
-                    ? "1.5px solid rgba(255,59,59,0.35)"
-                    : isHovered
-                      ? "1.5px solid rgba(255,59,59,0.25)"
-                      : "1.5px solid rgba(255,255,255,0.06)",
-                transition: "border 0.2s ease",
-                zIndex: 1,
+                opacity: (isWhiteHatGuessing && !isSpotlight) ? 0.3 : 1,
+                filter: (isWhiteHatGuessing && !isSpotlight) ? "grayscale(100%)" : "none",
+                transform: isSpotlight ? "scale(1.05)" : "scale(1)",
+                border: isSpotlight
+                  ? "2px solid #FFD700"
+                  : isVotedByMe
+                    ? "2px solid rgba(157,78,221,0.55)"
+                    : isLeading
+                      ? "1.5px solid rgba(255,59,59,0.35)"
+                      : isHovered
+                        ? "1.5px solid rgba(255,59,59,0.25)"
+                        : "1.5px solid rgba(255,255,255,0.06)",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                zIndex: isSpotlight ? 10 : 1,
+                boxShadow: isSpotlight ? "0 0 30px rgba(255,215,0,0.4)" : "none",
               }}
             >
               {/* GLASS BACKGROUND LAYER */}
@@ -211,22 +245,40 @@ export default function VotingGrid({
                 inset: 0,
                 zIndex: -1,
                 borderRadius: "inherit",
-                background: isVotedByMe
-                  ? "linear-gradient(160deg, rgba(157,78,221,0.12) 0%, rgba(255,255,255,0.02) 100%)"
-                  : isLeading
-                    ? "linear-gradient(160deg, rgba(255,59,59,0.08) 0%, rgba(255,255,255,0.02) 100%)"
-                    : isHovered
-                      ? "linear-gradient(160deg, rgba(255,59,59,0.06) 0%, rgba(255,255,255,0.02) 100%)"
-                      : "rgba(255,255,255,0.025)",
+                background: isSpotlight
+                  ? "linear-gradient(160deg, rgba(255,215,0,0.15) 0%, rgba(255,255,255,0.02) 100%)"
+                  : isVotedByMe
+                    ? "linear-gradient(160deg, rgba(157,78,221,0.12) 0%, rgba(255,255,255,0.02) 100%)"
+                    : isLeading
+                      ? "linear-gradient(160deg, rgba(255,59,59,0.08) 0%, rgba(255,255,255,0.02) 100%)"
+                      : isHovered
+                        ? "linear-gradient(160deg, rgba(255,59,59,0.06) 0%, rgba(255,255,255,0.02) 100%)"
+                        : "rgba(255,255,255,0.025)",
                 backdropFilter: "blur(16px)",
                 WebkitBackdropFilter: "blur(16px)",
                 transition: "background 0.2s ease, box-shadow 0.2s ease",
-                animation: isVotedByMe
-                  ? "vg-voted-glow 2.5s ease-in-out infinite"
-                  : isHovered && canVote
-                    ? "vg-card-hover 0.2s ease forwards"
-                    : "none",
+                animation: isSpotlight
+                  ? "vg-voted-glow 2.5s ease-in-out infinite" // Reuse pulse animation or make a yellow one
+                  : isVotedByMe
+                    ? "vg-voted-glow 2.5s ease-in-out infinite"
+                    : isHovered && canVote
+                      ? "vg-card-hover 0.2s ease forwards"
+                      : "none",
               }} />
+
+              {/* Spotlight Status Text */}
+              {isSpotlight && (
+                <div style={{
+                  position: "absolute", bottom: -20, left: "50%", transform: "translateX(-50%)",
+                  background: "#FFD700", color: "#000",
+                  padding: "4px 12px", borderRadius: 12,
+                  fontSize: 11, fontWeight: 900,
+                  whiteSpace: "nowrap", zIndex: 20,
+                  boxShadow: "0 4px 12px rgba(255,215,0,0.5)",
+                }}>
+                  ĐANG SUY NGHĨ...
+                </div>
+              )}
 
               {/* Top badges */}
               {isMe && (
@@ -256,7 +308,6 @@ export default function VotingGrid({
                 }}>🔴 DẪN ĐẦU</div>
               )}
 
-              {/* Avatar */}
               <div
                 onClick={e => {
                   e.stopPropagation();
@@ -274,8 +325,13 @@ export default function VotingGrid({
                 transition: "all 0.25s",
                 flexShrink: 0,
                 cursor: "pointer",
+                overflow: "hidden",
               }}>
-                {player.displayName.charAt(0).toUpperCase()}
+                {player.avatar ? (
+                  <img src={player.avatar} alt={player.displayName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ) : (
+                  player.displayName.charAt(0).toUpperCase()
+                )}
               </div>
 
               {/* Name */}

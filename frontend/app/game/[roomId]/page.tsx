@@ -1048,6 +1048,7 @@ export default function GameRoomPage() {
     const playersForVoting = players.map(p => ({
         userId: p.userId,
         displayName: p.displayName,
+        avatar: p.avatar,
         role: p.role ?? 'Civilian',
         isEliminated: p.isEliminated ?? false,
         voteCount: voteCounts[p.userId] ?? 0,
@@ -1057,6 +1058,7 @@ export default function GameRoomPage() {
     const playersForDescribing = players.map(p => ({
         userId: p.userId,
         displayName: p.displayName,
+        avatar: p.avatar,
         isEliminated: p.isEliminated ?? false,
     }));
 
@@ -1269,9 +1271,9 @@ export default function GameRoomPage() {
                 {overlayElements}
                 <Notification messages={notifications} />
                 {leaveRoomButton}
-                {showWhiteHatGuess && (
+                {showWhiteHatGuess && mySecret?.role === 'WhiteHat' && (
                     <WhiteHatGuessOverlay
-                        isWhiteHat={mySecret?.role === 'WhiteHat'}
+                        isWhiteHat={true}
                         onGuess={handleWhiteHatGuess}
                         onCancel={() => setShowWhiteHatGuess(false)}
                         initialTimeLeft={whiteHatTimeLeft}
@@ -1313,6 +1315,9 @@ export default function GameRoomPage() {
                     hasExtendedVote={hasExtendedVote}
                     skipVoteCount={skipVoteCount}
                     skipRequiredCount={skipRequiredCount}
+                    isWhiteHatGuessing={showWhiteHatGuess}
+                    whiteHatId={whiteHatInfo?.userId}
+                    whiteHatTimeLeft={whiteHatTimeLeft}
                     onExtendVote={handleExtendVote}
                     onVote={handleVote}
                     onChangeVote={handleChangeVote}
