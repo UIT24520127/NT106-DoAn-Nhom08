@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useGameSound } from "@/hooks/useGameSound";
 
 interface GameEndedScreenProps {
   winner: "Civilian" | "BlackHat" | "WhiteHat" | string;
@@ -90,17 +91,26 @@ export default function GameEndedScreen({
   winner, myRole, myWord, civilianWord, players, myUserId, roomId, onPlayAgain,
   backgroundImage,
 }: GameEndedScreenProps) {
+  const { playClick, stopGameBGM, playWin, playLose } = useGameSound();
   const router = useRouter();
   const [phase, setPhase] = useState<"hidden" | "banner" | "full">("hidden");
 
+  const isWinner = myRole === winner || (winner === "Civilian" && myRole === "Civilian");
+
   useEffect(() => {
+    stopGameBGM();
+    if (isWinner) {
+      playWin();
+    } else {
+      playLose();
+    }
+    
     const t1 = setTimeout(() => setPhase("banner"), 200);
     const t2 = setTimeout(() => setPhase("full"), 900);
     return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, []);
+  }, [stopGameBGM, playWin, playLose, isWinner]);
 
   const cfg = WINNER_CFG[winner] ?? WINNER_CFG["Civilian"];
-  const isWinner = myRole === winner || (winner === "Civilian" && myRole === "Civilian");
   const myRoleInfo = ROLE_LABEL[myRole];
   const alivePlayers = players.filter(p => !p.isEliminated);
   const eliminatedPlayers = players.filter(p => p.isEliminated);
@@ -365,7 +375,7 @@ export default function GameEndedScreen({
         {/* Action buttons */}
         <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
           {onPlayAgain && (
-            <button onClick={onPlayAgain} style={{
+            <button onClick={() => { playClick(); onPlayAgain(); }} style={{
               flex: 1, padding: "16px 0", borderRadius: 16, border: "none",
               background: cfg.banner,
               color: winner === "Civilian" || winner === "WhiteHat" ? "#000" : "#fff",
@@ -381,7 +391,7 @@ export default function GameEndedScreen({
               🔄 Chơi Lại
             </button>
           )}
-          <button onClick={() => router.push("/menu")} style={{
+          <button onClick={() => { playClick(); router.push("/menu"); }} style={{
             flex: 1, padding: "16px 0", borderRadius: 16,
             background: "rgba(255,255,255,0.05)",
             border: "1.5px solid rgba(255,255,255,0.12)",

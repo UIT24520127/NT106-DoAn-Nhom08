@@ -2,11 +2,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import * as signalR from "@microsoft/signalr";
-import { Users, LogOut, Play, Crown, CheckCircle2, XCircle, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown } from "lucide-react";
+import { Users, LogOut, Play, Crown, CheckCircle2, XCircle, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, Copy } from "lucide-react";
 import { getSignalRConnection } from "@/lib/signalRConnection";
 import { ref, onValue } from "firebase/database";
 import { realtimeDb } from "@/lib/firebase";
 import FriendModal from "@/components/friends/FriendModal";
+import { useGameSound } from "@/hooks/useGameSound";
 
 interface RoomSettings {
   maxPlayers: number;
@@ -19,6 +20,7 @@ interface RoomSettings {
 }
 
 export default function RoomPage() {
+  const { playClick, playReady, playStart, playAlert, playBGM } = useGameSound();
   const { roomId } = useParams();
   const router = useRouter();
   const [hubConnection, setHubConnection] = useState<signalR.HubConnection | null>(null);
@@ -37,6 +39,11 @@ export default function RoomPage() {
   });
   const [popup, setPopup] = useState({ isOpen: false, title: "", message: "", redirectOnClose: false });
   const [hasUnread, setHasUnread] = useState(false);
+
+  // Phát nhạc chờ khi vào phòng
+  useEffect(() => {
+    playBGM();
+  }, [playBGM]);
 
   useEffect(() => {
     const storedToken = sessionStorage.getItem("token") || "";
@@ -118,9 +125,10 @@ export default function RoomPage() {
       connection.off("KickedFromRoom");
       unsubRequests();
     };
-  }, [roomId, router]);
+  }, [roomId, router, playStart]);
 
   const handleLeaveRoom = async () => {
+    playClick();
     if (hubConnection) {
       await hubConnection.invoke("LeaveRoom");
       router.push("/menu");
@@ -128,18 +136,29 @@ export default function RoomPage() {
   };
 
   const handleToggleReady = async (isReady: boolean) => {
+    playReady();
     if (hubConnection) await hubConnection.invoke("ToggleReady", isReady);
   };
 
   const handleStartGame = async () => {
+    playClick();
     if (hubConnection) await hubConnection.invoke("StartGame");
   };
 
+  const handleCopyId = () => {
+    playClick();
+    navigator.clipboard.writeText(roomState.roomId);
+    setErrorMsg("Đã copy mã phòng!");
+    setTimeout(() => setErrorMsg(""), 2000);
+  };
+
   const handleKickPlayer = async (targetUserId: string) => {
+    playClick();
     if (hubConnection) await hubConnection.invoke("KickPlayer", targetUserId);
   };
 
   const handleUpdateSettings = async (newSettings: Partial<RoomSettings>) => {
+    playClick();
     const merged = { ...localSettings, ...newSettings };
     setLocalSettings(merged);
     if (hubConnection) {
@@ -177,7 +196,6 @@ export default function RoomPage() {
 
   const maxPlayers = settings.maxPlayers || 8;
   
-  // Dynamic sizing based on players
   let gridColsClass = "grid-cols-3";
   let cardPaddingClass = "p-6";
   let avatarSizeClass = "w-24 h-24";
@@ -218,7 +236,6 @@ export default function RoomPage() {
       className="relative min-h-screen w-screen bg-cover bg-center overflow-x-hidden overflow-y-auto flex flex-col items-center pt-20 pb-28 custom-scrollbar"
       style={{ backgroundImage: `linear-gradient(180deg, rgba(7,9,17,0.9) 0%, rgba(7,9,17,0.62) 44%, rgba(4,5,10,0.96) 100%), url(${backgroundImage})` }}
     >
-      {/* Background ambient glow */}
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(230,168,34,0.08)_0%,transparent_60%)]" />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full h-[300px] pointer-events-none bg-[radial-gradient(ellipse_60%_80%_at_50%_100%,rgba(99,102,241,0.06)_0%,transparent_70%)]" />
 
@@ -228,7 +245,6 @@ export default function RoomPage() {
         </div>
       )}
 
-      {/* ====== HEADER ====== */}
       <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-[0_4px_24px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.06)] w-full max-w-5xl flex flex-col sm:flex-row items-center justify-between gap-4 mb-8 relative z-10">
         <button
           onClick={handleLeaveRoom}
@@ -237,8 +253,8 @@ export default function RoomPage() {
           <LogOut size={16} /> Thoát
         </button>
         
-        <div className="text-center">
-          <p className="text-white/40 text-[10px] tracking-[0.3em] uppercase mb-1">Mã phòng</p>
+        <div className="text-center group cursor-pointer" onClick={handleCopyId}>
+          <p className="text-white/40 text-[10px] tracking-[0.3em] uppercase mb-1">Mã phòng <Copy size={10} className="inline ml-1" /></p>
           <h1 className="text-3xl font-black text-[#e6a822] uppercase tracking-widest drop-shadow-[0_0_30px_rgba(230,168,34,0.4)] m-0 leading-none">
             {roomState.roomId}
           </h1>
@@ -252,7 +268,7 @@ export default function RoomPage() {
           </div>
 
           <button
-            onClick={() => setIsFriendOpen(true)}
+            onClick={() => { playClick(); setIsFriendOpen(true); }}
             className="flex items-center gap-2 bg-[#e6a822] text-black hover:scale-105 hover:bg-yellow-400 px-4 py-2 rounded-xl transition-all font-black text-sm relative shadow-lg shadow-yellow-500/10"
           >
             <Users size={16} /> MỜI BẠN BÈ
@@ -262,13 +278,10 @@ export default function RoomPage() {
           </button>
         </div>
       </div>
-      {/* ====== MAIN LAYOUT ====== */}
       <div className="flex flex-col lg:flex-row gap-6 w-full max-w-5xl z-10 items-start px-4 sm:px-0">
         
-        {/* PLAYER GRID */}
         <div className="flex-1 w-full">
           <div className={`grid ${gridColsClass} gap-3.5 pt-5 pb-2 max-h-[55vh] overflow-y-auto pr-2 custom-scrollbar`}>
-            {/* Render actual players */}
             {players.map((player: any) => {
               const isMe = player.userId === userId;
               const isPlayerHost = player.userId === roomState.hostId;
@@ -331,11 +344,10 @@ export default function RoomPage() {
               );
             })}
 
-            {/* Render empty slots */}
             {Array.from({ length: Math.max(0, (settings.maxPlayers || 0) - players.length) }).map((_, i) => (
               <div key={`empty-${i}`} 
                 className={`bg-white/5 border border-dashed border-white/10 hover:bg-indigo-500/5 ${cardPaddingClass} rounded-2xl flex flex-col items-center cursor-pointer transition-all ${cardGapClass}`}
-                onClick={() => setIsFriendOpen(true)}
+                onClick={() => { playClick(); setIsFriendOpen(true); }}
               >
                 <div className={`${avatarSizeClass} bg-white/5 border-2 border-dashed border-white/10 rounded-full flex items-center justify-center`}>
                   <Users size={iconSize/1.5} className="text-white/15" />
@@ -349,11 +361,10 @@ export default function RoomPage() {
           </div>
         </div>
 
-        {/* SETTINGS PANEL (Host only) */}
         {isHost && (
           <div className="w-full lg:w-[280px] shrink-0 bg-white/5 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl flex flex-col h-fit">
             <button
-              onClick={() => setShowSettings(!showSettings)}
+              onClick={() => { playClick(); setShowSettings(!showSettings); }}
               className={`w-full px-5 py-4 bg-transparent border-none flex items-center gap-3 cursor-pointer text-white transition-all hover:bg-white/5 ${showSettings ? 'border-b border-white/10' : ''}`}
             >
               <Settings size={18} className="text-[#e6a822]" />
@@ -363,7 +374,6 @@ export default function RoomPage() {
 
             {showSettings && (
               <div className="p-5 flex flex-col gap-5">
-                {/* Describe Duration */}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5 text-white/70 text-xs font-bold uppercase tracking-wide">
@@ -382,7 +392,6 @@ export default function RoomPage() {
                   </div>
                 </div>
 
-                {/* Vote Duration */}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5 text-white/70 text-xs font-bold uppercase tracking-wide">
@@ -401,7 +410,6 @@ export default function RoomPage() {
                   </div>
                 </div>
 
-                {/* Round Transition Duration */}
                 <div className="flex flex-col">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-1.5 text-white/70 text-xs font-bold uppercase tracking-wide">
@@ -420,7 +428,6 @@ export default function RoomPage() {
                   </div>
                 </div>
 
-                {/* Reveal Eliminated Role */}
                 <div 
                   onClick={() => handleUpdateSettings({ revealEliminatedRole: !localSettings.revealEliminatedRole })}
                   className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
@@ -441,7 +448,6 @@ export default function RoomPage() {
                   </div>
                 </div>
 
-                {/* Warnings */}
                 {players.length < 3 && (
                   <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-500 text-xs font-bold leading-relaxed">
                     ⚠️ Cần ít nhất 3 người chơi để bắt đầu.
@@ -458,7 +464,6 @@ export default function RoomPage() {
         )}
       </div>
 
-      {/* ====== BOTTOM ACTIONS ====== */}
       <div className="fixed bottom-0 left-0 right-0 px-6 py-5 bg-gradient-to-t from-[#0a0a14] via-[#0a0a14]/90 to-transparent flex justify-center gap-4 z-50 pointer-events-none">
         <div className="pointer-events-auto flex gap-4">
           {!isHost && (
@@ -490,7 +495,6 @@ export default function RoomPage() {
         </div>
       </div>
 
-      {/* Friend Modal */}
       {token && (
         <FriendModal
           isOpen={isFriendOpen}
@@ -501,7 +505,6 @@ export default function RoomPage() {
         />
       )}
 
-      {/* POPUP THÔNG BÁO */}
       {popup.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-[#fcf8e8] w-full max-w-sm rounded-xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] border-2 border-[#d3b88b] p-6 text-center">
@@ -509,6 +512,7 @@ export default function RoomPage() {
             <p className="text-[#3e2723] font-medium text-base mb-6">{popup.message}</p>
             <button
               onClick={() => {
+                playClick();
                 setPopup({ ...popup, isOpen: false });
                 if (popup.redirectOnClose) router.push('/menu');
               }}

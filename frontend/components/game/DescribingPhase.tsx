@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, Lock, Mic, MicOff, Send, SkipForward, Volume2, VolumeX } from "lucide-react";
+import { useGameSound } from "@/hooks/useGameSound";
 
 interface DescribingPlayer {
   userId: string;
@@ -67,9 +68,14 @@ export default function DescribingPhase({
   onSkipTurn,
   onSubmitDescription,
   backgroundImage,
-  typingSync,
+  typingSync = {},
   onTyping,
 }: DescribingPhaseProps) {
+  const gameSounds = useGameSound();
+  const useGameSoundRef = useRef(gameSounds);
+  useEffect(() => { useGameSoundRef.current = gameSounds; }, [gameSounds]);
+
+  const { playClick, playAlert } = gameSounds;
   const [timeLeft, setTimeLeft] = useState(describeDuration);
   const [wordVisible, setWordVisible] = useState(false);
   const [descriptionText, setDescriptionText] = useState("");
@@ -133,6 +139,12 @@ export default function DescribingPhase({
       }
 
       setTimeLeft(remaining);
+      
+      // Phát âm thanh tick trong 5 giây cuối
+      if (remaining <= 5 && remaining > 0) {
+        const soundHook = useGameSoundRef.current; // Cần dùng ref hoặc hook ngoài scope
+        if (soundHook && soundHook.playTick) soundHook.playTick();
+      }
 
       if (remaining === 0) {
         window.clearInterval(interval);
@@ -176,6 +188,7 @@ export default function DescribingPhase({
   const handleSkip = () => {
     if (skipCooldown.current || !isMyTurn) return;
     skipCooldown.current = true;
+    playClick();
     onSkipTurn();
     window.setTimeout(() => {
       skipCooldown.current = false;
@@ -186,9 +199,11 @@ export default function DescribingPhase({
     if (!isMyTurn) return;
     const text = descriptionText.trim();
     if (!text) {
+      playAlert();
       setSpeechError("Nhap mo ta truoc khi gui.");
       return;
     }
+    playClick();
     recognitionRef.current?.stop?.();
     setIsListening(false);
     onSubmitDescription(text, descriptionSource);
@@ -198,6 +213,7 @@ export default function DescribingPhase({
 
   const startSpeechToText = () => {
     if (!isMyTurn || typeof window === "undefined") return;
+    playClick();
 
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -357,7 +373,7 @@ export default function DescribingPhase({
         </div>
 
         <button
-          onClick={() => setWordVisible(v => !v)}
+          onClick={() => { playClick(); setWordVisible(v => !v); }}
           style={{
             justifySelf: "end",
             minWidth: 164,
