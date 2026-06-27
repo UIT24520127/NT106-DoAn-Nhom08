@@ -8,6 +8,7 @@ interface DescribingPlayer {
   userId: string;
   displayName: string;
   isEliminated: boolean;
+  avatar?: string;
   isMicActive?: boolean;
 }
 
