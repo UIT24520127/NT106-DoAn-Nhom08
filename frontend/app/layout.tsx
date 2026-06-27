@@ -31,6 +31,18 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${nunito.variable} font-sans antialiased`}
       >
+        {/* Âm thanh toàn cục - Luôn tồn tại trong DOM, không bao giờ bị unmount khi chuyển trang */}
+        <audio id="sound-click" src="/sounds/click.mp3" preload="auto" className="hidden" />
+        <audio id="sound-ready" src="/sounds/ready.mp3" preload="auto" className="hidden" />
+        <audio id="sound-start" src="/sounds/start.mp3" preload="auto" className="hidden" />
+        <audio id="sound-vote" src="/sounds/vote.mp3" preload="auto" className="hidden" />
+        <audio id="sound-alert" src="/sounds/alert.mp3" preload="auto" className="hidden" />
+        <audio id="sound-tick" src="/sounds/tick.mp3" preload="auto" className="hidden" />
+        <audio id="sound-win" src="/sounds/win.mp3" preload="auto" className="hidden" />
+        <audio id="sound-lose" src="/sounds/lose.mp3" preload="auto" className="hidden" />
+        <audio id="sound-bgm" src="/sounds/pink-panther.mp3" preload="auto" loop className="hidden" />
+        <audio id="sound-bgm-game" src="/sounds/tunetank-jazz-spy-music-349626.mp3" preload="auto" loop className="hidden" />
+        
         <SessionGuard />
         {children}
       </body>

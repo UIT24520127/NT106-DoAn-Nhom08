@@ -10,6 +10,7 @@ import { getSignalRConnection } from "@/lib/signalRConnection";
 import { ref, onValue } from "firebase/database";      
 import { realtimeDb } from "@/lib/firebase";            
 import { useRouter } from "next/navigation";
+import { useGameSound } from "@/hooks/useGameSound";
 
 // ─── Avatar Cache Helpers ────────────────────────────────────────────────────
 // Lưu avatar DiceBear dưới dạng Base64 trong localStorage để tránh gọi lại
@@ -81,6 +82,7 @@ async function fetchAndCacheDiceBearAvatar(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MainMenu() {
+  const { playClick, playBGM, stopBGM } = useGameSound();
   const [showOptions, setShowOptions] = useState(false);
   const [showTitle, setShowTitle] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
@@ -107,6 +109,15 @@ export default function MainMenu() {
   const [isSearchOverlayOpen, setIsSearchOverlayOpen] = useState(false);
   const [searchStatus, setSearchStatus] = useState("Đang kết nối Server");
   const [hubConnection, setHubConnection] = useState<signalR.HubConnection | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      playBGM();
+    }, 500);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, []);
   const router = useRouter();
 
   useEffect(() => {
@@ -214,12 +225,16 @@ export default function MainMenu() {
   }, []); // Chỉ fetch 1 lần khi mount — không re-fetch khi đóng/mở modal
 
   const handleLogout = async () => {
+    playClick();
     setShowSettingsMenu(false);
     sessionStorage.removeItem("userId");
     await logout();
   };
 
   const handleFindMatch = async () => {
+    playClick();
+    // Add small delay so sound can play
+    await new Promise(resolve => setTimeout(resolve, 50));
     setIsSearchOverlayOpen(true);
     setSearchStatus("Đang thiết lập kết nối...");
     const token = sessionStorage.getItem("token") || "";
@@ -249,6 +264,7 @@ export default function MainMenu() {
   };
 
   const handleCancelSearch = async () => {
+    playClick();
     if (hubConnection) setHubConnection(null);
     setIsSearchOverlayOpen(false);
   };
@@ -285,7 +301,7 @@ export default function MainMenu() {
 
         {/* 👇 SỬA: Từ router.push('/friends') thành mở FriendSidebar */}
         <button
-          onClick={() => setIsFriendOpen(true)}
+          onClick={() => { playClick(); setIsFriendOpen(true); }}
           className="relative bg-[#1a1c23] p-3 rounded-2xl border-2 border-transparent hover:border-[#e6a822] hover:shadow-[0_0_15px_rgba(230,168,34,0.3)] transition shadow-lg active:scale-95 duration-200"
         >
           <Users size={24} color="white" strokeWidth={2.5} />
@@ -297,7 +313,7 @@ export default function MainMenu() {
 
         <div ref={settingsRef} className="relative">
           <button
-            onClick={() => setShowSettingsMenu(prev => !prev)}
+            onClick={() => { playClick(); setShowSettingsMenu(prev => !prev); }}
             className={`bg-[#1a1c23] p-3 rounded-2xl border-2 transition shadow-lg
               ${showSettingsMenu ? 'border-gray-400' : 'border-transparent hover:border-gray-500'}`}
           >
@@ -323,13 +339,13 @@ export default function MainMenu() {
         </div>
 
         <button
-          onClick={() => setShowGuide(true)}
+          onClick={() => { playClick(); setShowGuide(true); }}
           className="bg-[#1a1c23] p-3 px-4 rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg flex items-center justify-center">
           <span className="text-white text-xl font-bold italic">?</span>
         </button>
 
         <button
-          onClick={() => setIsProfileOpen(true)}
+          onClick={() => { playClick(); setIsProfileOpen(true); }}
           className="relative bg-[#1a1c23] w-[52px] h-[52px] rounded-2xl border-2 border-transparent hover:border-gray-500 transition shadow-lg flex items-center justify-center overflow-hidden"
         >
           {playerStats.avatar ? (
@@ -346,7 +362,7 @@ export default function MainMenu() {
         <div className="mt-[500px] flex flex-col items-center">
           {!showOptions ? (
             <button
-              onClick={() => setShowOptions(true)}
+              onClick={() => { playClick(); setShowOptions(true); }}
               className="text-4xl md:text-5xl font-black text-white bg-transparent hover:scale-110 transition-transform duration-300 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)]"
               style={{ WebkitTextStroke: '1.5px black' }}
             >
@@ -358,17 +374,17 @@ export default function MainMenu() {
                 className="bg-[#e6a822] text-black w-48 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
                 CHƠI NGAY
               </button>
-              <button onClick={() => router.push('/play-with-friends')}
+              <button onClick={() => { playClick(); setTimeout(() => router.push('/play-with-friends'), 100); }}
                 className="bg-[#3b82f6] text-white w-48 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
                 CHƠI VỚI BẠN
               </button>
-              <button onClick={() => setShowGuide(true)}
+              <button onClick={() => { playClick(); setShowGuide(true); }}
                 className="bg-[#10b981] text-white w-48 py-2.5 rounded-full text-base font-bold border-[3px] border-black hover:scale-105 transition-transform shadow-[0_5px_0_black] active:translate-y-1 active:shadow-none">
                 CÁCH CHƠI
               </button>
-              <button onClick={() => setShowOptions(false)}
+              <button onClick={() => { playClick(); setShowOptions(false); }}
                 className="mt-2 text-white/80 text-sm font-bold underline hover:text-white drop-shadow-md">
-                Quay lại
+                QUAY LẠI
               </button>
             </div>
           )}
@@ -420,7 +436,7 @@ export default function MainMenu() {
       {showGuide && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in px-4">
           <div className="relative bg-[#1a1c23] border-2 border-[#e6a822] rounded-3xl p-6 md:p-8 max-w-2xl w-full shadow-[0_0_30px_rgba(230,168,34,0.3)]">
-            <button onClick={() => setShowGuide(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white transition">
+            <button onClick={() => { playClick(); setShowGuide(false); }} className="absolute top-4 right-4 text-gray-400 hover:text-white transition">
               <X size={24} />
             </button>
             <h2 className="text-2xl md:text-3xl font-black text-[#e6a822] mb-6 text-center">

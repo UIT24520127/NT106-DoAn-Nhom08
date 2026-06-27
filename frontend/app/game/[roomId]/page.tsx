@@ -20,6 +20,7 @@ import WhiteHatGuessOverlay from '@/components/game/WhiteHatGuessOverlay';
 import { ref, set } from 'firebase/database';
 import { realtimeDb } from '@/lib/firebase';
 import { API_URL, getToken } from '@/lib/auth';
+import { useGameSound } from "@/hooks/useGameSound";
 
 type PeerInstance = any;
 
@@ -135,6 +136,24 @@ export default function GameRoomPage() {
     const params = useParams();
     const router = useRouter();
     const roomId = params.roomId as string;
+    
+    const gameSounds = useGameSound();
+    const { playClick, playStart, playReady, playAlert, stopBGM, playGameBGM, stopGameBGM, playLose, playWin } = gameSounds;
+    const gameSoundsRef = useRef(gameSounds);
+
+    useEffect(() => {
+        gameSoundsRef.current = gameSounds;
+    }, [gameSounds]);
+
+    // Dừng nhạc nền Pink Panther khi vào phòng chơi game
+    useEffect(() => {
+        stopBGM();
+        playGameBGM(); // Bắt đầu nhạc game
+        return () => {
+            stopGameBGM(); // Dừng nhạc game khi component bị unmount
+        };
+    }, [stopBGM, playGameBGM, stopGameBGM]);
+
     const [connection, setConnection] = useState<HubConnection | null>(null);
 
     // Tự động cập nhật Trạng thái Presence là In-Match khi bắt đầu vào Game
@@ -855,6 +874,11 @@ export default function GameRoomPage() {
 
             // Update room state players eliminated status
             if (data.eliminatedPlayer) {
+                const storedUserId = sessionStorage.getItem("userId");
+                if (data.eliminatedPlayer.userId === storedUserId) {
+                    if (gameSoundsRef.current.playLose) gameSoundsRef.current.playLose();
+                }
+
                 setRoomState(prev => {
                     if (!prev) return prev;
                     return {
@@ -873,6 +897,11 @@ export default function GameRoomPage() {
 
         // 8. Player eliminated (có thể server gửi riêng)
         newConn.on("PlayerEliminated", (data: { userId: string; displayName: string }) => {
+            const storedUserId = sessionStorage.getItem("userId");
+            if (data.userId === storedUserId) {
+                if (gameSoundsRef.current.playLose) gameSoundsRef.current.playLose();
+            }
+
             setRoomState(prev => {
                 if (!prev) return prev;
                 return {
@@ -1519,7 +1548,7 @@ export default function GameRoomPage() {
                 {isHost && (
                     <div className="w-full lg:w-[280px] shrink-0 bg-white/5 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl flex flex-col h-fit">
                         <button
-                            onClick={() => setShowSettings(!showSettings)}
+                            onClick={() => { playClick(); setShowSettings(!showSettings); }}
                             className={`w-full px-5 py-4 bg-transparent border-none flex items-center gap-3 cursor-pointer text-white transition-all hover:bg-white/5 ${showSettings ? 'border-b border-white/10' : ''}`}
                         >
                             <Settings size={18} className="text-[#e6a822]" />
@@ -1602,6 +1631,12 @@ export default function GameRoomPage() {
                                         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${localSettings.revealEliminatedRole ? 'left-[18px]' : 'left-0.5'}`} />
                                     </div>
                                 </div>
+                                <button
+                                    onClick={() => { playClick(); setShowLeaveConfirm(true); }}
+                                    className="flex items-center justify-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/50 px-4 py-3 rounded-xl transition-all font-bold text-sm tracking-wide"
+                                >
+                                    RỜI PHÒNG
+                                </button>
                             </div>
                         )}
                     </div>
@@ -1614,7 +1649,7 @@ export default function GameRoomPage() {
                     <div className="pointer-events-auto flex gap-4">
                         {!isHost && (
                             <button
-                                onClick={() => connection?.invoke("ToggleReady", !isMyPlayerReady)}
+                                onClick={() => { playReady(); connection?.invoke("ToggleReady", !isMyPlayerReady); }}
                                 className={`px-10 py-3.5 rounded-2xl font-black text-sm md:text-base cursor-pointer tracking-wider border-none transition-all shadow-[0_8px_24px_rgba(0,0,0,0.4)] ${
                                     isMyPlayerReady
                                         ? 'bg-white/10 text-white/50 border-t border-white/10'
@@ -1628,6 +1663,7 @@ export default function GameRoomPage() {
                         {isHost && (
                             <button
                                 onClick={async () => {
+                                    playStart();
                                     if (!connection) return;
                                     try { await connection.invoke("StartGame"); }
                                     catch (err) { console.error("StartGame error:", err); }
@@ -1651,7 +1687,7 @@ export default function GameRoomPage() {
                 <div className="fixed bottom-6 right-6 flex items-center gap-3 z-50">
                     <div className="flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
                         <button
-                            onClick={toggleSpeaker}
+                            onClick={() => { playClick(); toggleSpeaker(); }}
                             className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center text-lg cursor-pointer transition-all ${
                                 isSpeakerOn ? "bg-indigo-500/20 text-indigo-400" : "bg-white/5 text-white/30 hover:bg-white/10"
                             }`}
@@ -1659,7 +1695,7 @@ export default function GameRoomPage() {
                             {isSpeakerOn ? "🔊" : "🔇"}
                         </button>
                         <button
-                            onClick={toggleMic}
+                            onClick={() => { playClick(); toggleMic(); }}
                             className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center text-lg cursor-pointer transition-all ${
                                 isMicOn ? "bg-red-500/20 text-red-500" : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
                             }`}

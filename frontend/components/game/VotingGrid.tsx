@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import CountdownTimer from "./CountdownTimer";
+import { useGameSound } from "@/hooks/useGameSound";
 
 interface VotePlayer {
   userId: string;
@@ -52,6 +53,7 @@ export default function VotingGrid({
   backgroundImage,
   isWhiteHatGuessing = false, whiteHatId, whiteHatTimeLeft = 0,
 }: VotingGridProps) {
+  const { playClick, playVote } = useGameSound();
   const [historyPlayer, setHistoryPlayer] = useState<VotePlayer | null>(null);
   const [whiteHatEndTime, setWhiteHatEndTime] = useState<number>(0);
 
@@ -177,7 +179,7 @@ export default function VotingGrid({
                   <span>Đã bầu cho <strong style={{ color: "#fff", marginLeft: 4 }}>{players.find(p => p.userId === myVoteTarget)?.displayName}</strong></span>
                 }
               </div>
-              <button onClick={() => setChangingVote(true)} style={{
+              <button onClick={() => { playClick(); setChangingVote(true); }} style={{
                 background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
                 borderRadius: 99, padding: "7px 16px", color: "rgba(255,255,255,0.45)",
                 fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s",
@@ -185,7 +187,7 @@ export default function VotingGrid({
                 onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = "#fff"}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.45)"}
               >🔄 Đổi vote</button>
-              <button onClick={() => onRevokeVote && onRevokeVote()} style={{
+              <button onClick={() => { playClick(); if(onRevokeVote) onRevokeVote(); }} style={{
                 background: "rgba(255,59,59,0.05)", border: "1px solid rgba(255,59,59,0.2)",
                 borderRadius: 99, padding: "7px 16px", color: "#FF3B3B",
                 fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s",
@@ -235,6 +237,7 @@ export default function VotingGrid({
             <div key={player.userId}
               onClick={() => {
                 if (!canVote) return;
+                playVote();
                 if (changingVote) { onChangeVote(player.userId); setChangingVote(false); }
                 else onVote(player.userId);
               }}
@@ -423,10 +426,12 @@ export default function VotingGrid({
                 onClick={e => {
                   e.stopPropagation();
                   if (isVotedByMe && !changingVote) {
+                    playClick();
                     if (onRevokeVote) onRevokeVote();
                     return;
                   }
                   if (!canVote) return;
+                  playVote();
                   if (changingVote) { onChangeVote(player.userId); setChangingVote(false); }
                   else onVote(player.userId);
                 }}
@@ -501,7 +506,7 @@ export default function VotingGrid({
       }}>
         {/* Kéo dài thời gian */}
         {!isEliminated && onExtendVote && !isTimeExtended && (
-          <button onClick={onExtendVote} style={{
+          <button onClick={() => { playClick(); onExtendVote(); }} style={{
             padding: "10px 20px", borderRadius: 12,
             background: extendVoteCount > 0 ? "rgba(16,185,129,0.2)" : "rgba(16,185,129,0.12)",
             border: "1px solid rgba(16,185,129,0.35)",
@@ -543,6 +548,7 @@ export default function VotingGrid({
               </div>
             )}
             <button onClick={() => {
+              playClick();
               if (myVoteTarget === "NO_VOTE" && onRevokeVote) {
                 onRevokeVote();
               } else {
@@ -567,7 +573,7 @@ export default function VotingGrid({
 
         {/* Bỏ qua vòng vote */}
         {!isEliminated && !changingVote && (
-          <button onClick={onSkip} style={{
+          <button onClick={() => { playClick(); onSkip(); }} style={{
             padding: "10px 20px", borderRadius: 12,
             background: skipVoteCount > 0 ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
             border: "1px solid rgba(255,255,255,0.12)",
@@ -631,7 +637,7 @@ export default function VotingGrid({
             ) : (
               <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, textAlign: "center" }}>Chưa có lịch sử.</p>
             )}
-            <button onClick={() => setHistoryPlayer(null)} style={{
+            <button onClick={() => { playClick(); setHistoryPlayer(null); }} style={{
               marginTop: 20, width: "100%", padding: "10px",
               background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 12, color: "rgba(255,255,255,0.5)", cursor: "pointer",
