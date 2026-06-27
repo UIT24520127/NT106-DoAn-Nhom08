@@ -705,16 +705,22 @@ namespace ServerUndercover.Services
             if (voterId == targetId)
                 return new VoteCastResult(false, 0, "Không thể vote cho chính mình.");
 
-            if (!room.Players.TryGetValue(targetId, out var target) || target.IsEliminated)
+            if (targetId != "NO_VOTE" && (!room.Players.TryGetValue(targetId, out var target) || target.IsEliminated))
                 return new VoteCastResult(false, 0, "Mục tiêu không hợp lệ.");
 
             if (room.Votes.ContainsKey(voterId))
                 return new VoteCastResult(false, 0, "Bạn đã vote rồi.");
 
             room.Votes[voterId] = targetId;
-            target.VoteCount++;
+            
+            int newVoteCount = 0;
+            if (targetId != "NO_VOTE" && room.Players.TryGetValue(targetId, out var validTarget))
+            {
+                validTarget.VoteCount++;
+                newVoteCount = validTarget.VoteCount;
+            }
 
-            return new VoteCastResult(true, target.VoteCount, string.Empty);
+            return new VoteCastResult(true, newVoteCount, string.Empty);
         }
 
         public VoteCastResult ChangeVote(string roomId, string voterId, string targetId)
@@ -728,24 +734,55 @@ namespace ServerUndercover.Services
             if (voterId == targetId)
                 return new VoteCastResult(false, 0, "Khong the vote cho chinh minh.");
 
-            if (!room.Players.TryGetValue(targetId, out var newTarget) || newTarget.IsEliminated)
+            if (targetId != "NO_VOTE" && (!room.Players.TryGetValue(targetId, out var newTarget) || newTarget.IsEliminated))
                 return new VoteCastResult(false, 0, "Muc tieu khong hop le.");
 
             if (!room.Votes.TryGetValue(voterId, out var oldTargetId))
                 return new VoteCastResult(false, 0, "Ban chua vote.");
 
             if (oldTargetId == targetId)
-                return new VoteCastResult(true, newTarget.VoteCount, string.Empty);
+            {
+                int currentVoteCount = 0;
+                if (targetId != "NO_VOTE" && room.Players.TryGetValue(targetId, out var t)) currentVoteCount = t.VoteCount;
+                return new VoteCastResult(true, currentVoteCount, string.Empty);
+            }
 
-            if (room.Players.TryGetValue(oldTargetId, out var oldTarget) && oldTarget.VoteCount > 0)
+            if (oldTargetId != "NO_VOTE" && room.Players.TryGetValue(oldTargetId, out var oldTarget) && oldTarget.VoteCount > 0)
             {
                 oldTarget.VoteCount--;
             }
 
             room.Votes[voterId] = targetId;
-            newTarget.VoteCount++;
+            
+            int newVoteCount = 0;
+            if (targetId != "NO_VOTE" && room.Players.TryGetValue(targetId, out var validNewTarget))
+            {
+                validNewTarget.VoteCount++;
+                newVoteCount = validNewTarget.VoteCount;
+            }
 
-            return new VoteCastResult(true, newTarget.VoteCount, string.Empty);
+            return new VoteCastResult(true, newVoteCount, string.Empty);
+        }
+
+        public VoteCastResult RevokeVote(string roomId, string voterId)
+        {
+            if (!_rooms.TryGetValue(roomId, out Room? room))
+                return new VoteCastResult(false, 0, "Phòng không tồn tại.");
+
+            if (room.Phase != GamePhase.Voting)
+                return new VoteCastResult(false, 0, "Hiện không phải phase vote.");
+
+            if (!room.Votes.TryGetValue(voterId, out var oldTargetId))
+                return new VoteCastResult(false, 0, "Bạn chưa vote.");
+
+            if (oldTargetId != "NO_VOTE" && room.Players.TryGetValue(oldTargetId, out var oldTarget) && oldTarget.VoteCount > 0)
+            {
+                oldTarget.VoteCount--;
+            }
+
+            room.Votes.TryRemove(voterId, out _);
+
+            return new VoteCastResult(true, 0, string.Empty);
         }
 
         public record VoteResolution(bool IsDraw, string? EliminatedUserId, string? EliminatedDisplayName);
@@ -761,19 +798,25 @@ namespace ServerUndercover.Services
 
             room.RoundNumber++; // Tăng vòng chơi bất kể có ai bị loại hay không
 
-            // Đếm phiếu
+            // Đếm phiếu (loại bỏ phiếu "NO_VOTE")
             var voteCounts = room.Votes.Values
+                .Where(v => v != "NO_VOTE")
                 .GroupBy(v => v)
                 .ToDictionary(g => g.Key, g => g.Count());
 
             if (!voteCounts.Any())
-                return new VoteResolution(true, null, null); // Không ai vote → hòa
+                return new VoteResolution(true, null, null); // Không ai vote hợp lệ → hòa
 
             int maxVotes = voteCounts.Values.Max();
             var topPlayers = voteCounts.Where(kv => kv.Value == maxVotes).ToList();
 
             // Hòa: nhiều người cùng phiếu cao nhất
             if (topPlayers.Count > 1)
+                return new VoteResolution(true, null, null);
+
+            // Yêu cầu số phiếu lớn hơn phân nửa số người chơi còn sống
+            int aliveCount = room.Players.Values.Count(p => !p.IsEliminated);
+            if (maxVotes <= aliveCount / 2)
                 return new VoteResolution(true, null, null);
 
             string eliminatedId = topPlayers[0].Key;

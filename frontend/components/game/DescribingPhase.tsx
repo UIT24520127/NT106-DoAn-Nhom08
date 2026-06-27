@@ -118,14 +118,14 @@ export default function DescribingPhase({
   useEffect(() => {
     let initialRemaining = describeDuration;
     if (turnEndTime) {
-      initialRemaining = Math.max(0, Math.floor((turnEndTime - Date.now()) / 1000));
+      initialRemaining = Math.max(0, Math.ceil((turnEndTime - Date.now()) / 1000));
     }
     setTimeLeft(initialRemaining);
 
     const interval = window.setInterval(() => {
       let remaining = describeDuration;
       if (turnEndTime) {
-        remaining = Math.max(0, Math.floor((turnEndTime - Date.now()) / 1000));
+        remaining = Math.max(0, Math.ceil((turnEndTime - Date.now()) / 1000));
       } else {
         // Fallback if turnEndTime is somehow not provided (e.g. waiting for TurnStarted)
         // Just keep showing the describeDuration, don't tick down yet

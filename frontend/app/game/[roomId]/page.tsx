@@ -171,11 +171,14 @@ export default function GameRoomPage() {
     // ── Voting ──────────────────────────────
     const [voteEndTime, setVoteEndTime] = useState(Date.now() + 60000);
     const [voteCounts, setVoteCounts] = useState<VoteCounts>({});
+    const [realtimeVotes, setRealtimeVotes] = useState<Record<string, string>>({});
+    const [totalVotesCast, setTotalVotesCast] = useState<number>(0);
     const [hasVoted, setHasVoted] = useState(false);
     const [myVoteTarget, setMyVoteTarget] = useState<string | null>(null);
     const [extendVoteCount, setExtendVoteCount] = useState(0);
     const [extendRequiredCount, setExtendRequiredCount] = useState(0);
     const [hasExtendedVote, setHasExtendedVote] = useState(false);
+    const [hasSkippedVote, setHasSkippedVote] = useState(false);
     const [skipVoteCount, setSkipVoteCount] = useState(0);
     const [skipRequiredCount, setSkipRequiredCount] = useState(0);
 
@@ -322,6 +325,16 @@ export default function GameRoomPage() {
             setMyVoteTarget(targetUserId);
             addNotif(`Đã đổi vote sang ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
         } catch (e) { console.error("ChangeVote error:", e); }
+    };
+
+    const handleRevokeVote = async () => {
+        if (!connection) return;
+        try {
+            await connection.invoke("RevokeVote");
+            setMyVoteTarget(null);
+            setHasVoted(false);
+            addNotif("Đã thu hồi vote", 'info');
+        } catch (e) { console.error("RevokeVote error:", e); }
     };
 
     const handleSkipVoting = async () => {
@@ -576,7 +589,7 @@ export default function GameRoomPage() {
         });
 
         newConn.on("LoadingPhaseStarted", async (data: { timeoutSeconds?: number; totalCount?: number; startedAt?: number; readyCount?: number; readyPlayerIds?: string[] }) => {
-            const timeoutSeconds = data.timeoutSeconds ?? 10;
+            const timeoutSeconds = data.timeoutSeconds ?? 60;
             const startedAt = data.startedAt ?? Date.now();
             const elapsed = Math.floor((Date.now() - startedAt) / 1000);
             const hash = roomId.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
@@ -623,7 +636,7 @@ export default function GameRoomPage() {
                 readyCount: data.readyCount,
                 totalCount: data.totalCount,
                 readyPlayerIds: data.readyPlayerIds ?? prev?.readyPlayerIds ?? [],
-                timeoutSeconds: prev?.timeoutSeconds ?? 10,
+                timeoutSeconds: prev?.timeoutSeconds ?? 60,
                 startedAt: prev?.startedAt ?? Date.now(),
                 secondsLeft: prev?.secondsLeft ?? 10,
                 isMeReady: Boolean(data.readyPlayerIds?.includes(storedUserId)) || prev?.isMeReady || false,
@@ -639,7 +652,7 @@ export default function GameRoomPage() {
                 readyCount: prev?.readyCount ?? 0,
                 totalCount: prev?.totalCount ?? Object.keys(roomStateRef.current?.players ?? {}).length,
                 readyPlayerIds: prev?.readyPlayerIds ?? [],
-                timeoutSeconds: prev?.timeoutSeconds ?? 10,
+                timeoutSeconds: prev?.timeoutSeconds ?? 60,
                 startedAt: prev?.startedAt ?? Date.now(),
                 secondsLeft: prev?.secondsLeft ?? 0,
                 isMeReady: prev?.isMeReady ?? false,
@@ -765,27 +778,39 @@ export default function GameRoomPage() {
             setHasVoted(false);
             setMyVoteTarget(null);
             setVoteCounts({});
+            setRealtimeVotes({});
             setExtendVoteCount(0);
             setSkipVoteCount(0);
             setHasExtendedVote(false);
+            setHasSkippedVote(false);
             setLoadingSync(null);
             setGamePhase('voting');
             addNotif('Vòng bình chọn bắt đầu!', 'result');
         });
 
         // 6. Vote count update realtime
-        newConn.on("VoteUpdated", (data: { voteCounts: VoteCounts }) => {
+        newConn.on("VoteUpdated", (data: { voteCounts: VoteCounts, totalVotesCast?: number, votes?: Record<string, string> }) => {
             setVoteCounts(data.voteCounts);
+            if (data.votes) setRealtimeVotes(data.votes);
+            if (data.totalVotesCast !== undefined) {
+                setTotalVotesCast(data.totalVotesCast);
+            }
         });
 
-        newConn.on("ExtendVoteCountUpdated", (data: { extendCount: number; requiredCount: number }) => {
+        newConn.on("ExtendVoteCountUpdated", (data: { extendCount: number; requiredCount: number; extendPlayerIds?: string[] }) => {
             setExtendVoteCount(data.extendCount);
             setExtendRequiredCount(data.requiredCount);
+            if (data.extendPlayerIds) {
+                setHasExtendedVote(data.extendPlayerIds.includes(storedUserId));
+            }
         });
 
-        newConn.on("SkipVoteCountUpdated", (data: { skipCount: number; requiredCount: number }) => {
+        newConn.on("SkipVoteCountUpdated", (data: { skipCount: number; requiredCount: number; skipPlayerIds?: string[] }) => {
             setSkipVoteCount(data.skipCount);
             setSkipRequiredCount(data.requiredCount);
+            if (data.skipPlayerIds) {
+                setHasSkippedVote(data.skipPlayerIds.includes(storedUserId));
+            }
         });
 
         newConn.on("VoteTimeExtended", (data: { newEndTime: number }) => {
@@ -810,9 +835,12 @@ export default function GameRoomPage() {
                 setHasVoted(false);
                 setMyVoteTarget(null);
                 setVoteCounts({});
+                setRealtimeVotes({});
+                setTotalVotesCast(0);
                 setExtendVoteCount(0);
                 setSkipVoteCount(0);
                 setHasExtendedVote(false);
+                setHasSkippedVote(false);
                 setLoadingSync(null);
                 setGamePhase('voting');
             }
@@ -938,7 +966,7 @@ export default function GameRoomPage() {
                     if (pendingLoading) {
                         sessionStorage.removeItem(`loading:${roomId}`);
                         const parsed = JSON.parse(pendingLoading) as { timeoutSeconds?: number; totalCount?: number; startedAt?: number };
-                        const timeoutSeconds = parsed.timeoutSeconds ?? 10;
+                        const timeoutSeconds = parsed.timeoutSeconds ?? 60;
                         const startedAt = parsed.startedAt ?? Date.now();
                         const elapsed = Math.floor((Date.now() - startedAt) / 1000);
                         const hash = roomId.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
@@ -1305,6 +1333,8 @@ export default function GameRoomPage() {
                     myUserId={currentUserId}
                     voteEndTime={voteEndTime}
                     realtimeVoteCounts={voteCounts}
+                    totalVotesCast={totalVotesCast}
+                    realtimeVotes={realtimeVotes}
                     hasVoted={hasVoted}
                     myVoteTarget={myVoteTarget}
                     canSkip={canSkip()}
@@ -1315,12 +1345,14 @@ export default function GameRoomPage() {
                     hasExtendedVote={hasExtendedVote}
                     skipVoteCount={skipVoteCount}
                     skipRequiredCount={skipRequiredCount}
+                    hasSkippedVote={hasSkippedVote}
                     isWhiteHatGuessing={showWhiteHatGuess}
                     whiteHatId={whiteHatInfo?.userId}
                     whiteHatTimeLeft={whiteHatTimeLeft}
                     onExtendVote={handleExtendVote}
                     onVote={handleVote}
                     onChangeVote={handleChangeVote}
+                    onRevokeVote={handleRevokeVote}
                     onSkip={handleSkipVoting}
                     onTimerExpired={() => {
                         addNotif('Thời gian vote đã hết!', 'warning');

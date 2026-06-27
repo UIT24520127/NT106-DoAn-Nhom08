@@ -217,7 +217,7 @@ namespace ServerUndercover.Hubs
         private async Task CloseLoadingAfterTimeout(string roomId, DateTime loadingStartedAt)
         {
             var room = _roomManager.GetRoom(roomId);
-            var delaySeconds = room?.LoadingTimeoutSeconds ?? 10;
+            var delaySeconds = room?.LoadingTimeoutSeconds ?? 60;
             await Task.Delay(TimeSpan.FromSeconds(delaySeconds));
 
             room = _roomManager.GetRoom(roomId);
@@ -411,7 +411,9 @@ namespace ServerUndercover.Hubs
         {
             return Clients.Group(roomId).SendAsync("VoteUpdated", new
             {
-                voteCounts = room.Players.Values.ToDictionary(p => p.UserId, p => p.VoteCount)
+                voteCounts = room.Players.Values.ToDictionary(p => p.UserId, p => p.VoteCount),
+                totalVotesCast = room.Votes.Count,
+                votes = room.Votes // Công khai phiếu bầu
             });
         }
 
@@ -460,14 +462,8 @@ namespace ServerUndercover.Hubs
             string userId = GetUserId();
             if (!string.IsNullOrEmpty(userId))
             {
-                // Register session and check if there's an old connection
-                string? oldConnectionId = _roomManager.RegisterConnection(userId, Context.ConnectionId);
-                
-                if (!string.IsNullOrEmpty(oldConnectionId) && oldConnectionId != Context.ConnectionId)
-                {
-                    // Kick old tab
-                    await Clients.Client(oldConnectionId).SendAsync("ForceLogout", "Tài khoản của bạn đã được đăng nhập ở nơi khác.");
-                }
+                // Register session
+                _roomManager.RegisterConnection(userId, Context.ConnectionId);
 
                 // If user is in a room, re-join the SignalR group
                 string? roomId = _roomManager.GetUserRoomId(userId);
@@ -692,7 +688,7 @@ namespace ServerUndercover.Hubs
                 room.Phase = GamePhase.Loading;
                 room.RoundNumber = 1;
                 room.LoadingStartedAt = DateTime.UtcNow;
-                room.LoadingTimeoutSeconds = 10;
+                room.LoadingTimeoutSeconds = 60;
                 room.LoadingClosed = false;
                 room.LoadingReadyPlayerIds.Clear();
                 await _roomManager.CreateGameSessionAsync(room);
@@ -901,11 +897,6 @@ namespace ServerUndercover.Hubs
             if (roomId == null) return;
 
             var room = _roomManager.GetRoom(roomId);
-            if (!IsRoomHost(room, userId))
-            {
-                await Clients.Caller.SendAsync("RoomError", "Bạn không phải chủ phòng.");
-                return;
-            }
 
             // Reset room to Waiting state
             room.State = RoomState.Waiting;
@@ -1091,6 +1082,29 @@ namespace ServerUndercover.Hubs
             await BroadcastVoteCounts(roomId, room);
         }
 
+        public async Task RevokeVote()
+        {
+            string userId = GetUserId();
+            string? roomId = _roomManager.GetUserRoomId(userId);
+            if (roomId == null) return;
+
+            var room = _roomManager.GetRoom(roomId);
+            if (room == null)
+            {
+                await Clients.Caller.SendAsync("RoomError", "Phòng không tồn tại.");
+                return;
+            }
+
+            var result = _roomManager.RevokeVote(roomId, userId);
+            if (!result.Success)
+            {
+                await Clients.Caller.SendAsync("RoomError", result.ErrorMessage);
+                return;
+            }
+
+            await BroadcastVoteCounts(roomId, room);
+        }
+
         public async Task UseWhiteHatGuess(string guessedWord)
         {
             await GuessWord(guessedWord);
@@ -1152,13 +1166,22 @@ namespace ServerUndercover.Hubs
 
             if (room.Players.TryGetValue(userId, out var player) && !player.IsEliminated)
             {
-                room.SkipVoteRequests.TryAdd(userId, true);
+                if (room.SkipVoteRequests.ContainsKey(userId))
+                {
+                    room.SkipVoteRequests.TryRemove(userId, out _);
+                }
+                else
+                {
+                    room.SkipVoteRequests.TryAdd(userId, true);
+                }
+
                 int aliveCount = room.Players.Values.Count(p => !p.IsEliminated);
                 
                 await Clients.Group(roomId).SendAsync("SkipVoteCountUpdated", new
                 {
                     skipCount = room.SkipVoteRequests.Count,
-                    requiredCount = (aliveCount / 2) + 1
+                    requiredCount = (aliveCount / 2) + 1,
+                    skipPlayerIds = room.SkipVoteRequests.Keys.ToList()
                 });
 
                 if (room.SkipVoteRequests.Count > aliveCount / 2)
@@ -1182,13 +1205,22 @@ namespace ServerUndercover.Hubs
 
             if (room.Players.TryGetValue(userId, out var player) && !player.IsEliminated)
             {
-                room.ExtendVoteRequests.TryAdd(userId, true);
+                if (room.ExtendVoteRequests.ContainsKey(userId))
+                {
+                    room.ExtendVoteRequests.TryRemove(userId, out _);
+                }
+                else
+                {
+                    room.ExtendVoteRequests.TryAdd(userId, true);
+                }
+
                 int aliveCount = room.Players.Values.Count(p => !p.IsEliminated);
                 
                 await Clients.Group(roomId).SendAsync("ExtendVoteCountUpdated", new
                 {
                     extendCount = room.ExtendVoteRequests.Count,
-                    requiredCount = (aliveCount / 2) + 1
+                    requiredCount = (aliveCount / 2) + 1,
+                    extendPlayerIds = room.ExtendVoteRequests.Keys.ToList()
                 });
 
                 if (room.ExtendVoteRequests.Count > aliveCount / 2 && !room.HasExtendedVote)
@@ -1281,7 +1313,6 @@ namespace ServerUndercover.Hubs
                     });
                     return;
                 }
-
                 // Nếu là người bình thường chết (không kích hoạt đoán từ) VÀ chưa kết thúc game
                 await BroadcastRoundTransition(roomId, room, resolution);
 
