@@ -278,17 +278,18 @@ export default function GameRoomPage() {
         console.log(`[VOICE] createPeer -> ${targetId} | initiator=${initiator} | có mic stream=${hasStream}`);
         const peer = new Peer({
             initiator,
-            trickle: false,
+            trickle: true, // gửi offer/candidate ngay -> nối nhanh hơn nhiều (không chờ gom hết ICE/TURN)
             stream: userStream.current || undefined,
             config: {
                 iceServers: [
-                    // STUN: giúp tìm IP công khai (đủ cho NAT thường)
+                    // STUN: tìm IP công khai (đủ cho NAT thường)
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    // TURN: relay media khi P2P trực tiếp bị NAT/firewall chặn (BẮT BUỘC để chạy qua internet)
-                    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-                    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-                    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+                    { urls: 'stun:stun.relay.metered.ca:80' },
+                    // TURN Metered: relay media khi P2P trực tiếp bị NAT/firewall chặn
+                    { urls: 'turn:global.relay.metered.ca:80', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
+                    { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
+                    { urls: 'turn:global.relay.metered.ca:443', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
+                    { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
                 ],
             },
         });
