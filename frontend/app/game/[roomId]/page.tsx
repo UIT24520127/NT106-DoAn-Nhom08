@@ -1442,7 +1442,7 @@ export default function GameRoomPage() {
     // Voting Phase
     if (gamePhase === 'voting') {
         return (
-            <>
+            <div style={pageRootStyle}>
                 {overlayElements}
                 <Notification messages={notifications} />
                 {leaveRoomButton}
@@ -1509,7 +1509,7 @@ export default function GameRoomPage() {
                     }}
                     backgroundImage={backgroundImage}
                 />
-            </>
+            </div>
         );
     }
 
