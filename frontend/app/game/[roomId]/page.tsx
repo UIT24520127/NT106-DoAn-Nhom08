@@ -234,6 +234,30 @@ export default function GameRoomPage() {
     const [currentUser, setCurrentUser] = useState<string>("");
     const [currentUserId, setCurrentUserId] = useState<string>("");
     const [isChatOpen, setIsChatOpen] = useState(false);
+    const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+
+    useEffect(() => {
+        if (!connection) return;
+
+        const handleReceive = () => {
+            setHasUnreadMessages(prev => {
+                // We use functional state update but we need to check if chat is open.
+                // Since isChatOpen might be stale in closure, we can just use a ref or depend on isChatOpen.
+                // It's safer to depend on isChatOpen, but that re-binds the event listener.
+                // Actually, just set it to true, and we clear it when chat opens anyway.
+                return true;
+            });
+        };
+
+        connection.on("ReceiveMessage", handleReceive);
+        return () => { connection.off("ReceiveMessage", handleReceive); };
+    }, [connection]);
+
+    useEffect(() => {
+        if (isChatOpen) {
+            setHasUnreadMessages(false);
+        }
+    }, [isChatOpen]);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
 
     // Lắng nghe thay đổi âm lượng voice output
@@ -592,11 +616,14 @@ export default function GameRoomPage() {
                     <button
                         onClick={() => setIsChatOpen(!isChatOpen)}
                         title="Chat"
-                        className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
+                        className={`relative w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
                             isChatOpen ? "bg-[#e6a822] text-black" : "bg-white/10 text-white/70 hover:bg-white/20"
                         }`}
                     >
                         <MessageSquare size={20} />
+                        {!isChatOpen && hasUnreadMessages && (
+                            <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 rounded-full border-2 border-[#1a1a2e]" />
+                        )}
                     </button>
                     <button
                         onClick={() => setShowSettingsModal(true)}

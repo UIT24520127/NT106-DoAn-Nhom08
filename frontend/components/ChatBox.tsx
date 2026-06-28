@@ -21,13 +21,15 @@ const ChatBox = ({ connection, roomId, currentUser, playerCount }: ChatBoxProps)
 
   useEffect(() => {
     if (connection) {
-      // Lắng nghe tin nhắn từ Server
-      connection.on("ReceiveMessage", (data: Message) => {
+      const handleReceive = (data: Message) => {
         setMessages((prev) => [...prev, data]);
-      });
+      };
+      // Lắng nghe tin nhắn từ Server
+      connection.on("ReceiveMessage", handleReceive);
+      
+      // Cleanup khi component bị hủy
+      return () => { connection.off("ReceiveMessage", handleReceive); };
     }
-    // Cleanup khi component bị hủy
-    return () => { connection?.off("ReceiveMessage"); };
   }, [connection]);
 
   // Tự động cuộn xuống khi có tin nhắn mới
