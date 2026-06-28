@@ -37,7 +37,6 @@ export default function RootLayout({
         <audio id="sound-start" src="/sounds/start.mp3" preload="auto" className="hidden" />
         <audio id="sound-vote" src="/sounds/vote.mp3" preload="auto" className="hidden" />
         <audio id="sound-alert" src="/sounds/alert.mp3" preload="auto" className="hidden" />
-        <audio id="sound-tick" src="/sounds/tick.mp3" preload="none" className="hidden" />
         <audio id="sound-countdown5s" src="/sounds/countdown5s.mp3" preload="none" className="hidden" />
         <audio id="sound-countdown10s" src="/sounds/countdown10s.mp3" preload="none" className="hidden" />
         <audio id="sound-win" src="/sounds/win.mp3" preload="none" className="hidden" />

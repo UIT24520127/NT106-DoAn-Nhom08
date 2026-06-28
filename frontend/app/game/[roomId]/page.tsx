@@ -21,6 +21,8 @@ import { ref, set } from 'firebase/database';
 import { realtimeDb } from '@/lib/firebase';
 import { API_URL, getToken } from '@/lib/auth';
 import { useGameSound } from "@/hooks/useGameSound";
+import SettingsModal from "@/components/SettingsModal";
+import { getVoiceOutputVolume, subscribeSound } from "@/lib/soundSettings";
 
 type PeerInstance = any;
 
@@ -231,6 +233,21 @@ export default function GameRoomPage() {
     const [currentUser, setCurrentUser] = useState<string>("");
     const [currentUserId, setCurrentUserId] = useState<string>("");
     const [isChatOpen, setIsChatOpen] = useState(false);
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+    // Lắng nghe thay đổi âm lượng voice output
+    useEffect(() => {
+        const updateVoiceVols = () => {
+            const vol = getVoiceOutputVolume();
+            Object.values(remoteAudios.current).forEach(audio => {
+                audio.volume = vol;
+            });
+        };
+        // Áp dụng ngay khi mount
+        updateVoiceVols();
+        // Lắng nghe thay đổi từ SettingsModal
+        return subscribeSound(updateVoiceVols);
+    }, []);
 
     // ── Settings ────────────────────────────
     const [showSettings, setShowSettings] = useState(false);
@@ -282,7 +299,7 @@ export default function GameRoomPage() {
             }
             audio.srcObject = stream;
             audio.muted = !isSpeakerOn;
-            audio.volume = 1;
+            audio.volume = getVoiceOutputVolume();
             audio.play()
                 .then(() => console.log(`[VOICE] ▶️ đang phát audio của ${targetId}`))
                 .catch(err => console.warn(`[VOICE] ⚠️ autoplay bị chặn (${targetId}):`, err?.name || err));
@@ -580,6 +597,15 @@ export default function GameRoomPage() {
                     >
                         <MessageSquare size={20} />
                     </button>
+                    <button
+                        onClick={() => setShowSettingsModal(true)}
+                        title="Cài đặt"
+                        className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
+                            showSettingsModal ? "bg-[#e6a822] text-black" : "bg-white/10 text-white/70 hover:bg-white/20"
+                        }`}
+                    >
+                        <Settings size={20} />
+                    </button>
                 </div>
             ) : (
                 <div className="fixed top-6 right-6 z-[70] bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
@@ -606,6 +632,7 @@ export default function GameRoomPage() {
         <>
             {confirmLeaveOverlay}
             {voiceControls}
+            {showSettingsModal && <SettingsModal onClose={() => setShowSettingsModal(false)} />}
         </>
     );
 

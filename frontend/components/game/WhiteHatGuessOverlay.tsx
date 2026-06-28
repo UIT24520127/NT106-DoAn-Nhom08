@@ -37,10 +37,7 @@ export default function WhiteHatGuessOverlay({
       const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
       setTimeLeft(remaining);
 
-      // Play tick sound if White Hat in the last 5 seconds
-      if (isWhiteHat && remaining <= 5 && remaining > 0) {
-        if (gameSoundsRef.current.playTick) gameSoundsRef.current.playTick();
-      }
+      // Play tick sound if White Hat in the last 5 seconds (Removed)
 
       if (remaining === 0) {
         clearInterval(timer);

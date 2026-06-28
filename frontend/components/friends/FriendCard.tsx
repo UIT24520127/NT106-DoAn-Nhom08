@@ -2,10 +2,14 @@
 
 import { useState } from "react";
 import { MessageSquare, MoreVertical, Trash2, ShieldAlert } from "lucide-react";
+import { getSfxUiVolume } from "@/lib/soundSettings";
 
 // Tiện ích âm thanh retro
 const playSound = (type: "click" | "invite") => {
   try {
+    const vol = getSfxUiVolume();
+    if (vol <= 0) return;
+
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     if (type === "click") {
       const osc = audioCtx.createOscillator();
@@ -14,8 +18,8 @@ const playSound = (type: "click" | "invite") => {
       gain.connect(audioCtx.destination);
       osc.frequency.setValueAtTime(800, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.05);
-      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.08 * vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01 * vol, audioCtx.currentTime + 0.05);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.05);
     } else if (type === "invite") {
@@ -26,13 +30,14 @@ const playSound = (type: "click" | "invite") => {
         gain.connect(audioCtx.destination);
         osc.frequency.setValueAtTime(freq, audioCtx.currentTime + delay);
         gain.gain.setValueAtTime(0, audioCtx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.08, audioCtx.currentTime + delay + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + delay + 0.25);
+        gain.gain.linearRampToValueAtTime(0.08 * vol, audioCtx.currentTime + delay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.01 * vol, audioCtx.currentTime + delay + 0.25);
         osc.start(audioCtx.currentTime + delay);
         osc.stop(audioCtx.currentTime + delay + 0.25);
       };
-      playChime(900, 0);
-      playChime(1300, 0.08);
+      playChime(523.25, 0); // C5
+      playChime(659.25, 0.1); // E5
+      playChime(783.99, 0.2); // G5
     }
   } catch (err) {
     // Web Audio API blocked or not supported

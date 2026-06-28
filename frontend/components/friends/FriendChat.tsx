@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { ArrowLeft, Send, Sparkles } from "lucide-react";
+import { getSfxUiVolume } from "@/lib/soundSettings";
 import { ref, onValue, push, set, remove, query, limitToLast } from "firebase/database";
 import { realtimeDb } from "@/lib/firebase";
 import axios from "axios";
@@ -20,6 +21,9 @@ interface FriendChatProps {
 
 const playChatSound = (type: "send" | "receive") => {
   try {
+    const vol = getSfxUiVolume();
+    if (vol <= 0) return;
+
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -30,16 +34,16 @@ const playChatSound = (type: "send" | "receive") => {
       osc.type = "sine";
       osc.frequency.setValueAtTime(600, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(1000, audioCtx.currentTime + 0.08);
-      gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.06 * vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.005 * vol, audioCtx.currentTime + 0.08);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.08);
     } else {
       osc.type = "triangle";
       osc.frequency.setValueAtTime(900, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.12);
-      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.08 * vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.005 * vol, audioCtx.currentTime + 0.12);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.12);
     }
