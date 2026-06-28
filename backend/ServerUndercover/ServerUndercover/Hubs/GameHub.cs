@@ -415,31 +415,31 @@ namespace ServerUndercover.Hubs
             });
         }
 
-        private Task BroadcastRoundTransition(string roomId, Room room, RoomManagerService.VoteResolution resolution)
+        private async Task BroadcastRoundTransition(string roomId, Room room, RoomManagerService.VoteResolution resolution, bool isGameOver = false)
         {
-            var alivePlayers = room.Players.Values
-                .Where(p => !p.IsEliminated)
-                .Select(p => new { p.UserId, p.DisplayName })
-                .ToList();
-
+            var pList = room.Players.Values.ToList();
+            int aliveCount = pList.Count(p => !p.IsEliminated);
+            
+            // Xử lý ẩn vai trò nếu setting quy định
             string? eliminatedRole = null;
             if (resolution.EliminatedUserId != null && room.Players.TryGetValue(resolution.EliminatedUserId, out var eliminatedPlayer))
             {
                 eliminatedRole = room.Settings.RevealEliminatedRole ? eliminatedPlayer.Role : null;
             }
 
-            return _hubContext.Clients.Group(roomId).SendAsync("RoundTransitionStarted", new
+            await _hubContext.Clients.Group(roomId).SendAsync("RoundTransitionStarted", new
             {
-                roundNumber = room.RoundNumber,
+                roundNumber = room.RoundNumber + 1,
                 countdownDuration = room.Settings.RoundTransitionDuration,
-                alivePlayers,
-                eliminatedPlayer = resolution.IsDraw ? null : new
+                alivePlayers = pList.Where(p => !p.IsEliminated).Select(p => new { userId = p.UserId, displayName = p.DisplayName }).ToList(),
+                eliminatedPlayer = resolution.EliminatedUserId == null ? null : new
                 {
                     userId = resolution.EliminatedUserId,
                     displayName = resolution.EliminatedDisplayName
                 },
                 eliminatedPlayerRole = eliminatedRole,
-                isTieVote = resolution.IsDraw
+                isTieVote = resolution.IsDraw,
+                isGameOver = isGameOver
             });
         }
 
@@ -1368,31 +1368,40 @@ namespace ServerUndercover.Hubs
                 if (isWhiteHatEliminated || (winCheck.IsGameOver && hasAliveWhiteHat))
                 {
                     // Lấy chính xác Mũ Trắng nào được đoán
-                    RoomPlayer? whiteHatP = isWhiteHatEliminated 
-                        ? eliminatedPlayer 
-                        : room.Players.Values.FirstOrDefault(p => p.Role == "WhiteHat" && !p.IsEliminated);
+                    var whiteHatToGuess = isWhiteHatEliminated ? eliminatedPlayer : room.Players.Values.First(p => p.Role == "WhiteHat" && !p.IsEliminated);
+                        
+                    // Broadcast transition trước khi chuyển phase đoán từ để user xem ai bị loại
+                    await BroadcastRoundTransition(roomId, room, resolution, false);
+                        
+                    // Đợi hiệu ứng transition chạy xong
+                    await Task.Delay((room.Settings.RoundTransitionDuration * 1000) + 1000);
 
-                    if (whiteHatP == null) return;
-
-                    // Chuyển sang đoán từ NGAY LẬP TỨC (không hiện màn hình RoundTransitionScreen chờ 5s)
+                    // Chuyển sang đoán từ
                     room.Phase = GamePhase.WhiteHatGuess;
                     room.WhiteHatEndTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (20 * 1000);
-                    _ = EndWhiteHatGuessAfterTimeout(roomId, room.WhiteHatEndTime, whiteHatP.UserId);
+                    _ = EndWhiteHatGuessAfterTimeout(roomId, room.WhiteHatEndTime, whiteHatToGuess.UserId);
 
                     await _roomManager.UpdateGameSessionPhaseAsync(room);
                     await SendRoomUpdatedToGroup(roomId, room);
+                        
                     await _hubContext.Clients.Group(roomId).SendAsync("WhiteHatOpportunity", new
                     {
                         pendingWinner = winCheck.WinnerRole,
                         timeLeft = 20,
-                        whiteHatDisplayName = whiteHatP?.DisplayName,
-                        whiteHatUserId = whiteHatP?.UserId
+                        whiteHatDisplayName = whiteHatToGuess?.DisplayName,
+                        whiteHatUserId = whiteHatToGuess?.UserId
                     });
                     return;
                 }
 
                 if (winCheck.IsGameOver)
                 {
+                    // Broadcast transition cho người bị loại trước khi kết thúc game
+                    await BroadcastRoundTransition(roomId, room, resolution, true);
+                        
+                    // Đợi hiệu ứng transition chạy xong
+                    await Task.Delay((room.Settings.RoundTransitionDuration * 1000) + 1000);
+
                     room.Phase = GamePhase.GameEnd;
                     room.State = RoomState.Finished;
                     await _roomManager.DeleteGameSessionAsync(room);
@@ -1419,7 +1428,7 @@ namespace ServerUndercover.Hubs
             }
             else
             {
-                await BroadcastRoundTransition(roomId, room, resolution);
+                await BroadcastRoundTransition(roomId, room, resolution, false);
                 await Task.Delay(room.Settings.RoundTransitionDuration * 1000);
             }
 

@@ -65,6 +65,7 @@ interface RoundTransitionData {
     eliminatedPlayerRole?: string | null;
     alivePlayers: { userId: string; displayName: string }[];
     countdownDuration: number;
+    isGameOver?: boolean;
 }
 
 interface GameEndedData {
@@ -1017,6 +1018,7 @@ export default function GameRoomPage() {
             eliminatedPlayer?: { userId: string; displayName: string } | null;
             eliminatedPlayerRole?: string | null;
             isTieVote: boolean;
+            isGameOver?: boolean;
         }) => {
             setTransitionData({
                 roundNumber: data.roundNumber,
@@ -1025,6 +1027,7 @@ export default function GameRoomPage() {
                 eliminatedPlayerRole: data.eliminatedPlayerRole ?? null,
                 alivePlayers: data.alivePlayers,
                 countdownDuration: data.countdownDuration,
+                isGameOver: data.isGameOver
             });
             setGamePhase('roundTransition');
             setShowWhiteHatGuess(false); // Fix: hide White Hat overlay during transition

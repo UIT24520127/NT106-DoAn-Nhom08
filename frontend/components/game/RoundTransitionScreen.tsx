@@ -8,6 +8,7 @@ interface RoundTransitionScreenProps {
   eliminatedPlayerRole?: string | null;
   alivePlayers: { userId: string; displayName: string }[];
   countdownDuration?: number;
+  isGameOver?: boolean;
   onCountdownEnd: () => void;
   backgroundImage?: string;
 }
@@ -20,7 +21,7 @@ const ROLE_LABEL: Record<string, { label: string; icon: string; color: string; g
 
 export default function RoundTransitionScreen({
   roundNumber, isTieVote, eliminatedPlayerName, eliminatedPlayerRole,
-  alivePlayers, countdownDuration = 5, onCountdownEnd,
+  alivePlayers = [], countdownDuration = 0, isGameOver = false, onCountdownEnd,
   backgroundImage,
 }: RoundTransitionScreenProps) {
   const [countdown, setCountdown] = useState(countdownDuration);
@@ -238,54 +239,56 @@ export default function RoundTransitionScreen({
         </div>
 
         {/* ── NEXT ROUND INFO ── */}
-        <div style={{
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 22, padding: "20px 28px", marginBottom: 20,
-          animation: phase === "next" ? "rt-reveal 0.5s ease 0.6s both" : "none",
-          opacity: phase === "next" ? 1 : 0,
-          transition: "opacity 0.4s ease",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div>
-              <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 4px" }}>Vòng tiếp theo</p>
-              <p style={{ color: "#fff", fontWeight: 900, fontSize: 20, margin: 0 }}>
-                Vòng <span style={{ color: "#00F2FE", textShadow: "0 0 12px rgba(0,242,254,0.6)" }}>{roundNumber}</span>
-              </p>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 4px" }}>Còn lại</p>
-              <p style={{ color: "#00FF94", fontWeight: 900, fontSize: 20, margin: 0, textShadow: "0 0 12px rgba(0,255,148,0.5)" }}>
-                {alivePlayers.length} người
-              </p>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {alivePlayers.map(p => (
-              <div key={p.userId} style={{
-                display: "flex", alignItems: "center", gap: 6,
-                background: "rgba(0,255,148,0.05)",
-                border: "1px solid rgba(0,255,148,0.15)",
-                borderRadius: 8, padding: "4px 10px",
-              }}>
-                <div style={{
-                  width: 20, height: 20, borderRadius: "50%",
-                  background: "rgba(0,255,148,0.15)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 9, fontWeight: 900, color: "#00FF94",
-                }}>
-                  {p.displayName.charAt(0).toUpperCase()}
-                </div>
-                <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>{p.displayName}</span>
+        {!isGameOver && (
+          <div style={{
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: 22, padding: "20px 28px", marginBottom: 20,
+            animation: phase === "next" ? "rt-reveal 0.5s ease 0.6s both" : "none",
+            opacity: phase === "next" ? 1 : 0,
+            transition: "opacity 0.4s ease",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div>
+                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 4px" }}>Vòng tiếp theo</p>
+                <p style={{ color: "#fff", fontWeight: 900, fontSize: 20, margin: 0 }}>
+                  Vòng <span style={{ color: "#00F2FE", textShadow: "0 0 12px rgba(0,242,254,0.6)" }}>{roundNumber}</span>
+                </p>
               </div>
-            ))}
-          </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 4px" }}>Còn lại</p>
+                <p style={{ color: "#00FF94", fontWeight: 900, fontSize: 20, margin: 0, textShadow: "0 0 12px rgba(0,255,148,0.5)" }}>
+                  {alivePlayers.length} người
+                </p>
+              </div>
+            </div>
 
-          <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, margin: "12px 0 0", fontStyle: "italic" }}>
-            🔀 Thứ tự lượt nói sẽ được random lại.
-          </p>
-        </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {alivePlayers.map(p => (
+                <div key={p.userId} style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  background: "rgba(0,255,148,0.05)",
+                  border: "1px solid rgba(0,255,148,0.15)",
+                  borderRadius: 8, padding: "4px 10px",
+                }}>
+                  <div style={{
+                    width: 20, height: 20, borderRadius: "50%",
+                    background: "rgba(0,255,148,0.15)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 9, fontWeight: 900, color: "#00FF94",
+                  }}>
+                    {p.displayName.charAt(0).toUpperCase()}
+                  </div>
+                  <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>{p.displayName}</span>
+                </div>
+              ))}
+            </div>
+
+            <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, margin: "12px 0 0", fontStyle: "italic" }}>
+              🔀 Thứ tự lượt nói sẽ được random lại.
+            </p>
+          </div>
+        )}
 
         {/* ── COUNTDOWN ── */}
         <div style={{
@@ -294,7 +297,7 @@ export default function RoundTransitionScreen({
           transition: "opacity 0.4s ease 0.8s",
         }}>
           <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, letterSpacing: "0.15em", margin: "0 0 10px" }}>
-            Vòng mới bắt đầu sau
+            {isGameOver ? "Trò chơi kết thúc sau" : "Vòng mới bắt đầu sau"}
           </p>
           <div style={{
             fontSize: 64, fontWeight: 900,
