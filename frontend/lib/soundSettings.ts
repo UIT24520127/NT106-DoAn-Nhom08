@@ -58,6 +58,18 @@ function applyGameBgmLive() {
     if (a) a.volume = gameBgmVolume;
 }
 
+function applySfxGameplayLive() {
+    if (typeof document === "undefined") return;
+    const a5 = document.getElementById("sound-countdown5s") as HTMLAudioElement | null;
+    if (a5 && !a5.paused) a5.volume = clamp01(sfxGameplayVolume * 0.8);
+    const a10 = document.getElementById("sound-countdown10s") as HTMLAudioElement | null;
+    if (a10 && !a10.paused) a10.volume = clamp01(sfxGameplayVolume * 0.8);
+    const aVote = document.getElementById("sound-vote") as HTMLAudioElement | null;
+    if (aVote && !aVote.paused) aVote.volume = clamp01(sfxGameplayVolume * 0.5);
+    const aLoai = document.getElementById("sound-loai") as HTMLAudioElement | null;
+    if (aLoai && !aLoai.paused) aLoai.volume = clamp01(sfxGameplayVolume * 0.8);
+}
+
 // BGM Setters
 export function setMenuBgmVolume(v: number) {
     menuBgmVolume = clamp01(v);
@@ -86,6 +98,7 @@ export function setSfxLobbyVolume(v: number) {
 export function setSfxGameplayVolume(v: number) {
     sfxGameplayVolume = clamp01(v);
     if (typeof window !== "undefined") window.localStorage.setItem(SFX_GAMEPLAY_KEY, String(sfxGameplayVolume));
+    applySfxGameplayLive();
     notify();
 }
 export function setSfxEndgameVolume(v: number) {
@@ -118,7 +131,7 @@ if (typeof window !== "undefined") {
             case GAME_BGM_KEY: gameBgmVolume = clamp01(val); applyGameBgmLive(); break;
             case SFX_UI_KEY: sfxUiVolume = clamp01(val); break;
             case SFX_LOBBY_KEY: sfxLobbyVolume = clamp01(val); break;
-            case SFX_GAMEPLAY_KEY: sfxGameplayVolume = clamp01(val); break;
+            case SFX_GAMEPLAY_KEY: sfxGameplayVolume = clamp01(val); applySfxGameplayLive(); break;
             case SFX_ENDGAME_KEY: sfxEndgameVolume = clamp01(val); break;
             case MIC_VOL_KEY: micVolume = clamp01(val); break;
             case VOICE_OUTPUT_KEY: voiceOutputVolume = clamp01(val); break;
