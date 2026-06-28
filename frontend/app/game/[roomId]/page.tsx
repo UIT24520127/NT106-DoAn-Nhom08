@@ -883,6 +883,10 @@ export default function GameRoomPage() {
             const remaining = data.remainingMs ?? ((data.duration ?? 30) * 1000);
             setTurnEndTime(Date.now() + remaining);
             setShowWhiteHatGuess(false); // Fix: always hide White Hat overlay when a new turn starts
+            
+            // Bắt buộc chuyển sang describing ngay khi server thực sự bắt đầu đếm giờ (sửa lỗi hiện 28s ở vòng 1)
+            setGamePhase('describing');
+            setIsWaitingForTurnOrder(false);
         });
 
         // 4. Lượt nói kết thúc / skip
