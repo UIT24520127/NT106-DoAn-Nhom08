@@ -7,6 +7,7 @@ import { getSignalRConnection } from "@/lib/signalRConnection";
 import { ref, onValue } from "firebase/database";
 import { realtimeDb } from "@/lib/firebase";
 import FriendModal from "@/components/friends/FriendModal";
+import SettingsModal from "@/components/SettingsModal";
 import { useGameSound } from "@/hooks/useGameSound";
 
 interface RoomSettings {
@@ -31,6 +32,7 @@ export default function RoomPage() {
   const [token, setToken] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSoundSettings, setShowSoundSettings] = useState(false);
   const [localSettings, setLocalSettings] = useState<Partial<RoomSettings>>({
     describeDuration: 30,
     voteDuration: 60,
@@ -266,6 +268,14 @@ export default function RoomPage() {
             <span className="text-white font-bold text-base">{players.length}</span>
             <span className="text-white/30 text-sm">/ {settings.maxPlayers || "?"}</span>
           </div>
+
+          <button
+            onClick={() => { playClick(); setShowSoundSettings(true); }}
+            title="Cài đặt âm thanh"
+            className="flex items-center justify-center w-10 h-10 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/30 rounded-xl transition-all text-white/70 hover:text-white"
+          >
+            <Settings size={18} />
+          </button>
 
           <button
             onClick={() => { playClick(); setIsFriendOpen(true); }}
@@ -504,6 +514,8 @@ export default function RoomPage() {
           showInvite={true}
         />
       )}
+
+      {showSoundSettings && <SettingsModal onClose={() => setShowSoundSettings(false)} />}
 
       {popup.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
