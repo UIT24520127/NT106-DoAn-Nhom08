@@ -615,32 +615,62 @@ namespace ServerUndercover.Hubs
 
                 if (updatedRoom.State == RoomState.Playing)
                 {
-                    var winCheck = _roomManager.CheckWinConditions(roomId);
-                    if (winCheck.IsGameOver)
+                    if (updatedRoom.Phase == GamePhase.Loading || updatedRoom.Phase == GamePhase.RoleReveal)
                     {
-                        updatedRoom.Phase = GamePhase.GameEnd;
-                        updatedRoom.State = RoomState.Finished;
-                        await _roomManager.DeleteGameSessionAsync(updatedRoom);
-                        await Clients.Group(roomId).SendAsync("GameEnded", new
+                        if (updatedRoom.Players.Count < 3)
                         {
-                            winner = winCheck.WinnerRole,
-                            civilianWord = updatedRoom.Players.Values.FirstOrDefault(player => player.Role == "Civilian")?.Word,
-                            players = updatedRoom.Players.Values.Select(player => new
+                            updatedRoom.State = RoomState.Waiting;
+                            updatedRoom.Phase = GamePhase.RoleReveal;
+                            updatedRoom.LoadingReadyPlayerIds.Clear();
+                            updatedRoom.LoadingStartedAt = null;
+                            updatedRoom.LoadingClosed = false;
+                            
+                            await _roomManager.DeleteGameSessionAsync(updatedRoom);
+                            await Clients.Group(roomId).SendAsync("RoomError", "Không đủ người chơi để tiếp tục ván đấu, ván đấu đã bị hủy.");
+                            await SendRoomUpdatedToGroup(roomId, updatedRoom);
+                            await BroadcastPublicRooms();
+                        }
+                        else if (updatedRoom.Phase == GamePhase.Loading)
+                        {
+                            // Cập nhật lại số người đã tải xong sau khi có người rời đi
+                            await BroadcastLoadingProgress(updatedRoom);
+
+                            // Nếu tất cả những người CÒN LẠI đều đã ready thì bắt đầu luôn
+                            if (updatedRoom.LoadingReadyPlayerIds.Count >= updatedRoom.Players.Count)
                             {
-                                userId = player.UserId,
-                                displayName = player.DisplayName,
-                                role = player.Role,
-                                isEliminated = player.IsEliminated
-                            }).ToList()
-                        });
+                                await CloseLoadingAndRevealRoles(updatedRoom);
+                            }
+                        }
                     }
-                    else if (updatedRoom.Phase == GamePhase.Voting)
+                    else
                     {
-                        // Check if voting phase should end because the total alive players decreased
-                        int totalVotes = updatedRoom.Votes.Count;
-                        if (totalVotes == updatedRoom.Players.Count(p => !p.Value.IsEliminated))
+                        var winCheck = _roomManager.CheckWinConditions(roomId);
+                        if (winCheck.IsGameOver)
                         {
-                            await ResolveVotingPhase(roomId);
+                            updatedRoom.Phase = GamePhase.GameEnd;
+                            updatedRoom.State = RoomState.Finished;
+                            await _roomManager.DeleteGameSessionAsync(updatedRoom);
+                            await Clients.Group(roomId).SendAsync("GameEnded", new
+                            {
+                                winner = winCheck.WinnerRole,
+                                civilianWord = updatedRoom.Players.Values.FirstOrDefault(player => player.Role == "Civilian")?.Word,
+                                players = updatedRoom.Players.Values.Select(player => new
+                                {
+                                    userId = player.UserId,
+                                    displayName = player.DisplayName,
+                                    role = player.Role,
+                                    isEliminated = player.IsEliminated
+                                }).ToList()
+                            });
+                        }
+                        else if (updatedRoom.Phase == GamePhase.Voting)
+                        {
+                            // Check if voting phase should end because the total alive players decreased
+                            int totalVotes = updatedRoom.Votes.Count;
+                            if (totalVotes == updatedRoom.Players.Count(p => !p.Value.IsEliminated))
+                            {
+                                await ResolveVotingPhase(roomId);
+                            }
                         }
                     }
                 }
