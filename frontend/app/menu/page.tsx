@@ -206,12 +206,12 @@ export default function MainMenu() {
           setPlayerStats({
             username: data.username || data.Username || "Đặc vụ ẩn danh",
             totalGames: data.totalGames || data.TotalGames || 0,
-            wins: data.wins || data.Wins || 0,
+            wins: data.totalWins || data.TotalWins || data.wins || data.Wins || 0,
             civilianWins: data.civilianWins || data.CivilianWins || 0,
             undercoverWins: data.undercoverWins || data.UndercoverWins || 0,
             mrWhiteWins: data.mrWhiteWins || data.MrWhiteWins || 0,
             winRate: (data.totalGames || data.TotalGames) > 0
-              ? (((data.wins || data.Wins) / (data.totalGames || data.TotalGames)) * 100).toFixed(1) + "%"
+              ? (((data.totalWins || data.TotalWins || data.wins || data.Wins || 0) / (data.totalGames || data.TotalGames)) * 100).toFixed(1) + "%"
               : "0%",
             mostPlayedRole: data.mostPlayedRole || data.MostPlayedRole || "Tân binh",
             avatar: displayAvatar,

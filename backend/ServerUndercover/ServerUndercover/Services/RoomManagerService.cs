@@ -17,6 +17,25 @@ namespace ServerUndercover.Services
         // Theo dõi Session của User (UserId -> ConnectionId)
         private readonly ConcurrentDictionary<string, string> _userConnections = new();
 
+        // Thành viên voice chat của mỗi phòng (RoomId -> tập ConnectionId đang trong voice)
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _voiceMembers = new();
+
+        public List<string> GetVoiceMembers(string roomId)
+            => _voiceMembers.TryGetValue(roomId, out var set) ? set.Keys.ToList() : new List<string>();
+
+        public void AddVoiceMember(string roomId, string connectionId)
+            => _voiceMembers.GetOrAdd(roomId, _ => new ConcurrentDictionary<string, byte>())[connectionId] = 0;
+
+        public void RemoveVoiceMember(string roomId, string connectionId)
+        {
+            if (_voiceMembers.TryGetValue(roomId, out var set)) set.TryRemove(connectionId, out _);
+        }
+
+        public void RemoveVoiceMemberEverywhere(string connectionId)
+        {
+            foreach (var set in _voiceMembers.Values) set.TryRemove(connectionId, out _);
+        }
+
         //Cấp từ khi bắt đầu ván mới, xóa khi ván kết thúc
         private readonly List<WordPair> _localWordPool = new(); // Kho từ tạm thời trên RAM
 

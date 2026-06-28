@@ -8,7 +8,7 @@ import {
     HubConnectionBuilder,
     HubConnectionState
 } from '@microsoft/signalr';
-import { Shield, MessageSquare, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, CheckCircle2, LogOut, Key } from 'lucide-react';
+import { Shield, MessageSquare, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, CheckCircle2, LogOut, Key, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import ChatBox from '@/components/ChatBox';
 import RoleRevealingScreen from '@/components/game/RoleRevealingScreen';
 import DescribingPhase from '@/components/game/DescribingPhase';
@@ -221,6 +221,9 @@ export default function GameRoomPage() {
     const userStream = useRef<MediaStream | null>(null);
     const peers = useRef<Record<string, PeerInstance>>({});
     const remoteAudios = useRef<Record<string, HTMLAudioElement>>({});
+    const peerCtorRef = useRef<any>(null); // simple-peer constructor (preload để tạo peer đồng bộ, tránh race)
+    const myVoiceId = useRef<string>(''); // connectionId của CHÍNH MÌNH do server báo về (dùng so sánh chọn initiator)
+    const joinedVoiceRef = useRef<boolean>(false); // chống gọi joinVoiceChat 2 lần
 
     // ── Room / UI ───────────────────────────
     const [roomState, setRoomState] = useState<RoomState | null>(null);
@@ -250,31 +253,43 @@ export default function GameRoomPage() {
     // ================================
     // WebRTC helpers
     // ================================
-    const createPeer = async (targetId: string, conn: HubConnection, initiator: boolean) => {
-        const Peer = (await import('simple-peer')).default;
+    // Tạo peer ĐỒNG BỘ (constructor đã được preload trong joinVoiceChat) -> không còn await -> tránh race tạo trùng peer
+    const createPeer = (targetId: string, conn: HubConnection, initiator: boolean): PeerInstance | null => {
+        const Peer = peerCtorRef.current;
+        if (!Peer) { console.warn('[VOICE] simple-peer chưa sẵn sàng'); return null; }
+        const hasStream = !!userStream.current;
+        console.log(`[VOICE] createPeer -> ${targetId} | initiator=${initiator} | có mic stream=${hasStream}`);
         const peer = new Peer({
             initiator,
             trickle: false,
             stream: userStream.current || undefined,
         });
         peer.on('signal', async (data: any) => {
-            await conn.invoke('SendVoiceSignal', targetId, JSON.stringify(data));
+            console.log(`[VOICE] gửi signal -> ${targetId} (${data?.type || 'candidate'})`);
+            try { await conn.invoke('SendVoiceSignal', targetId, JSON.stringify(data)); }
+            catch (e) { console.error('[VOICE] SendVoiceSignal lỗi:', e); }
         });
         peer.on('stream', (stream: MediaStream) => {
+            console.log(`[VOICE] 🔊 NHẬN remote stream từ ${targetId} | tracks=${stream.getAudioTracks().length}`);
             let audio = document.getElementById(`audio-${targetId}`) as HTMLAudioElement;
             if (!audio) {
                 audio = document.createElement('audio');
                 audio.id = `audio-${targetId}`;
                 audio.autoplay = true;
+                (audio as any).playsInline = true;
                 document.body.appendChild(audio);
                 remoteAudios.current[targetId] = audio;
             }
             audio.srcObject = stream;
             audio.muted = !isSpeakerOn;
+            audio.volume = 1;
+            audio.play()
+                .then(() => console.log(`[VOICE] ▶️ đang phát audio của ${targetId}`))
+                .catch(err => console.warn(`[VOICE] ⚠️ autoplay bị chặn (${targetId}):`, err?.name || err));
         });
-        peer.on('connect', () => console.log(`✅ P2P connected: ${targetId}`));
-        peer.on('error', (err: any) => { console.error('Peer error:', err); cleanupPeer(targetId); });
-        peer.on('close', () => cleanupPeer(targetId));
+        peer.on('connect', () => console.log(`[VOICE] ✅ P2P CONNECTED: ${targetId}`));
+        peer.on('error', (err: any) => { console.error(`[VOICE] ❌ Peer error (${targetId}):`, err); cleanupPeer(targetId); });
+        peer.on('close', () => { console.log(`[VOICE] đóng peer ${targetId}`); cleanupPeer(targetId); });
         return peer;
     };
 
@@ -283,34 +298,82 @@ export default function GameRoomPage() {
         if (remoteAudios.current[id]) { remoteAudios.current[id].remove(); delete remoteAudios.current[id]; }
     };
 
+    // Kết nối tới 1 peer khác. Quy tắc tất định: chỉ bên có connectionId LỚN HƠN làm initiator
+    // -> mỗi cặp chỉ có 1 offer, tránh glare ("Failed to start SCTP transport").
+    const connectToPeer = (otherId: string, conn: HubConnection) => {
+        if (!otherId || peers.current[otherId]) {
+            console.log(`[VOICE] bỏ qua connectToPeer ${otherId} (đã có peer hoặc rỗng)`);
+            return;
+        }
+        // Ưu tiên id do server báo (myVoiceId), fallback connectionId của client
+        const myId = myVoiceId.current || conn.connectionId || '';
+        const initiator = myId > otherId;
+        console.log(`[VOICE] connectToPeer ${otherId} | myId=${myId} | làm initiator=${initiator}`);
+        const peer = createPeer(otherId, conn, initiator);
+        if (peer) peers.current[otherId] = peer;
+    };
+
     const joinVoiceChat = async (activeConn: HubConnection) => {
+        if (joinedVoiceRef.current) { console.log('[VOICE] joinVoiceChat: đã vào rồi, bỏ qua'); return; }
+        joinedVoiceRef.current = true;
         try {
+            console.log('[VOICE] joinVoiceChat: bắt đầu...');
+            // Preload constructor TRƯỚC khi vào voice -> mọi sự kiện signaling sau đó tạo peer đồng bộ
+            if (!peerCtorRef.current) peerCtorRef.current = (await import('simple-peer')).default;
             if (!userStream.current) {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,   // khử tiếng vọng (mic thu lại loa)
+                        noiseSuppression: true,   // lọc ồn nền
+                        autoGainControl: true,    // tự cân âm lượng
+                    },
+                });
                 stream.getAudioTracks().forEach(t => t.enabled = false);
                 userStream.current = stream;
+                console.log(`[VOICE] đã lấy mic, số audio track=${stream.getAudioTracks().length} (đang tắt sẵn)`);
             }
             await activeConn.invoke("StartVoiceChat", roomId);
             setIsJoinedVoice(true);
+            console.log(`[VOICE] đã StartVoiceChat, connectionId=${activeConn.connectionId}`);
         } catch (err) {
-            console.error("❌ Mic access denied:", err);
+            joinedVoiceRef.current = false;
+            console.error("[VOICE] ❌ Không vào được voice / mic bị từ chối:", err);
         }
+    };
+
+    // Rời voice: dọn sạch tất cả peer + tắt mic + báo server. Gọi khi chơi lại / về menu / unmount.
+    const leaveVoice = (conn?: HubConnection | null) => {
+        const c = conn || connection;
+        try { c?.invoke("LeaveVoiceChat", roomId); } catch { /* ignore */ }
+        Object.keys(peers.current).forEach(id => cleanupPeer(id));
+        userStream.current?.getTracks().forEach(t => t.stop());
+        userStream.current = null;
+        joinedVoiceRef.current = false;
+        myVoiceId.current = '';
+        console.log('[VOICE] 🔌 rời voice: đã destroy peers + tắt mic + báo server');
     };
 
     // ================================
     // Controls
     // ================================
     const toggleMic = () => {
-        if (!userStream.current) return;
+        if (!userStream.current) { console.warn('[VOICE] toggleMic: chưa có mic stream'); return; }
         const newState = !isMicOn;
         userStream.current.getAudioTracks().forEach(t => t.enabled = newState);
         setIsMicOn(newState);
+        console.log(`[VOICE] 🎙️ Mic ${newState ? 'BẬT' : 'TẮT'} | số peer đang kết nối=${Object.keys(peers.current).length}`);
+        // Tận dụng cú click (user gesture) để bỏ chặn autoplay cho audio đang nhận
+        Object.values(remoteAudios.current).forEach(a => a.play().catch(() => {}));
     };
 
     const toggleSpeaker = () => {
         const newState = !isSpeakerOn;
         setIsSpeakerOn(newState);
-        Object.values(remoteAudios.current).forEach(audio => audio.muted = !newState);
+        Object.values(remoteAudios.current).forEach(audio => {
+            audio.muted = !newState;
+            if (newState) audio.play().catch(() => {});
+        });
+        console.log(`[VOICE] 🔊 Loa ${newState ? 'BẬT' : 'TẮT'} | số audio remote=${Object.keys(remoteAudios.current).length}`);
     };
 
     const handleSkipTurn = async () => {
@@ -376,6 +439,7 @@ export default function GameRoomPage() {
 
     const handlePlayAgain = async () => {
         if (!connection) return;
+        leaveVoice(connection); // dọn voice trước khi rời trang game
         try { await connection.invoke("BackToLobby"); }
         catch (e) { console.error("PlayAgain error:", e); }
         router.push(`/room/${roomId}`);
@@ -394,6 +458,7 @@ export default function GameRoomPage() {
         setShowLeaveConfirm(false);
         if (!connection) return;
 
+        leaveVoice(connection); // dọn voice trước khi về menu
         try {
             await connection.invoke("LeaveRoom");
         } catch (error) {
@@ -483,9 +548,64 @@ export default function GameRoomPage() {
         </div>
     ) : null;
 
+    const voiceControls = (
+        <>
+            {/* Thanh điều khiển cố định góc TRÊN PHẢI: Loa - Mic - Chat */}
+            {isJoinedVoice ? (
+                <div className="fixed top-6 right-6 z-[70] flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+                    <button
+                        onClick={toggleSpeaker}
+                        title={isSpeakerOn ? "Tắt loa" : "Bật loa"}
+                        className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
+                            isSpeakerOn ? "bg-indigo-500/20 text-indigo-400" : "bg-white/5 text-white/30 hover:bg-white/10"
+                        }`}
+                    >
+                        {isSpeakerOn ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                    </button>
+                    <button
+                        onClick={toggleMic}
+                        title={isMicOn ? "Tắt mic" : "Bật mic"}
+                        className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
+                            isMicOn ? "bg-red-500/20 text-red-500" : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
+                        }`}
+                    >
+                        {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
+                    </button>
+                    <button
+                        onClick={() => setIsChatOpen(!isChatOpen)}
+                        title="Chat"
+                        className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
+                            isChatOpen ? "bg-[#e6a822] text-black" : "bg-white/10 text-white/70 hover:bg-white/20"
+                        }`}
+                    >
+                        <MessageSquare size={20} />
+                    </button>
+                </div>
+            ) : (
+                <div className="fixed top-6 right-6 z-[70] bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-yellow-500/50"></span>
+                    Đang kết nối voice...
+                </div>
+            )}
+
+            {/* Chat box mở XUỐNG dưới thanh điều khiển */}
+            <div className={`fixed top-24 right-6 w-[340px] z-[65] transition-all duration-300 ${isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+                {connection && (
+                    <ChatBox
+                        connection={connection}
+                        roomId={roomId}
+                        currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
+                        playerCount={Object.keys(roomState?.players || {}).length}
+                    />
+                )}
+            </div>
+        </>
+    );
+
     const overlayElements = (
         <>
             {confirmLeaveOverlay}
+            {voiceControls}
         </>
     );
 
@@ -564,20 +684,29 @@ export default function GameRoomPage() {
         });
 
         // ── Voice events ─────────────────────────
-        newConn.on('UserJoinedVoice', async (newcomerId: string) => {
-            if (!peers.current[newcomerId]) {
-                const peer = await createPeer(newcomerId, newConn, true);
-                peers.current[newcomerId] = peer;
-            }
+        // Người mới nhận danh sách người đang trong voice -> kết nối tới từng người (tất định)
+        newConn.on('ExistingVoiceUsers', (data: { selfId: string; users: string[] }) => {
+            myVoiceId.current = data?.selfId || '';
+            console.log('[VOICE] 📥 ExistingVoiceUsers | selfId=', data?.selfId, '| users=', data?.users);
+            (data?.users || []).forEach(id => connectToPeer(id, newConn));
         });
-        newConn.on('ReceiveSignal', async (senderId: string, signal: string) => {
+        // Có người mới vào voice -> kết nối tới họ (tất định)
+        newConn.on('UserJoinedVoice', (newcomerId: string) => {
+            console.log('[VOICE] 📥 UserJoinedVoice:', newcomerId);
+            connectToPeer(newcomerId, newConn);
+        });
+        newConn.on('ReceiveSignal', (senderId: string, signal: string) => {
+            console.log(`[VOICE] 📥 ReceiveSignal từ ${senderId}`);
             let peer = peers.current[senderId];
             if (!peer) {
-                peer = await createPeer(senderId, newConn, false);
-                peers.current[senderId] = peer;
+                // Chưa có peer -> mình là bên non-initiator, tạo để nhận offer
+                console.log(`[VOICE] chưa có peer cho ${senderId} -> tạo non-initiator`);
+                peer = createPeer(senderId, newConn, false);
+                if (peer) peers.current[senderId] = peer;
             }
-            peer.signal(JSON.parse(signal));
+            if (peer) { try { peer.signal(JSON.parse(signal)); } catch (e) { console.error('[VOICE] signal lỗi:', e); } }
         });
+        newConn.on('PlayerDisconnected', (id: string) => { console.log('[VOICE] 📥 PlayerDisconnected:', id); cleanupPeer(id); });
         newConn.on('PlayerDisconnected', (id: string) => cleanupPeer(id));
         newConn.on("PlayerLeft", (data: { userId: string, displayName: string }) => {
             addNotif(`${data.displayName} đã rời phòng.`, 'warning');
@@ -966,6 +1095,7 @@ export default function GameRoomPage() {
                 try {
                     await newConn.invoke("JoinRoom", roomId);
                     await newConn.invoke("GetRoomState", roomId);
+                    joinVoiceChat(newConn); // Tự động kết nối mic ngay khi vào phòng
                     const pendingLoading = sessionStorage.getItem(`loading:${roomId}`);
                     if (pendingLoading) {
                         sessionStorage.removeItem(`loading:${roomId}`);
@@ -1016,6 +1146,7 @@ export default function GameRoomPage() {
             newConn.off('RoomError');
             newConn.off('KickedFromRoom');
             newConn.off('RoomUpdated');
+            newConn.off('ExistingVoiceUsers');
             newConn.off('UserJoinedVoice');
             newConn.off('ReceiveSignal');
             newConn.off('PlayerDisconnected');
@@ -1044,11 +1175,11 @@ export default function GameRoomPage() {
             newConn.off('WhiteHatOpportunity');
             newConn.off('WhiteHatGuessResult');
             newConn.off('RoundStarted');
+            leaveVoice(newConn); // dọn voice khi rời trang game (destroy peers + tắt mic + báo server)
             newConn.off('TypingSynchronized');
             newConn.off('ExtendVoteCountUpdated');
             newConn.off('SkipVoteCountUpdated');
             newConn.off('VoteTimeExtended');
-            userStream.current?.getTracks().forEach(t => t.stop());
         };
     }, [roomId]);
 
@@ -1273,33 +1404,6 @@ export default function GameRoomPage() {
                     typingSync={typingSync}
                     onTyping={(text) => connection?.invoke("SyncTyping", text)}
                 />
-                {/* Chat overlay */}
-                <button
-                    onClick={() => setIsChatOpen(!isChatOpen)}
-                    style={{
-                        position: "fixed", bottom: 80, right: 20, zIndex: 60,
-                        width: 48, height: 48, borderRadius: "50%", border: "none",
-                        background: isChatOpen ? "#e6a822" : "rgba(255,255,255,0.1)",
-                        color: isChatOpen ? "#000" : "rgba(255,255,255,0.7)",
-                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                        boxShadow: "0 4px 16px rgba(0,0,0,0.4)", transition: "all 0.2s",
-                    }}
-                >
-                    <MessageSquare size={20} />
-                </button>
-                <div style={{
-                    position: "fixed", bottom: 140, right: 20, width: 340,
-                    zIndex: 55, display: isChatOpen ? "block" : "none",
-                }}>
-                    {connection && (
-                        <ChatBox
-                            connection={connection}
-                            roomId={roomId}
-                            currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
-                            playerCount={currentPlayerCount}
-                        />
-                    )}
-                </div>
             </div>
         );
     }
@@ -1374,33 +1478,6 @@ export default function GameRoomPage() {
                     }}
                     backgroundImage={backgroundImage}
                 />
-                {/* Chat */}
-                <button
-                    onClick={() => setIsChatOpen(!isChatOpen)}
-                    style={{
-                        position: "fixed", bottom: 24, right: 24, zIndex: 60,
-                        width: 48, height: 48, borderRadius: "50%", border: "none",
-                        background: isChatOpen ? "#e6a822" : "rgba(255,255,255,0.1)",
-                        color: isChatOpen ? "#000" : "rgba(255,255,255,0.7)",
-                        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                        boxShadow: "0 4px 16px rgba(0,0,0,0.4)", transition: "all 0.2s",
-                    }}
-                >
-                    <MessageSquare size={20} />
-                </button>
-                <div style={{
-                    position: "fixed", bottom: 84, right: 24, width: 340,
-                    zIndex: 55, display: isChatOpen ? "block" : "none",
-                }}>
-                    {connection && (
-                        <ChatBox
-                            connection={connection}
-                            roomId={roomId}
-                            currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
-                            playerCount={currentPlayerCount}
-                        />
-                    )}
-                </div>
             </>
         );
     }
@@ -1684,59 +1761,6 @@ export default function GameRoomPage() {
                 </div>
             )}
 
-            {/* ── VOICE & CHAT CONTROLS ── */}
-            {isJoinedVoice && (
-                <div className="fixed bottom-6 right-6 flex items-center gap-3 z-50">
-                    <div className="flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
-                        <button
-                            onClick={() => { playClick(); toggleSpeaker(); }}
-                            className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center text-lg cursor-pointer transition-all ${
-                                isSpeakerOn ? "bg-indigo-500/20 text-indigo-400" : "bg-white/5 text-white/30 hover:bg-white/10"
-                            }`}
-                        >
-                            {isSpeakerOn ? "🔊" : "🔇"}
-                        </button>
-                        <button
-                            onClick={() => { playClick(); toggleMic(); }}
-                            className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center text-lg cursor-pointer transition-all ${
-                                isMicOn ? "bg-red-500/20 text-red-500" : "bg-green-500/10 text-green-500 hover:bg-green-500/20"
-                            }`}
-                        >
-                            {isMicOn ? "🎙️" : "🚫"}
-                        </button>
-                    </div>
-
-                    <button
-                        onClick={() => setIsChatOpen(!isChatOpen)}
-                        className={`w-[52px] h-[52px] rounded-full border-none flex items-center justify-center text-xl cursor-pointer transition-all ${
-                            isChatOpen 
-                                ? "bg-[#e6a822] text-black shadow-[0_4px_20px_rgba(230,168,34,0.4)]" 
-                                : "bg-white/10 text-white/60 hover:bg-white/20 shadow-[0_4px_16px_rgba(0,0,0,0.4)]"
-                        }`}
-                    >
-                        {isChatOpen ? "✖" : "💬"}
-                    </button>
-                </div>
-            )}
-
-            {!isJoinedVoice && (
-                <div className="fixed bottom-6 right-6 bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
-                    <span className="w-2 h-2 rounded-full bg-yellow-500/50"></span>
-                    Đang kết nối voice...
-                </div>
-            )}
-
-            {/* Chat box */}
-            <div className={`fixed bottom-24 right-6 w-[340px] z-[55] transition-all duration-300 ${isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-                {connection && (
-                    <ChatBox
-                        connection={connection}
-                        roomId={roomId}
-                        currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
-                        playerCount={Object.keys(roomState?.players || {}).length}
-                    />
-                )}
-            </div>
         </div>
     );
 }
