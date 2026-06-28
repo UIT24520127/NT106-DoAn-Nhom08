@@ -31,7 +31,8 @@ export default function LoginPage() {
   const [googleNamePrompt, setGoogleNamePrompt] = useState({
     isOpen: false,
     uid: "",
-    defaultName: ""
+    defaultName: "",
+    idToken: ""
   });
   const [googleNewName, setGoogleNewName] = useState("");
 
@@ -110,35 +111,15 @@ export default function LoginPage() {
         console.log("Đã đăng nhập Google, userId:", user.uid);
         showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
       } else if (checkRes.status === 404) {
-        saveToken(idToken);
-        sessionStorage.setItem("userId", user.uid);
+        // Bắt buộc hỏi tên cho user mới chưa có trong hệ thống, không lưu token ngay để tránh bị redirect
         const displayName = user.displayName || "Google User";
-        try {
-          const syncRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/auth/google-sync`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uid: user.uid, username: displayName }),
-          });
-
-          if (syncRes.status === 409) {
-            setGoogleNamePrompt({
-              isOpen: true,
-              uid: user.uid,
-              defaultName: displayName
-            });
-            setGoogleNewName(displayName);
-            return;
-          }
-
-          if (syncRes.ok) {
-            showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
-          } else {
-            const data = await syncRes.json();
-            showPopup("Lỗi", data.message, false);
-          }
-        } catch (err) {
-          showPopup("Lỗi kết nối", "Không thể kết nối đến Server C#.", false);
-        }
+        setGoogleNamePrompt({
+          isOpen: true,
+          uid: user.uid,
+          defaultName: displayName,
+          idToken: idToken
+        });
+        setGoogleNewName(displayName);
       } else {
         showPopup("Lỗi kết nối", "Không thể kiểm tra thông tin tài khoản.", false);
       }
@@ -173,8 +154,12 @@ export default function LoginPage() {
       if (syncRes.status === 409) {
         showPopup("Lỗi", data.message, false);
       } else if (syncRes.ok) {
-        setGoogleNamePrompt({ isOpen: false, uid: "", defaultName: "" });
+        if (googleNamePrompt.idToken) {
+          saveToken(googleNamePrompt.idToken);
+        }
+        sessionStorage.setItem("userId", googleNamePrompt.uid);
         sessionStorage.setItem("username", googleNewName.trim());
+        setGoogleNamePrompt({ isOpen: false, uid: "", defaultName: "", idToken: "" });
         showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
       } else {
         showPopup("Lỗi", data.message, false);
@@ -435,7 +420,7 @@ export default function LoginPage() {
           <div className="bg-[#fcf8e8] w-full max-w-sm rounded-xl shadow-2xl p-6 border-2 border-[#d3b88b] animate-scale-in">
             <h2 className="text-xl font-bold text-[#3e2723] text-center mb-4">Nhập Tên Hiển Thị</h2>
             <p className="text-sm text-[#6d4c41] text-center mb-4">
-              Tên hiển thị mặc định của bạn đã bị trùng. Vui lòng chọn một tên khác để tiếp tục đăng nhập!
+              Chào mừng tân binh! Vui lòng chọn một tên hiển thị để sử dụng trong game.
             </p>
             <form onSubmit={handleGoogleNameSubmit} className="flex flex-col gap-4">
               <input
