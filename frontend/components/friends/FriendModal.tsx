@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X, Users, Search, Mail, ArrowRight, UserCheck } from "lucide-react";
+import { getSfxUiVolume } from "@/lib/soundSettings";
 import FriendList from "@/components/friends/FriendList";
 import FriendSearch from "@/components/friends/FriendSearch";
 import FriendRequests from "@/components/friends/FriendRequests";
@@ -28,6 +29,9 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 // Bộ tổng hợp âm thanh retro
 const playSound = (type: "click" | "open") => {
   try {
+    const vol = getSfxUiVolume();
+    if (vol <= 0) return;
+
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
@@ -37,16 +41,16 @@ const playSound = (type: "click" | "open") => {
     if (type === "click") {
       osc.frequency.setValueAtTime(800, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.05);
-      gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+      gain.gain.setValueAtTime(0.08 * vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01 * vol, audioCtx.currentTime + 0.05);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.05);
     } else if (type === "open") {
       osc.type = "triangle";
       osc.frequency.setValueAtTime(400, audioCtx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.005, audioCtx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.1 * vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01 * vol, audioCtx.currentTime + 0.15);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.15);
     }

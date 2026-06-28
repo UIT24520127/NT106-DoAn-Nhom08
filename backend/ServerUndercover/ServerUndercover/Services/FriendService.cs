@@ -203,7 +203,8 @@ namespace ServerUndercover.Services
             var tasks = snap1.Documents.Concat(snap2.Documents).Select(async doc =>
             {
                 var data = doc.ToDictionary();
-                string friendId = data["requesterId"].ToString() == userId ? data["addresseeId"].ToString() : data["requesterId"].ToString();
+                string rawFriendId = data["requesterId"].ToString() == userId ? data["addresseeId"].ToString() : data["requesterId"].ToString();
+                string friendId = rawFriendId.Trim();
 
                 var userSnap = await _firestore.Collection("users").Document(friendId).GetSnapshotAsync();
                 var userInfo = userSnap.Exists ? userSnap.ToDictionary() : new Dictionary<string, object>
@@ -246,7 +247,8 @@ namespace ServerUndercover.Services
             var tasks = snap.Documents.Select(async doc =>
             {
                 var data = doc.ToDictionary();
-                string requesterId = data["requesterId"].ToString();
+                string rawRequesterId = data["requesterId"].ToString();
+                string requesterId = rawRequesterId.Trim();
 
                 var userSnap = await _firestore.Collection("users").Document(requesterId).GetSnapshotAsync();
                 var userInfo = userSnap.Exists ? userSnap.ToDictionary() : new Dictionary<string, object>

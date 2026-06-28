@@ -21,6 +21,8 @@ import { ref, set } from 'firebase/database';
 import { realtimeDb } from '@/lib/firebase';
 import { API_URL, getToken } from '@/lib/auth';
 import { useGameSound } from "@/hooks/useGameSound";
+import SettingsModal from "@/components/SettingsModal";
+import { getVoiceOutputVolume, subscribeSound } from "@/lib/soundSettings";
 
 type PeerInstance = any;
 
@@ -231,6 +233,21 @@ export default function GameRoomPage() {
     const [currentUser, setCurrentUser] = useState<string>("");
     const [currentUserId, setCurrentUserId] = useState<string>("");
     const [isChatOpen, setIsChatOpen] = useState(false);
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+    // Lắng nghe thay đổi âm lượng voice output
+    useEffect(() => {
+        const updateVoiceVols = () => {
+            const vol = getVoiceOutputVolume();
+            Object.values(remoteAudios.current).forEach(audio => {
+                audio.volume = vol;
+            });
+        };
+        // Áp dụng ngay khi mount
+        updateVoiceVols();
+        // Lắng nghe thay đổi từ SettingsModal
+        return subscribeSound(updateVoiceVols);
+    }, []);
 
     // ── Settings ────────────────────────────
     const [showSettings, setShowSettings] = useState(false);
@@ -261,8 +278,20 @@ export default function GameRoomPage() {
         console.log(`[VOICE] createPeer -> ${targetId} | initiator=${initiator} | có mic stream=${hasStream}`);
         const peer = new Peer({
             initiator,
-            trickle: false,
+            trickle: true, // gửi offer/candidate ngay -> nối nhanh hơn nhiều (không chờ gom hết ICE/TURN)
             stream: userStream.current || undefined,
+            config: {
+                iceServers: [
+                    // STUN: tìm IP công khai (đủ cho NAT thường)
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun.relay.metered.ca:80' },
+                    // TURN Metered: relay media khi P2P trực tiếp bị NAT/firewall chặn
+                    { urls: 'turn:global.relay.metered.ca:80', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
+                    { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
+                    { urls: 'turn:global.relay.metered.ca:443', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
+                    { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
+                ],
+            },
         });
         peer.on('signal', async (data: any) => {
             console.log(`[VOICE] gửi signal -> ${targetId} (${data?.type || 'candidate'})`);
@@ -282,7 +311,7 @@ export default function GameRoomPage() {
             }
             audio.srcObject = stream;
             audio.muted = !isSpeakerOn;
-            audio.volume = 1;
+            audio.volume = getVoiceOutputVolume();
             audio.play()
                 .then(() => console.log(`[VOICE] ▶️ đang phát audio của ${targetId}`))
                 .catch(err => console.warn(`[VOICE] ⚠️ autoplay bị chặn (${targetId}):`, err?.name || err));
@@ -552,7 +581,7 @@ export default function GameRoomPage() {
         <>
             {/* Thanh điều khiển cố định góc TRÊN PHẢI: Loa - Mic - Chat */}
             {isJoinedVoice ? (
-                <div className="fixed top-6 right-6 z-[70] flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+                <div className="fixed top-6 right-6 z-[500] flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
                     <button
                         onClick={toggleSpeaker}
                         title={isSpeakerOn ? "Tắt loa" : "Bật loa"}
@@ -580,16 +609,25 @@ export default function GameRoomPage() {
                     >
                         <MessageSquare size={20} />
                     </button>
+                    <button
+                        onClick={() => setShowSettingsModal(true)}
+                        title="Cài đặt"
+                        className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
+                            showSettingsModal ? "bg-[#e6a822] text-black" : "bg-white/10 text-white/70 hover:bg-white/20"
+                        }`}
+                    >
+                        <Settings size={20} />
+                    </button>
                 </div>
             ) : (
-                <div className="fixed top-6 right-6 z-[70] bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
+                <div className="fixed top-6 right-6 z-[500] bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
                     <span className="w-2 h-2 rounded-full bg-yellow-500/50"></span>
                     Đang kết nối voice...
                 </div>
             )}
 
             {/* Chat box mở XUỐNG dưới thanh điều khiển */}
-            <div className={`fixed top-24 right-6 w-[340px] z-[65] transition-all duration-300 ${isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+            <div className={`fixed top-24 right-6 w-[340px] z-[499] transition-all duration-300 ${isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
                 {connection && (
                     <ChatBox
                         connection={connection}
@@ -606,6 +644,7 @@ export default function GameRoomPage() {
         <>
             {confirmLeaveOverlay}
             {voiceControls}
+            {showSettingsModal && <SettingsModal onClose={() => setShowSettingsModal(false)} />}
         </>
     );
 
@@ -856,6 +895,10 @@ export default function GameRoomPage() {
             const remaining = data.remainingMs ?? ((data.duration ?? 30) * 1000);
             setTurnEndTime(Date.now() + remaining);
             setShowWhiteHatGuess(false); // Fix: always hide White Hat overlay when a new turn starts
+            
+            // Bắt buộc chuyển sang describing ngay khi server thực sự bắt đầu đếm giờ (sửa lỗi hiện 28s ở vòng 1)
+            setGamePhase('describing');
+            setIsWaitingForTurnOrder(false);
         });
 
         // 4. Lượt nói kết thúc / skip
