@@ -569,7 +569,7 @@ export default function GameRoomPage() {
         <>
             {/* Thanh điều khiển cố định góc TRÊN PHẢI: Loa - Mic - Chat */}
             {isJoinedVoice ? (
-                <div className="fixed top-6 right-6 z-[70] flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+                <div className="fixed top-6 right-6 z-[500] flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
                     <button
                         onClick={toggleSpeaker}
                         title={isSpeakerOn ? "Tắt loa" : "Bật loa"}
@@ -608,14 +608,14 @@ export default function GameRoomPage() {
                     </button>
                 </div>
             ) : (
-                <div className="fixed top-6 right-6 z-[70] bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
+                <div className="fixed top-6 right-6 z-[500] bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
                     <span className="w-2 h-2 rounded-full bg-yellow-500/50"></span>
                     Đang kết nối voice...
                 </div>
             )}
 
             {/* Chat box mở XUỐNG dưới thanh điều khiển */}
-            <div className={`fixed top-24 right-6 w-[340px] z-[65] transition-all duration-300 ${isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
+            <div className={`fixed top-24 right-6 w-[340px] z-[499] transition-all duration-300 ${isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'}`}>
                 {connection && (
                     <ChatBox
                         connection={connection}
