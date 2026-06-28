@@ -238,7 +238,7 @@ export default function LoginPage() {
     <div
       className="relative h-screen w-screen flex items-center justify-center bg-gray-900 overflow-hidden"
       style={{
-        backgroundImage: "url('/bg.png')",
+        backgroundImage: "url('/bg.jpg')",
         backgroundSize: "cover",
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat"

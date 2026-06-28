@@ -172,7 +172,7 @@ export default function RoomPage() {
 
   const roomCode = Array.isArray(roomId) ? roomId[0] : String(roomId ?? "");
   const backgroundImage = useMemo(() => {
-    const images = ["/bg1.jpg", "/bg2.jpg", "/bg3.jpg", "/bg4.png"];
+    const images = ["/bg1.jpg", "/bg2.jpg", "/bg3.jpg", "/bg4.jpg"];
     const hash = roomCode.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
     return images[hash % images.length];
   }, [roomCode]);

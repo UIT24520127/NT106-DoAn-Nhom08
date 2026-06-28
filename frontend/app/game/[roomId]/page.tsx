@@ -85,7 +85,7 @@ interface LoadingSyncState {
     activePlayerIds: string[];
 }
 
-const GAME_BACKGROUNDS = ['/bg1.jpg', '/bg2.jpg', '/bg3.jpg', '/bg4.png'];
+const GAME_BACKGROUNDS = ['/bg1.jpg', '/bg2.jpg', '/bg3.jpg', '/bg4.jpg'];
 
 // ================================
 // Notification toast
@@ -627,17 +627,14 @@ export default function GameRoomPage() {
     }, [isWaitingForTurnOrder]);
 
     const preloadGameAssets = useCallback(async (imageUrl: string) => {
-        if (typeof window === "undefined") return;
-        await Promise.allSettled(
-            GAME_BACKGROUNDS.concat(imageUrl)
-                .filter((url, index, list) => list.indexOf(url) === index)
-                .map(url => new Promise<void>((resolve) => {
-                    const img = new Image();
-                    img.onload = () => resolve();
-                    img.onerror = () => resolve();
-                    img.src = url;
-                }))
-        );
+        if (typeof window === "undefined" || !imageUrl) return;
+        // Chỉ preload ĐÚNG ảnh nền đang dùng (không tải cả 4 ảnh gây lag).
+        await new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            img.src = imageUrl;
+        });
     }, []);
 
     // ================================

@@ -281,7 +281,7 @@ export default function MainMenu() {
   }, [hubConnection]);
 
   return (
-    <div className="relative h-screen w-screen bg-[url('/bg.png')] bg-cover bg-center overflow-hidden">
+    <div className="relative h-screen w-screen bg-[url('/bg.jpg')] bg-cover bg-center overflow-hidden">
 
       {/* TIÊU ĐỀ GAME */}
       <div className={`absolute top-[8%] left-1/2 -translate-x-1/2 z-30 flex flex-col items-center text-center transition-all duration-1000 ease-out
