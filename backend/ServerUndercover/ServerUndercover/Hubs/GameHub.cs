@@ -151,19 +151,14 @@ namespace ServerUndercover.Hubs
 
         private async Task CloseLoadingAndRevealRoles(Room room)
         {
-            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", $"DEBUG: CloseLoadingAndRevealRoles entered! Phase: {room.Phase}");
-            
             lock (room)
             {
                 if (room.LoadingClosed || room.Phase != GamePhase.Loading) 
                 {
-                    _ = _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", $"DEBUG: Early exit. LoadingClosed: {room.LoadingClosed}, Phase: {room.Phase}");
                     return;
                 }
                 room.LoadingClosed = true;
             }
-
-            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", $"DEBUG: Past lock. TimedOut Check...");
             var timedOutPlayers = room.Players.Values
                 .Where(p => !room.LoadingReadyPlayerIds.ContainsKey(p.UserId))
                 .ToList();
@@ -203,15 +198,10 @@ namespace ServerUndercover.Hubs
                 player.IsReady = false;
             }
 
-            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Updating Session Phase...");
             await _roomManager.UpdateGameSessionPhaseAsync(room);
-            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Broadcasting Loading...");
             await BroadcastLoadingProgress(room);
-            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Sending Room Updated...");
             await SendRoomUpdatedToGroup(room.RoomId, room);
-            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: Sending Secrets...");
             await SendSecretsToRoom(room);
-            await _hubContext.Clients.Group(room.RoomId).SendAsync("RoomError", "DEBUG: CloseLoadingAndRevealRoles FINISHED!");
         }
 
         private async Task CloseLoadingAfterTimeout(string roomId, DateTime loadingStartedAt)
@@ -338,7 +328,7 @@ namespace ServerUndercover.Hubs
             await ResolveVotingPhase(roomId);
         }
 
-        private async Task EndWhiteHatGuessAfterTimeout(string roomId, long endTime)
+        private async Task EndWhiteHatGuessAfterTimeout(string roomId, long endTime, string targetUserId)
         {
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var delayMs = endTime - now;
@@ -351,7 +341,7 @@ namespace ServerUndercover.Hubs
             if (room == null || room.Phase != GamePhase.WhiteHatGuess || room.WhiteHatEndTime != endTime)
                 return;
 
-            var player = room.Players.Values.FirstOrDefault(p => p.Role == "WhiteHat");
+            if (!room.Players.TryGetValue(targetUserId, out var player)) return;
             if (player == null) return;
 
             player.IsEliminated = true;
@@ -365,6 +355,13 @@ namespace ServerUndercover.Hubs
             {
                 userId = player.UserId,
                 displayName = player.DisplayName
+            });
+
+            await _hubContext.Clients.Group(roomId).SendAsync("ReceiveMessage", new
+            {
+                User = "Hệ thống",
+                Content = $"{player.DisplayName} đã bị loại do quá thời gian đoán từ khóa.",
+                Timestamp = DateTime.Now.ToString("HH:mm")
             });
 
             var winCheck = _roomManager.CheckWinConditions(roomId);
@@ -412,7 +409,9 @@ namespace ServerUndercover.Hubs
         {
             return Clients.Group(roomId).SendAsync("VoteUpdated", new
             {
-                voteCounts = room.Players.Values.ToDictionary(p => p.UserId, p => p.VoteCount)
+                voteCounts = room.Players.Values.ToDictionary(p => p.UserId, p => p.VoteCount),
+                totalVotesCast = room.Votes.Count,
+                votes = room.Votes // Công khai phiếu bầu
             });
         }
 
@@ -448,6 +447,13 @@ namespace ServerUndercover.Hubs
         {
             if (resolution.EliminatedUserId == null)
                 return Task.CompletedTask;
+
+            _ = _hubContext.Clients.Group(roomId).SendAsync("ReceiveMessage", new
+            {
+                User = "Hệ thống",
+                Content = $"{resolution.EliminatedDisplayName} đã bị loại do có số phiếu vote cao nhất.",
+                Timestamp = DateTime.Now.ToString("HH:mm")
+            });
 
             return _hubContext.Clients.Group(roomId).SendAsync("PlayerEliminated", new
             {
@@ -496,8 +502,16 @@ namespace ServerUndercover.Hubs
                         var room = _roomManager.GetRoom(roomId);
                         if (room != null && (room.State == RoomState.Waiting || room.State == RoomState.Finished))
                         {
+                            string leftPlayerName = room.Players.TryGetValue(userId, out var p) ? p.DisplayName : "Một người chơi";
                             _roomManager.LeaveRoom(userId);
                             await Clients.Group(roomId).SendAsync("RoomUpdated", room);
+                            await Clients.Group(roomId).SendAsync("PlayerLeft", new { userId, displayName = leftPlayerName });
+                            await Clients.Group(roomId).SendAsync("ReceiveMessage", new
+                            {
+                                User = "Hệ thống",
+                                Content = $"{leftPlayerName} đã rời phòng.",
+                                Timestamp = DateTime.Now.ToString("HH:mm")
+                            });
                         }
                     }
                 }
@@ -579,14 +593,56 @@ namespace ServerUndercover.Hubs
                 await Groups.RemoveFromGroupAsync(connectionId, roomId);
             }
 
+            var oldRoom = _roomManager.GetRoom(roomId);
+            string leftPlayerName = oldRoom?.Players.TryGetValue(userId, out var p) == true ? p.DisplayName : "Một người chơi";
+
             var updatedRoom = _roomManager.LeaveRoom(userId);
 
             if (updatedRoom != null) // Room still exists
             {
                 await SendRoomUpdatedToGroup(roomId, updatedRoom);
+                await Clients.Group(roomId).SendAsync("PlayerLeft", new { userId, displayName = leftPlayerName });
+                await Clients.Group(roomId).SendAsync("ReceiveMessage", new
+                {
+                    User = "Hệ thống",
+                    Content = $"{leftPlayerName} đã rời phòng.",
+                    Timestamp = DateTime.Now.ToString("HH:mm")
+                });
                 if (updatedRoom.IsPublic)
                 {
                     await BroadcastPublicRooms();
+                }
+
+                if (updatedRoom.State == RoomState.Playing)
+                {
+                    var winCheck = _roomManager.CheckWinConditions(roomId);
+                    if (winCheck.IsGameOver)
+                    {
+                        updatedRoom.Phase = GamePhase.GameEnd;
+                        updatedRoom.State = RoomState.Finished;
+                        await _roomManager.DeleteGameSessionAsync(updatedRoom);
+                        await Clients.Group(roomId).SendAsync("GameEnded", new
+                        {
+                            winner = winCheck.WinnerRole,
+                            civilianWord = updatedRoom.Players.Values.FirstOrDefault(player => player.Role == "Civilian")?.Word,
+                            players = updatedRoom.Players.Values.Select(player => new
+                            {
+                                userId = player.UserId,
+                                displayName = player.DisplayName,
+                                role = player.Role,
+                                isEliminated = player.IsEliminated
+                            }).ToList()
+                        });
+                    }
+                    else if (updatedRoom.Phase == GamePhase.Voting)
+                    {
+                        // Check if voting phase should end because the total alive players decreased
+                        int totalVotes = updatedRoom.Votes.Count;
+                        if (totalVotes == updatedRoom.Players.Count(p => !p.Value.IsEliminated))
+                        {
+                            await ResolveVotingPhase(roomId);
+                        }
+                    }
                 }
             }
             else // Room was destroyed
@@ -804,6 +860,7 @@ namespace ServerUndercover.Hubs
             if (readyCount >= totalCount)
             {
                 await Clients.Group(roomId).SendAsync("AllPlayersReady");
+                await Task.Delay(3000); // Đợi hiệu ứng 3 giây bên frontend
                 await StartActualGameLoop(room);
             }
         }
@@ -1086,6 +1143,29 @@ namespace ServerUndercover.Hubs
             await BroadcastVoteCounts(roomId, room);
         }
 
+        public async Task RevokeVote()
+        {
+            string userId = GetUserId();
+            string? roomId = _roomManager.GetUserRoomId(userId);
+            if (roomId == null) return;
+
+            var room = _roomManager.GetRoom(roomId);
+            if (room == null)
+            {
+                await Clients.Caller.SendAsync("RoomError", "Phòng không tồn tại.");
+                return;
+            }
+
+            var result = _roomManager.RevokeVote(roomId, userId);
+            if (!result.Success)
+            {
+                await Clients.Caller.SendAsync("RoomError", result.ErrorMessage);
+                return;
+            }
+
+            await BroadcastVoteCounts(roomId, room);
+        }
+
         public async Task UseWhiteHatGuess(string guessedWord)
         {
             await GuessWord(guessedWord);
@@ -1147,13 +1227,22 @@ namespace ServerUndercover.Hubs
 
             if (room.Players.TryGetValue(userId, out var player) && !player.IsEliminated)
             {
-                room.SkipVoteRequests.TryAdd(userId, true);
+                if (room.SkipVoteRequests.ContainsKey(userId))
+                {
+                    room.SkipVoteRequests.TryRemove(userId, out _);
+                }
+                else
+                {
+                    room.SkipVoteRequests.TryAdd(userId, true);
+                }
+
                 int aliveCount = room.Players.Values.Count(p => !p.IsEliminated);
                 
                 await Clients.Group(roomId).SendAsync("SkipVoteCountUpdated", new
                 {
                     skipCount = room.SkipVoteRequests.Count,
-                    requiredCount = (aliveCount / 2) + 1
+                    requiredCount = (aliveCount / 2) + 1,
+                    skipPlayerIds = room.SkipVoteRequests.Keys.ToList()
                 });
 
                 if (room.SkipVoteRequests.Count > aliveCount / 2)
@@ -1177,13 +1266,22 @@ namespace ServerUndercover.Hubs
 
             if (room.Players.TryGetValue(userId, out var player) && !player.IsEliminated)
             {
-                room.ExtendVoteRequests.TryAdd(userId, true);
+                if (room.ExtendVoteRequests.ContainsKey(userId))
+                {
+                    room.ExtendVoteRequests.TryRemove(userId, out _);
+                }
+                else
+                {
+                    room.ExtendVoteRequests.TryAdd(userId, true);
+                }
+
                 int aliveCount = room.Players.Values.Count(p => !p.IsEliminated);
                 
                 await Clients.Group(roomId).SendAsync("ExtendVoteCountUpdated", new
                 {
                     extendCount = room.ExtendVoteRequests.Count,
-                    requiredCount = (aliveCount / 2) + 1
+                    requiredCount = (aliveCount / 2) + 1,
+                    extendPlayerIds = room.ExtendVoteRequests.Keys.ToList()
                 });
 
                 if (room.ExtendVoteRequests.Count > aliveCount / 2 && !room.HasExtendedVote)
@@ -1239,14 +1337,20 @@ namespace ServerUndercover.Hubs
                 // Nếu Mũ Trắng bị chết HOẶC game kết thúc mà Mũ Trắng vẫn còn sống (hấp hối)
                 if (isWhiteHatEliminated || (winCheck.IsGameOver && hasAliveWhiteHat))
                 {
+                    // Lấy chính xác Mũ Trắng nào được đoán
+                    RoomPlayer? whiteHatP = isWhiteHatEliminated 
+                        ? eliminatedPlayer 
+                        : room.Players.Values.FirstOrDefault(p => p.Role == "WhiteHat" && !p.IsEliminated);
+
+                    if (whiteHatP == null) return;
+
                     // Chuyển sang đoán từ NGAY LẬP TỨC (không hiện màn hình RoundTransitionScreen chờ 5s)
                     room.Phase = GamePhase.WhiteHatGuess;
                     room.WhiteHatEndTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (20 * 1000);
-                    _ = EndWhiteHatGuessAfterTimeout(roomId, room.WhiteHatEndTime);
+                    _ = EndWhiteHatGuessAfterTimeout(roomId, room.WhiteHatEndTime, whiteHatP.UserId);
 
                     await _roomManager.UpdateGameSessionPhaseAsync(room);
                     await SendRoomUpdatedToGroup(roomId, room);
-                    var whiteHatP = room.Players.Values.FirstOrDefault(p => p.Role == "WhiteHat");
                     await _hubContext.Clients.Group(roomId).SendAsync("WhiteHatOpportunity", new
                     {
                         pendingWinner = winCheck.WinnerRole,
@@ -1277,7 +1381,6 @@ namespace ServerUndercover.Hubs
                     });
                     return;
                 }
-
                 // Nếu là người bình thường chết (không kích hoạt đoán từ) VÀ chưa kết thúc game
                 await BroadcastRoundTransition(roomId, room, resolution);
 
@@ -1368,6 +1471,13 @@ namespace ServerUndercover.Hubs
                     displayName = player.DisplayName
                 });
 
+                await Clients.Group(roomId).SendAsync("ReceiveMessage", new
+                {
+                    User = "Hệ thống",
+                    Content = $"{player.DisplayName} đã bị loại do đoán sai từ khóa.",
+                    Timestamp = DateTime.Now.ToString("HH:mm")
+                });
+
                 // Kiểm tra lại điều kiện thắng (không còn WhiteHat)
                 var winCheck = _roomManager.CheckWinConditions(roomId);
                 if (winCheck.IsGameOver)
@@ -1393,7 +1503,7 @@ namespace ServerUndercover.Hubs
                 {
                     if (room.Phase == GamePhase.WhiteHatGuess)
                     {
-                        // Đoán thất bại sau khi bị vote out -> Trình chiếu RoundTransitionScreen cho người vừa chết (Mũ Trắng)
+                        room.Phase = GamePhase.Loading; // Prevent EndWhiteHatGuessAfterTimeout from double-executing
                         var res = new RoomManagerService.VoteResolution(false, player.UserId, player.DisplayName);
                         await BroadcastRoundTransition(roomId, room, res);
                         await Task.Delay((room.Settings.RoundTransitionDuration * 1000) + 1000);

@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, Lock, Mic, MicOff, Send, SkipForward, Volume2, VolumeX } from "lucide-react";
+import { useGameSound } from "@/hooks/useGameSound";
 
 interface DescribingPlayer {
   userId: string;
   displayName: string;
   isEliminated: boolean;
+  avatar?: string;
   isMicActive?: boolean;
 }
 
@@ -67,9 +69,14 @@ export default function DescribingPhase({
   onSkipTurn,
   onSubmitDescription,
   backgroundImage,
-  typingSync,
+  typingSync = {},
   onTyping,
 }: DescribingPhaseProps) {
+  const gameSounds = useGameSound();
+  const useGameSoundRef = useRef(gameSounds);
+  useEffect(() => { useGameSoundRef.current = gameSounds; }, [gameSounds]);
+
+  const { playClick, playAlert } = gameSounds;
   const [timeLeft, setTimeLeft] = useState(describeDuration);
   const [wordVisible, setWordVisible] = useState(false);
   const [descriptionText, setDescriptionText] = useState("");
@@ -118,25 +125,31 @@ export default function DescribingPhase({
   useEffect(() => {
     let initialRemaining = describeDuration;
     if (turnEndTime) {
-      initialRemaining = Math.max(0, Math.floor((turnEndTime - Date.now()) / 1000));
+      initialRemaining = Math.max(0, Math.ceil((turnEndTime - Date.now()) / 1000));
     }
     setTimeLeft(initialRemaining);
 
     const interval = window.setInterval(() => {
       let remaining = describeDuration;
       if (turnEndTime) {
-        remaining = Math.max(0, Math.floor((turnEndTime - Date.now()) / 1000));
+        remaining = Math.max(0, Math.ceil((turnEndTime - Date.now()) / 1000));
       } else {
         // Fallback if turnEndTime is somehow not provided (e.g. waiting for TurnStarted)
         // Just keep showing the describeDuration, don't tick down yet
         return;
       }
-      
+
       setTimeLeft(remaining);
       
+      // Phát âm thanh tick trong 5 giây cuối
+      if (remaining <= 5 && remaining > 0) {
+        const soundHook = useGameSoundRef.current; // Cần dùng ref hoặc hook ngoài scope
+        if (soundHook && soundHook.playTick) soundHook.playTick();
+      }
+
       if (remaining === 0) {
         window.clearInterval(interval);
-        
+
         // Auto-submit logic when timer naturally hits 0
         if (isMyTurnRef.current && !hasAutoSubmitted.current) {
           hasAutoSubmitted.current = true;
@@ -176,6 +189,7 @@ export default function DescribingPhase({
   const handleSkip = () => {
     if (skipCooldown.current || !isMyTurn) return;
     skipCooldown.current = true;
+    playClick();
     onSkipTurn();
     window.setTimeout(() => {
       skipCooldown.current = false;
@@ -186,9 +200,11 @@ export default function DescribingPhase({
     if (!isMyTurn) return;
     const text = descriptionText.trim();
     if (!text) {
+      playAlert();
       setSpeechError("Nhap mo ta truoc khi gui.");
       return;
     }
+    playClick();
     recognitionRef.current?.stop?.();
     setIsListening(false);
     onSubmitDescription(text, descriptionSource);
@@ -198,6 +214,7 @@ export default function DescribingPhase({
 
   const startSpeechToText = () => {
     if (!isMyTurn || typeof window === "undefined") return;
+    playClick();
 
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -357,7 +374,7 @@ export default function DescribingPhase({
         </div>
 
         <button
-          onClick={() => setWordVisible(v => !v)}
+          onClick={() => { playClick(); setWordVisible(v => !v); }}
           style={{
             justifySelf: "end",
             minWidth: 164,
@@ -468,47 +485,47 @@ export default function DescribingPhase({
                 ["--offset" as any]: offset,
                 ["--scale" as any]: scale,
                 position: "absolute",
-                transform: `translateX(${offset * 168}px) scale(${scale})`,
+                transform: `translateX(${offset * 200}px) scale(${scale})`,
                 opacity,
                 zIndex: isActive ? 10 : 5 - abs,
                 transition: "all 0.48s cubic-bezier(0.34,1.56,0.64,1)",
               }}
             >
               {typingSync?.[player.userId]?.text && (
-                 <div style={{
-                    position: 'absolute',
-                    bottom: '90%',
-                    left: '75%',
-                    background: typingSync[player.userId].isFinal 
-                        ? 'linear-gradient(135deg, rgba(34,197,94,0.9), rgba(22,163,74,0.95))' 
-                        : 'linear-gradient(135deg, rgba(14,23,38,0.95), rgba(8,14,24,0.98))',
-                    color: typingSync[player.userId].isFinal ? '#000' : '#22d3ee',
-                    border: `1px solid ${typingSync[player.userId].isFinal ? '#4ade80' : 'rgba(34,211,238,0.4)'}`,
-                    padding: '10px 18px',
-                    borderRadius: '16px 16px 16px 4px',
-                    fontWeight: 800,
-                    fontSize: 14,
-                    pointerEvents: 'none',
-                    boxShadow: typingSync[player.userId].isFinal 
-                        ? '0 8px 24px rgba(34,197,94,0.3)' 
-                        : '0 8px 24px rgba(34,211,238,0.2)',
-                    zIndex: 20,
-                    transition: 'all 0.2s',
-                    width: 'max-content',
-                    maxWidth: 220,
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                 }}>
-                   {typingSync[player.userId].text}
-                   {!typingSync[player.userId].isFinal && <span style={{ animation: 'dp-blink 1s infinite', marginLeft: 2, color: '#fff' }}>|</span>}
-                 </div>
+                <div style={{
+                  position: 'absolute',
+                  bottom: '90%',
+                  left: '75%',
+                  background: typingSync[player.userId].isFinal
+                    ? 'linear-gradient(135deg, rgba(34,197,94,0.9), rgba(22,163,74,0.95))'
+                    : 'linear-gradient(135deg, rgba(14,23,38,0.95), rgba(8,14,24,0.98))',
+                  color: typingSync[player.userId].isFinal ? '#000' : '#22d3ee',
+                  border: `1px solid ${typingSync[player.userId].isFinal ? '#4ade80' : 'rgba(34,211,238,0.4)'}`,
+                  padding: '10px 18px',
+                  borderRadius: '16px 16px 16px 4px',
+                  fontWeight: 800,
+                  fontSize: 14,
+                  pointerEvents: 'none',
+                  boxShadow: typingSync[player.userId].isFinal
+                    ? '0 8px 24px rgba(34,197,94,0.3)'
+                    : '0 8px 24px rgba(34,211,238,0.2)',
+                  zIndex: 20,
+                  transition: 'all 0.2s',
+                  width: 'max-content',
+                  maxWidth: 220,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}>
+                  {typingSync[player.userId].text}
+                  {!typingSync[player.userId].isFinal && <span style={{ animation: 'dp-blink 1s infinite', marginLeft: 2, color: '#fff' }}>|</span>}
+                </div>
               )}
               <div
                 style={{
-                  width: isActive ? 210 : 150,
-                  minHeight: isActive ? 244 : 156,
-                  borderRadius: 24,
-                  padding: isActive ? "28px 24px" : "18px 16px",
+                  width: isActive ? 280 : 180,
+                  minHeight: isActive ? 320 : 180,
+                  borderRadius: 32,
+                  padding: isActive ? "36px 24px" : "20px 16px",
                   background: isActive
                     ? "linear-gradient(160deg, rgba(12,25,34,0.78), rgba(8,10,20,0.82))"
                     : "rgba(13,16,28,0.46)",
@@ -518,7 +535,7 @@ export default function DescribingPhase({
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  gap: 14,
+                  gap: 18,
                   animation: isActive ? "dp-card-glow 2.8s ease-in-out infinite" : "none",
                 }}
               >
@@ -526,8 +543,8 @@ export default function DescribingPhase({
                   {isSpeaking && <SpeakingRipple color={isMyTurn ? "#22c55e" : "#22d3ee"} />}
                   <div
                     style={{
-                      width: isActive ? 98 : 60,
-                      height: isActive ? 98 : 60,
+                      width: isActive ? 120 : 70,
+                      height: isActive ? 120 : 70,
                       borderRadius: "50%",
                       background: `radial-gradient(circle at 35% 35%, ${pColor}35, #0b1020)`,
                       border: `3px solid ${pColor}`,
@@ -535,12 +552,17 @@ export default function DescribingPhase({
                       alignItems: "center",
                       justifyContent: "center",
                       color: pColor,
-                      fontSize: isActive ? 38 : 20,
+                      fontSize: isActive ? 48 : 24,
                       fontWeight: 900,
                       boxShadow: isActive ? `0 0 28px ${pColor}66` : "none",
+                      overflow: "hidden",
                     }}
                   >
-                    {player.displayName.charAt(0).toUpperCase()}
+                    {player.avatar ? (
+                      <img src={player.avatar} alt={player.displayName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : (
+                      player.displayName.charAt(0).toUpperCase()
+                    )}
                   </div>
                 </div>
 
@@ -549,7 +571,7 @@ export default function DescribingPhase({
                     style={{
                       color: "#fff",
                       fontWeight: 900,
-                      fontSize: isActive ? 16 : 12,
+                      fontSize: isActive ? 18 : 13,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
@@ -567,12 +589,12 @@ export default function DescribingPhase({
                 {isActive ? (
                   <div
                     style={{
-                      padding: "6px 15px",
+                      padding: "8px 20px",
                       borderRadius: 999,
                       background: "rgba(34,211,238,0.12)",
                       border: "1px solid rgba(34,211,238,0.32)",
                       color: "#22d3ee",
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: 900,
                       letterSpacing: "0.08em",
                     }}
@@ -590,32 +612,7 @@ export default function DescribingPhase({
         })}
       </div>
 
-      {eliminatedPlayers.length > 0 && (
-        <div style={{ width: "min(100%, 860px)", marginTop: 20, zIndex: 1 }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-            {eliminatedPlayers.map(player => (
-              <div
-                key={player.userId}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  borderRadius: 999,
-                  padding: "6px 12px",
-                  background: "rgba(239,68,68,0.08)",
-                  border: "1px solid rgba(239,68,68,0.18)",
-                  color: "rgba(255,255,255,0.42)",
-                  fontSize: 12,
-                  filter: "grayscale(100%)",
-                }}
-              >
-                <span>{player.displayName}</span>
-                <span>Đã bị loại</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       <div
         style={{
@@ -644,13 +641,13 @@ export default function DescribingPhase({
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, color: "rgba(255,255,255,0.42)", fontSize: 12, fontWeight: 800 }}>
                 <Keyboard size={14} />
-                <span>Nhap mo ta ngan gon, hoac dung voice-to-text roi gui.</span>
+                <span>Nhập mô tả ngắn gọn, hoặc dùng voice-to-text rồi gửi.</span>
                 <span style={{ marginLeft: "auto", color: descriptionSource === "speech" ? "#22d3ee" : "rgba(255,255,255,0.3)" }}>
                   {descriptionSource === "speech" ? "VOICE" : "TYPED"}
                 </span>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 10, alignItems: "center" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: 10, alignItems: "center" }}>
                 <input
                   value={descriptionText}
                   onChange={e => {
@@ -660,14 +657,14 @@ export default function DescribingPhase({
                     setSpeechError("");
                     if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
                     typingTimeoutRef.current = window.setTimeout(() => {
-                        onTyping?.(val);
+                      onTyping?.(val);
                     }, 150);
                   }}
                   onKeyDown={e => {
                     if (e.key === "Enter") handleSubmit();
                   }}
                   maxLength={80}
-                  placeholder="Nhap tu/cum tu mo ta..."
+                  placeholder="Nhập từ/cụm từ mô tả..."
                   style={{
                     height: 48,
                     minWidth: 0,
@@ -685,24 +682,7 @@ export default function DescribingPhase({
 
 
 
-                <button
-                  onClick={handleSkip}
-                  title="Bỏ lượt"
-                  style={{
-                    height: 48,
-                    padding: "0 16px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "rgba(255,255,255,0.42)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                  }}
-                >
-                  <SkipForward size={18} />
-                </button>
+
 
                 <button
                   onClick={handleSubmit}
@@ -724,7 +704,7 @@ export default function DescribingPhase({
                     boxShadow: "0 10px 28px rgba(34,197,94,0.28)",
                   }}
                 >
-                  <Send size={16} /> GUI
+                  <Send size={16} /> GỬI
                 </button>
               </div>
 

@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { useGameSound } from "@/hooks/useGameSound";
 
 interface WhiteHatGuessOverlayProps {
   isWhiteHat: boolean;
@@ -16,6 +17,10 @@ export default function WhiteHatGuessOverlay({
   initialTimeLeft = 20,
   whiteHatInfo,
 }: WhiteHatGuessOverlayProps) {
+  const gameSounds = useGameSound();
+  const { playClick, playStart, playAlert } = gameSounds;
+  const gameSoundsRef = useRef(gameSounds);
+
   const [guess, setGuess] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [timeLeft, setTimeLeft] = useState(initialTimeLeft);
@@ -23,10 +28,20 @@ export default function WhiteHatGuessOverlay({
   const [endTime] = useState(() => Date.now() + initialTimeLeft * 1000);
 
   useEffect(() => {
+    gameSoundsRef.current = gameSounds;
+  }, [gameSounds]);
+
+  useEffect(() => {
     if (timeLeft <= 0) return;
     const timer = setInterval(() => {
       const remaining = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
       setTimeLeft(remaining);
+
+      // Play tick sound if White Hat in the last 5 seconds
+      if (isWhiteHat && remaining <= 5 && remaining > 0) {
+        if (gameSoundsRef.current.playTick) gameSoundsRef.current.playTick();
+      }
+
       if (remaining === 0) {
         clearInterval(timer);
       }
@@ -113,6 +128,7 @@ export default function WhiteHatGuessOverlay({
 
   const handleSubmit = () => {
     if (!guess.trim() || submitted) return;
+    playClick();
     setSubmitted(true);
     onGuess(guess.trim());
   };
@@ -190,7 +206,7 @@ export default function WhiteHatGuessOverlay({
             />
             <div style={{ display: "flex", gap: 12 }}>
               <button
-                onClick={onCancel}
+                onClick={() => { playClick(); onCancel(); }}
                 style={{
                   flex: 1, padding: "12px 0", borderRadius: 12, border: "none",
                   background: "rgba(255,255,255,0.1)",

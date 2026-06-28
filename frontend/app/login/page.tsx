@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { saveToken } from "@/lib/auth";
 import { signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
+import { useGameSound } from "@/hooks/useGameSound";
 
 
 export default function LoginPage() {
   const router = useRouter();
+  const { playClick, playAlert } = useGameSound();
 
   useEffect(() => {
     const token = sessionStorage.getItem("token");
@@ -43,6 +45,7 @@ export default function LoginPage() {
   });
 
   const showPopup = (title: string, message: string, isSuccess: boolean = true, redirectOnClose: boolean = false) => {
+    if (!isSuccess) playAlert();
     setPopup({ isOpen: true, title, message, isSuccess, redirectOnClose });
   };
 
@@ -56,6 +59,7 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    playClick();
     if (isLoggingIn) return;
     setIsLoggingIn(true);
     try {
@@ -91,6 +95,7 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    playClick();
     if (isGoogleLoggingIn) return;
     setIsGoogleLoggingIn(true);
     try {
@@ -182,6 +187,7 @@ export default function LoginPage() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    playClick();
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/auth/register`, {
         method: "POST",
@@ -278,6 +284,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoggingIn}
+                onClick={() => playClick()}
                 className={`w-full font-bold py-3 rounded shadow-lg mt-2 transition-transform duration-150 active:scale-95
                   ${isLoggingIn
                     ? 'bg-gray-500 cursor-not-allowed text-white'
@@ -321,7 +328,7 @@ export default function LoginPage() {
             <hr className="border-[#e0d6c8] mb-5 border-t-2" />
 
             <button
-              onClick={() => { setIsRegistering(true); setPassword(""); }}
+              onClick={() => { playClick(); setIsRegistering(true); setPassword(""); }}
               className="w-full bg-[#3e2723] hover:bg-[#2b1b18] text-white font-bold py-3 rounded shadow-lg transition-transform duration-150 active:scale-95"
             >
               TẠO HỒ SƠ MỚI
@@ -373,6 +380,7 @@ export default function LoginPage() {
 
               <button
                 type="submit"
+                onClick={() => playClick()}
                 className="w-full bg-[#9b111e] hover:bg-[#7a0000] text-white font-bold py-3 rounded shadow-lg mt-3 transition-transform duration-150 active:scale-95"
               >
                 XÁC NHẬN TẠO
@@ -381,7 +389,7 @@ export default function LoginPage() {
 
             <div className="text-center mt-5">
               <span
-                onClick={() => setIsRegistering(false)}
+                onClick={() => { playClick(); setIsRegistering(false); }}
                 className="text-[#3e2723] text-sm font-bold cursor-pointer hover:underline"
               >
                 ← Trở lại đăng nhập
@@ -412,7 +420,7 @@ export default function LoginPage() {
 
             {/* Nút đóng */}
             <button
-              onClick={closePopup}
+              onClick={() => { playClick(); closePopup(); }}
               className="w-full bg-[#3e2723] hover:bg-[#2b1b18] text-white font-bold py-2.5 rounded shadow transition-transform duration-150 active:scale-95"
             >
               Đã hiểu
@@ -441,13 +449,14 @@ export default function LoginPage() {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => setGoogleNamePrompt({ isOpen: false, uid: "", defaultName: "" })}
+                  onClick={() => { playClick(); setGoogleNamePrompt({ isOpen: false, uid: "", defaultName: "" }); }}
                   className="flex-1 font-bold py-2.5 rounded bg-gray-300 hover:bg-gray-400 text-gray-800 transition-colors"
                 >
                   HỦY
                 </button>
                 <button
                   type="submit"
+                  onClick={() => playClick()}
                   className="flex-1 font-bold py-2.5 rounded bg-[#9b111e] hover:bg-[#7a0000] text-white transition-colors"
                 >
                   XÁC NHẬN

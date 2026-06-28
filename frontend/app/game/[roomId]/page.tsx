@@ -20,6 +20,7 @@ import WhiteHatGuessOverlay from '@/components/game/WhiteHatGuessOverlay';
 import { ref, set } from 'firebase/database';
 import { realtimeDb } from '@/lib/firebase';
 import { API_URL, getToken } from '@/lib/auth';
+import { useGameSound } from "@/hooks/useGameSound";
 
 type PeerInstance = any;
 
@@ -135,6 +136,24 @@ export default function GameRoomPage() {
     const params = useParams();
     const router = useRouter();
     const roomId = params.roomId as string;
+    
+    const gameSounds = useGameSound();
+    const { playClick, playStart, playReady, playAlert, stopBGM, playGameBGM, stopGameBGM, playLose, playWin } = gameSounds;
+    const gameSoundsRef = useRef(gameSounds);
+
+    useEffect(() => {
+        gameSoundsRef.current = gameSounds;
+    }, [gameSounds]);
+
+    // Dừng nhạc nền Pink Panther khi vào phòng chơi game
+    useEffect(() => {
+        stopBGM();
+        playGameBGM(); // Bắt đầu nhạc game
+        return () => {
+            stopGameBGM(); // Dừng nhạc game khi component bị unmount
+        };
+    }, [stopBGM, playGameBGM, stopGameBGM]);
+
     const [connection, setConnection] = useState<HubConnection | null>(null);
 
     // Tự động cập nhật Trạng thái Presence là In-Match khi bắt đầu vào Game
@@ -171,11 +190,15 @@ export default function GameRoomPage() {
     // ── Voting ──────────────────────────────
     const [voteEndTime, setVoteEndTime] = useState(Date.now() + 60000);
     const [voteCounts, setVoteCounts] = useState<VoteCounts>({});
+    const [realtimeVotes, setRealtimeVotes] = useState<Record<string, string>>({});
+    const [totalVotesCast, setTotalVotesCast] = useState<number>(0);
     const [hasVoted, setHasVoted] = useState(false);
     const [myVoteTarget, setMyVoteTarget] = useState<string | null>(null);
     const [extendVoteCount, setExtendVoteCount] = useState(0);
     const [extendRequiredCount, setExtendRequiredCount] = useState(0);
-    const [hasExtendedVote, setHasExtendedVote] = useState(false);
+    const [hasRequestedExtend, setHasRequestedExtend] = useState(false);
+    const [isTimeExtended, setIsTimeExtended] = useState(false);
+    const [hasSkippedVote, setHasSkippedVote] = useState(false);
     const [skipVoteCount, setSkipVoteCount] = useState(0);
     const [skipRequiredCount, setSkipRequiredCount] = useState(0);
 
@@ -374,7 +397,6 @@ export default function GameRoomPage() {
             await connection.invoke("SubmitVote", targetUserId);
             setMyVoteTarget(targetUserId);
             setHasVoted(true);
-            addNotif(`Đã bầu cho ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
         } catch (e) { console.error("Vote error:", e); }
     };
 
@@ -383,8 +405,17 @@ export default function GameRoomPage() {
         try {
             await connection.invoke("ChangeVote", targetUserId);
             setMyVoteTarget(targetUserId);
-            addNotif(`Đã đổi vote sang ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
+            setHasVoted(true);
         } catch (e) { console.error("ChangeVote error:", e); }
+    };
+
+    const handleRevokeVote = async () => {
+        if (!connection) return;
+        try {
+            await connection.invoke("RevokeVote");
+            setMyVoteTarget(null);
+            setHasVoted(false);
+        } catch (e) { console.error("RevokeVote error:", e); }
     };
 
     const handleSkipVoting = async () => {
@@ -676,6 +707,10 @@ export default function GameRoomPage() {
             if (peer) { try { peer.signal(JSON.parse(signal)); } catch (e) { console.error('[VOICE] signal lỗi:', e); } }
         });
         newConn.on('PlayerDisconnected', (id: string) => { console.log('[VOICE] 📥 PlayerDisconnected:', id); cleanupPeer(id); });
+        newConn.on('PlayerDisconnected', (id: string) => cleanupPeer(id));
+        newConn.on("PlayerLeft", (data: { userId: string, displayName: string }) => {
+            addNotif(`${data.displayName} đã rời phòng.`, 'warning');
+        });
 
         // ── Game phase events ────────────────────
 
@@ -683,20 +718,12 @@ export default function GameRoomPage() {
         newConn.on("ReceiveSecretWord", (data: { role: string; word: string }) => {
             setMySecret(data);
             setGamePhase('roleRevealing');
-            addNotif(data.word
-                ? `Bạn đã nhận từ khóa: ${data.word}`
-                : 'Bạn đã nhận vai trò. Chờ bắt đầu lượt miêu tả.',
-                'info');
         });
 
         // Backward-compat with old event name
         newConn.on("RoleAssigned", (data: { role: string; word: string }) => {
             setMySecret(data);
             setGamePhase('roleRevealing');
-            addNotif(data.word
-                ? `Bạn đã nhận từ khóa: ${data.word}`
-                : 'Bạn đã nhận vai trò. Chờ bắt đầu lượt miêu tả.',
-                'info');
         });
 
         newConn.on("ReturnedToLobby", () => {
@@ -812,16 +839,10 @@ export default function GameRoomPage() {
 
         // 2. Thứ tự lượt nói
         newConn.on("TurnOrderGenerated", (data: { roundNumber: number; turnOrder: string[] }) => {
-            setTypingSync({});
+            setRoundNumber(data.roundNumber);
             setTurnOrder(data.turnOrder);
             setCurrentTurnIndex(0);
-            setRoundNumber(data.roundNumber);
-            setIsWaitingForTurnOrder(false);
-            setLoadingSync(null);
-            setGamePhase('describing');
             setTurnEndTime(0); // Đặt về 0 để DescribingPhase biết là chưa bắt đầu đếm
-            setShowWhiteHatGuess(false);
-            addNotif(`Vòng ${data.roundNumber} bắt đầu! Thứ tự đã được random.`, 'info');
         });
 
         // 3. Lượt nói bắt đầu
@@ -837,16 +858,7 @@ export default function GameRoomPage() {
             // Lấy thời gian còn lại do server gửi (hoặc fallback mặc định) cộng vào Date.now() của máy khách
             const remaining = data.remainingMs ?? ((data.duration ?? 30) * 1000);
             setTurnEndTime(Date.now() + remaining);
-
-            const players = roomStateRef.current ? Object.values(roomStateRef.current.players) : [];
-            const speaker = players.find((p: any) => p.userId === data.currentSpeakerId) as any;
-            if (speaker) {
-                if (data.currentSpeakerId === storedUserId) {
-                    addNotif('Đến lượt bạn miêu tả!', 'result');
-                } else {
-                    addNotif(`Đến lượt ${speaker.displayName} miêu tả.`, 'info');
-                }
-            }
+            setShowWhiteHatGuess(false); // Fix: always hide White Hat overlay when a new turn starts
         });
 
         // 4. Lượt nói kết thúc / skip
@@ -893,33 +905,44 @@ export default function GameRoomPage() {
             setHasVoted(false);
             setMyVoteTarget(null);
             setVoteCounts({});
+            setRealtimeVotes({});
             setExtendVoteCount(0);
             setSkipVoteCount(0);
-            setHasExtendedVote(false);
+            setHasRequestedExtend(false);
+            setIsTimeExtended(false);
+            setHasSkippedVote(false);
             setLoadingSync(null);
             setGamePhase('voting');
-            addNotif('Vòng bình chọn bắt đầu!', 'result');
         });
 
         // 6. Vote count update realtime
-        newConn.on("VoteUpdated", (data: { voteCounts: VoteCounts }) => {
+        newConn.on("VoteUpdated", (data: { voteCounts: VoteCounts, totalVotesCast?: number, votes?: Record<string, string> }) => {
             setVoteCounts(data.voteCounts);
+            if (data.votes) setRealtimeVotes(data.votes);
+            if (data.totalVotesCast !== undefined) {
+                setTotalVotesCast(data.totalVotesCast);
+            }
         });
 
-        newConn.on("ExtendVoteCountUpdated", (data: { extendCount: number; requiredCount: number }) => {
+        newConn.on("ExtendVoteCountUpdated", (data: { extendCount: number; requiredCount: number; extendPlayerIds?: string[] }) => {
             setExtendVoteCount(data.extendCount);
             setExtendRequiredCount(data.requiredCount);
+            if (data.extendPlayerIds) {
+                setHasRequestedExtend(data.extendPlayerIds.includes(storedUserId));
+            }
         });
 
-        newConn.on("SkipVoteCountUpdated", (data: { skipCount: number; requiredCount: number }) => {
+        newConn.on("SkipVoteCountUpdated", (data: { skipCount: number; requiredCount: number; skipPlayerIds?: string[] }) => {
             setSkipVoteCount(data.skipCount);
             setSkipRequiredCount(data.requiredCount);
+            if (data.skipPlayerIds) {
+                setHasSkippedVote(data.skipPlayerIds.includes(storedUserId));
+            }
         });
 
         newConn.on("VoteTimeExtended", (data: { newEndTime: number }) => {
             setVoteEndTime(data.newEndTime);
-            setHasExtendedVote(true);
-            addNotif('Thời gian vote đã được gia hạn thêm 1 phút!', 'info');
+            setIsTimeExtended(true);
         });
 
         newConn.on("PhaseChanged", (data: any) => {
@@ -938,10 +961,15 @@ export default function GameRoomPage() {
                 setHasVoted(false);
                 setMyVoteTarget(null);
                 setVoteCounts({});
+                setRealtimeVotes({});
+                setTotalVotesCast(0);
                 setExtendVoteCount(0);
                 setSkipVoteCount(0);
-                setHasExtendedVote(false);
+                setHasRequestedExtend(false);
+                setIsTimeExtended(false);
+                setHasSkippedVote(false);
                 setLoadingSync(null);
+                setWhiteHatInfo(null);
                 setGamePhase('voting');
             }
             if (phase === 'whitehatguess') {
@@ -971,15 +999,15 @@ export default function GameRoomPage() {
                 countdownDuration: data.countdownDuration,
             });
             setGamePhase('roundTransition');
-
-            if (!data.isTieVote && data.eliminatedPlayer) {
-                addNotif(`${data.eliminatedPlayer.displayName} bị loại với số phiếu cao nhất.`, 'result');
-            } else if (data.isTieVote) {
-                addNotif('Hòa phiếu! Không ai bị loại.', 'warning');
-            }
+            setShowWhiteHatGuess(false); // Fix: hide White Hat overlay during transition
 
             // Update room state players eliminated status
             if (data.eliminatedPlayer) {
+                const storedUserId = sessionStorage.getItem("userId");
+                if (data.eliminatedPlayer.userId === storedUserId) {
+                    if (gameSoundsRef.current.playLose) gameSoundsRef.current.playLose();
+                }
+
                 setRoomState(prev => {
                     if (!prev) return prev;
                     return {
@@ -998,6 +1026,11 @@ export default function GameRoomPage() {
 
         // 8. Player eliminated (có thể server gửi riêng)
         newConn.on("PlayerEliminated", (data: { userId: string; displayName: string }) => {
+            const storedUserId = sessionStorage.getItem("userId");
+            if (data.userId === storedUserId) {
+                if (gameSoundsRef.current.playLose) gameSoundsRef.current.playLose();
+            }
+
             setRoomState(prev => {
                 if (!prev) return prev;
                 return {
@@ -1038,7 +1071,7 @@ export default function GameRoomPage() {
         newConn.on("WhiteHatGuessResult", (data: { isCorrect: boolean, displayName: string }) => {
             setShowWhiteHatGuess(false);
             if (!data.isCorrect) {
-                addNotif(`Mũ Trắng ${data.displayName} đã đoán sai từ khóa và bị loại!`, 'error');
+                addNotif(`${data.displayName} đã đoán sai từ khóa và bị loại!`, 'warning');
             }
         });
 
@@ -1127,6 +1160,7 @@ export default function GameRoomPage() {
             newConn.off('GameStarted');
             newConn.off('AllPlayersReady');
             newConn.off('TurnOrderGenerated');
+            newConn.off('PlayerLeft');
             newConn.off('TurnStarted');
             newConn.off('TurnEnded');
             newConn.off('TurnSkipped');
@@ -1139,8 +1173,13 @@ export default function GameRoomPage() {
             newConn.off('GameEnded');
             newConn.off('ErrorMessage');
             newConn.off('WhiteHatOpportunity');
+            newConn.off('WhiteHatGuessResult');
             newConn.off('RoundStarted');
             leaveVoice(newConn); // dọn voice khi rời trang game (destroy peers + tắt mic + báo server)
+            newConn.off('TypingSynchronized');
+            newConn.off('ExtendVoteCountUpdated');
+            newConn.off('SkipVoteCountUpdated');
+            newConn.off('VoteTimeExtended');
         };
     }, [roomId]);
 
@@ -1178,6 +1217,7 @@ export default function GameRoomPage() {
     const playersForVoting = players.map(p => ({
         userId: p.userId,
         displayName: p.displayName,
+        avatar: p.avatar,
         role: p.role ?? 'Civilian',
         isEliminated: p.isEliminated ?? false,
         voteCount: voteCounts[p.userId] ?? 0,
@@ -1187,6 +1227,7 @@ export default function GameRoomPage() {
     const playersForDescribing = players.map(p => ({
         userId: p.userId,
         displayName: p.displayName,
+        avatar: p.avatar,
         isEliminated: p.isEliminated ?? false,
     }));
 
@@ -1228,6 +1269,8 @@ export default function GameRoomPage() {
     // ================================
     // RENDER BY PHASE
     // ================================
+
+    const isMyWhiteHatGuess = mySecret?.role === 'WhiteHat' && (!whiteHatInfo || whiteHatInfo.userId === currentUserId);
 
     if (gamePhase === 'loading' && loadingSync) {
         return (
@@ -1318,14 +1361,14 @@ export default function GameRoomPage() {
                 {overlayElements}
                 <Notification messages={notifications} />
                 {leaveRoomButton}
-                {showWhiteHatGuess && (
+                {showWhiteHatGuess && isMyWhiteHatGuess && (
                     <WhiteHatGuessOverlay
-                        isWhiteHat={mySecret?.role === 'WhiteHat'}
+                        isWhiteHat={true}
                         onGuess={handleWhiteHatGuess}
                         onCancel={() => setShowWhiteHatGuess(false)}
                     />
                 )}
-                {mySecret?.role === 'WhiteHat' && !isEliminated && !showWhiteHatGuess && (
+                {isMyWhiteHatGuess && !isEliminated && !showWhiteHatGuess && (
                     <button
                         onClick={() => setShowWhiteHatGuess(true)}
                         style={{
@@ -1372,16 +1415,16 @@ export default function GameRoomPage() {
                 {overlayElements}
                 <Notification messages={notifications} />
                 {leaveRoomButton}
-                {showWhiteHatGuess && (
+                {showWhiteHatGuess && isMyWhiteHatGuess && (
                     <WhiteHatGuessOverlay
-                        isWhiteHat={mySecret?.role === 'WhiteHat'}
+                        isWhiteHat={true}
                         onGuess={handleWhiteHatGuess}
                         onCancel={() => setShowWhiteHatGuess(false)}
                         initialTimeLeft={whiteHatTimeLeft}
                         whiteHatInfo={whiteHatInfo}
                     />
                 )}
-                {mySecret?.role === 'WhiteHat' && !isEliminated && !showWhiteHatGuess && (
+                {isMyWhiteHatGuess && !isEliminated && !showWhiteHatGuess && (
                     <button
                         onClick={() => setShowWhiteHatGuess(true)}
                         style={{
@@ -1406,6 +1449,8 @@ export default function GameRoomPage() {
                     myUserId={currentUserId}
                     voteEndTime={voteEndTime}
                     realtimeVoteCounts={voteCounts}
+                    totalVotesCast={totalVotesCast}
+                    realtimeVotes={realtimeVotes}
                     hasVoted={hasVoted}
                     myVoteTarget={myVoteTarget}
                     canSkip={canSkip()}
@@ -1413,15 +1458,23 @@ export default function GameRoomPage() {
                     isEliminated={isEliminated}
                     extendVoteCount={extendVoteCount}
                     extendRequiredCount={extendRequiredCount}
-                    hasExtendedVote={hasExtendedVote}
+                    hasRequestedExtend={hasRequestedExtend}
+                    isTimeExtended={isTimeExtended}
                     skipVoteCount={skipVoteCount}
                     skipRequiredCount={skipRequiredCount}
+                    hasSkippedVote={hasSkippedVote}
+                    isWhiteHatGuessing={showWhiteHatGuess}
+                    whiteHatId={whiteHatInfo?.userId}
+                    whiteHatTimeLeft={whiteHatTimeLeft}
                     onExtendVote={handleExtendVote}
                     onVote={handleVote}
                     onChangeVote={handleChangeVote}
+                    onRevokeVote={handleRevokeVote}
                     onSkip={handleSkipVoting}
                     onTimerExpired={() => {
-                        addNotif('Thời gian vote đã hết!', 'warning');
+                        if (!hasVoted) {
+                            // optional: auto-submit vote or do something else
+                        }
                     }}
                     backgroundImage={backgroundImage}
                 />
@@ -1574,7 +1627,7 @@ export default function GameRoomPage() {
                 {isHost && (
                     <div className="w-full lg:w-[280px] shrink-0 bg-white/5 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-xl shadow-2xl flex flex-col h-fit">
                         <button
-                            onClick={() => setShowSettings(!showSettings)}
+                            onClick={() => { playClick(); setShowSettings(!showSettings); }}
                             className={`w-full px-5 py-4 bg-transparent border-none flex items-center gap-3 cursor-pointer text-white transition-all hover:bg-white/5 ${showSettings ? 'border-b border-white/10' : ''}`}
                         >
                             <Settings size={18} className="text-[#e6a822]" />
@@ -1657,6 +1710,12 @@ export default function GameRoomPage() {
                                         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${localSettings.revealEliminatedRole ? 'left-[18px]' : 'left-0.5'}`} />
                                     </div>
                                 </div>
+                                <button
+                                    onClick={() => { playClick(); setShowLeaveConfirm(true); }}
+                                    className="flex items-center justify-center gap-2 bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 hover:border-red-500/50 px-4 py-3 rounded-xl transition-all font-bold text-sm tracking-wide"
+                                >
+                                    RỜI PHÒNG
+                                </button>
                             </div>
                         )}
                     </div>
@@ -1669,7 +1728,7 @@ export default function GameRoomPage() {
                     <div className="pointer-events-auto flex gap-4">
                         {!isHost && (
                             <button
-                                onClick={() => connection?.invoke("ToggleReady", !isMyPlayerReady)}
+                                onClick={() => { playReady(); connection?.invoke("ToggleReady", !isMyPlayerReady); }}
                                 className={`px-10 py-3.5 rounded-2xl font-black text-sm md:text-base cursor-pointer tracking-wider border-none transition-all shadow-[0_8px_24px_rgba(0,0,0,0.4)] ${
                                     isMyPlayerReady
                                         ? 'bg-white/10 text-white/50 border-t border-white/10'
@@ -1683,6 +1742,7 @@ export default function GameRoomPage() {
                         {isHost && (
                             <button
                                 onClick={async () => {
+                                    playStart();
                                     if (!connection) return;
                                     try { await connection.invoke("StartGame"); }
                                     catch (err) { console.error("StartGame error:", err); }
