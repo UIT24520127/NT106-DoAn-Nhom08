@@ -30,9 +30,9 @@ export default function CountdownTimer({ endTime, onExpired }: CountdownTimerPro
       const remaining = calc();
       setTimeLeft(remaining);
 
-      // Phát âm thanh tick trong 10 giây cuối
-      if (remaining <= 10 && remaining > 0) {
-        if (gameSoundsRef.current.playTick) gameSoundsRef.current.playTick();
+      // Phát âm thanh đếm ngược 10s khi còn đúng 10 giây
+      if (remaining === 10) {
+        if (gameSoundsRef.current.playCountdown10s) gameSoundsRef.current.playCountdown10s();
       }
 
       if (remaining === 0) {

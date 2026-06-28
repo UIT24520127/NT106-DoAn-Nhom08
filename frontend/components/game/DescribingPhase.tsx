@@ -141,10 +141,10 @@ export default function DescribingPhase({
 
       setTimeLeft(remaining);
       
-      // Phát âm thanh tick trong 5 giây cuối
-      if (remaining <= 5 && remaining > 0) {
-        const soundHook = useGameSoundRef.current; // Cần dùng ref hoặc hook ngoài scope
-        if (soundHook && soundHook.playTick) soundHook.playTick();
+      // Phát âm thanh đếm ngược 5s khi còn đúng 5 giây
+      if (remaining === 5) {
+        const soundHook = useGameSoundRef.current;
+        if (soundHook && soundHook.playCountdown5s) soundHook.playCountdown5s();
       }
 
       if (remaining === 0) {
