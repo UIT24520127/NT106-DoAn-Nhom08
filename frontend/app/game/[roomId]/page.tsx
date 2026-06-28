@@ -280,6 +280,17 @@ export default function GameRoomPage() {
             initiator,
             trickle: false,
             stream: userStream.current || undefined,
+            config: {
+                iceServers: [
+                    // STUN: giúp tìm IP công khai (đủ cho NAT thường)
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    // TURN: relay media khi P2P trực tiếp bị NAT/firewall chặn (BẮT BUỘC để chạy qua internet)
+                    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+                    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+                    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+                ],
+            },
         });
         peer.on('signal', async (data: any) => {
             console.log(`[VOICE] gửi signal -> ${targetId} (${data?.type || 'candidate'})`);
