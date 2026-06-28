@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { getBgmVolume, getSfxVolume } from "@/lib/soundSettings";
+import { getMenuBgmVolume, getGameBgmVolume, getSfxVolume } from "@/lib/soundSettings";
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
@@ -17,17 +17,31 @@ export const useGameSound = () => {
             audio.play().catch(() => { /* bỏ qua AbortError/autoplay */ });
         };
 
-        // Nhạc nền: âm lượng = master BGM (trực tiếp 0..1)
-        const toggleBGM = (id: string, play: boolean) => {
+        // Nhạc nền menu
+        const toggleMenuBGM = (play: boolean) => {
             if (typeof document === "undefined") return;
-            const audio = document.getElementById(id) as HTMLAudioElement | null;
+            const audio = document.getElementById("sound-bgm") as HTMLAudioElement | null;
             if (!audio) return;
             if (play) {
-                audio.volume = getBgmVolume();
+                audio.volume = getMenuBgmVolume();
                 if (audio.paused) audio.play().catch(() => { /* bỏ qua */ });
             } else {
                 audio.pause();
-                audio.currentTime = 0; // RESET về đầu -> lần phát sau bắt đầu lại từ đầu
+                audio.currentTime = 0; // RESET về đầu
+            }
+        };
+
+        // Nhạc nền game
+        const toggleGameBGM = (play: boolean) => {
+            if (typeof document === "undefined") return;
+            const audio = document.getElementById("sound-bgm-game") as HTMLAudioElement | null;
+            if (!audio) return;
+            if (play) {
+                audio.volume = getGameBgmVolume();
+                if (audio.paused) audio.play().catch(() => { /* bỏ qua */ });
+            } else {
+                audio.pause();
+                audio.currentTime = 0; // RESET về đầu
             }
         };
 
@@ -40,10 +54,10 @@ export const useGameSound = () => {
             playTick: () => playGlobalSound("sound-tick", 0.8),
             playWin: () => playGlobalSound("sound-win", 0.8),
             playLose: () => playGlobalSound("sound-lose", 0.8),
-            playBGM: () => toggleBGM("sound-bgm", true),
-            stopBGM: () => toggleBGM("sound-bgm", false),
-            playGameBGM: () => toggleBGM("sound-bgm-game", true),
-            stopGameBGM: () => toggleBGM("sound-bgm-game", false),
+            playBGM: () => toggleMenuBGM(true),
+            stopBGM: () => toggleMenuBGM(false),
+            playGameBGM: () => toggleGameBGM(true),
+            stopGameBGM: () => toggleGameBGM(false),
         };
     }, []);
 };

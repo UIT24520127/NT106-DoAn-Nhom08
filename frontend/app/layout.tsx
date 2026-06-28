@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter, Nunito } from "next/font/google";
 import "./globals.css";
 import SessionGuard from "@/components/SessionGuard";
-import VolumeControl from "@/components/VolumeControl";
 
 const inter = Inter({
   subsets: ["latin", "vietnamese"],
@@ -45,7 +44,6 @@ export default function RootLayout({
         <audio id="sound-bgm-game" src="/sounds/tunetank-jazz-spy-music-349626.mp3" preload="none" loop className="hidden" />
         
         <SessionGuard />
-        <VolumeControl />
         {children}
       </body>
     </html>

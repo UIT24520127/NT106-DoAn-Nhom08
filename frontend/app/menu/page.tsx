@@ -11,6 +11,7 @@ import { ref, onValue } from "firebase/database";
 import { realtimeDb } from "@/lib/firebase";            
 import { useRouter } from "next/navigation";
 import { useGameSound } from "@/hooks/useGameSound";
+import { getMenuBgmVolume, getGameBgmVolume, getSfxVolume, setMenuBgmVolume, setGameBgmVolume, setSfxVolume, subscribeSound } from "@/lib/soundSettings";
 
 // ─── Avatar Cache Helpers ────────────────────────────────────────────────────
 // Lưu avatar DiceBear dưới dạng Base64 trong localStorage để tránh gọi lại
@@ -92,6 +93,22 @@ export default function MainMenu() {
   const [isFriendOpen, setIsFriendOpen] = useState(false);  
   const [token, setToken] = useState("");                    
   const [pendingCount, setPendingCount] = useState(0);       
+
+  const [menuBgm, setMenuBgm] = useState(0);
+  const [gameBgm, setGameBgm] = useState(0);
+  const [sfxVol, setSfxVol] = useState(0);
+
+  useEffect(() => {
+    setMenuBgm(getMenuBgmVolume());
+    setGameBgm(getGameBgmVolume());
+    setSfxVol(getSfxVolume());
+    return subscribeSound(() => {
+      setMenuBgm(getMenuBgmVolume());
+      setGameBgm(getGameBgmVolume());
+      setSfxVol(getSfxVolume());
+    });
+  }, []);
+
   // Lazy initializer: đọc cache avatar từ localStorage NGAY LẬP TỨC (đồng bộ)
   // trước khi render lần đầu → avatar hiển thị không cần chờ API
   const [playerStats, setPlayerStats] = useState({
@@ -327,6 +344,50 @@ export default function MainMenu() {
                   <X size={16} />
                 </button>
               </div>
+
+              {/* Sound Settings */}
+              <div className="px-4 py-3 border-b border-gray-700 space-y-3">
+                <div>
+                  <div className="flex justify-between text-xs text-gray-300 font-semibold mb-1">
+                    <span>Nhạc nền Menu</span>
+                    <span>{Math.round(menuBgm * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0" max="1" step="0.01"
+                    value={menuBgm}
+                    onChange={(e) => setMenuBgmVolume(parseFloat(e.target.value))}
+                    className="w-full accent-[#e6a822] cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs text-gray-300 font-semibold mb-1">
+                    <span>Nhạc nền Game</span>
+                    <span>{Math.round(gameBgm * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0" max="1" step="0.01"
+                    value={gameBgm}
+                    onChange={(e) => setGameBgmVolume(parseFloat(e.target.value))}
+                    className="w-full accent-[#e6a822] cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs text-gray-300 font-semibold mb-1">
+                    <span>Hiệu ứng (SFX)</span>
+                    <span>{Math.round(sfxVol * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0" max="1" step="0.01"
+                    value={sfxVol}
+                    onChange={(e) => setSfxVolume(parseFloat(e.target.value))}
+                    className="w-full accent-[#3b82f6] cursor-pointer"
+                  />
+                </div>
+              </div>
+
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
