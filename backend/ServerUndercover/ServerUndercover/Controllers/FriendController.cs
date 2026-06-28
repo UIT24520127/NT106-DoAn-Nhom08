@@ -24,7 +24,7 @@ namespace ServerUndercover.Controllers
 
         private string GetUserId()
         {
-            return User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("user_id")?.Value ?? "";
+            return (User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("user_id")?.Value ?? "").Trim();
         }
 
         [HttpGet]
