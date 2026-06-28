@@ -833,8 +833,8 @@ namespace ServerUndercover.Services
             if (topPlayers.Count > 1)
                 return new VoteResolution(true, null, null);
 
-            // Yêu cầu số phiếu lớn hơn phân nửa số người chơi còn sống
-            int aliveCount = room.Players.Values.Count(p => !p.IsEliminated);
+            // Yêu cầu số phiếu lớn hơn phân nửa số người chơi còn sống VÀ đang kết nối
+            int aliveCount = room.Players.Values.Count(p => !p.IsEliminated && p.IsConnected);
             if (maxVotes <= aliveCount / 2)
                 return new VoteResolution(true, null, null);
 

@@ -217,17 +217,51 @@ namespace ServerUndercover.Hubs
             await CloseLoadingAndRevealRoles(room);
         }
 
-        private Task BroadcastTurnStarted(string roomId, Room room)
+        private async Task BroadcastTurnStarted(string roomId, Room room)
         {
             if (room.CurrentTurnIndex >= room.TurnOrder.Count)
-                return Task.CompletedTask;
+                return;
+
+            string nextSpeakerId = room.TurnOrder[room.CurrentTurnIndex];
+            if (!room.Players.TryGetValue(nextSpeakerId, out var player) || !player.IsConnected)
+            {
+                // NgÆ°á» i chÆ¡i máº¥t káº¿t ná»‘i hoáº·c Ä‘Ã£ rá» i phÃ²ng -> Tá»± Ä‘á»™ng bá»  qua
+                int submittedTurnIndex = room.CurrentTurnIndex;
+                bool roundOver = _roomManager.SubmitDescription(roomId, nextSpeakerId, "(Mất kết nối)");
+                await _roomManager.RecordDescriptionAsync(room, nextSpeakerId, "(Mất kết nối)", "disconnect", submittedTurnIndex);
+                
+                await _hubContext.Clients.Group(roomId).SendAsync("DescriptionSubmitted", new
+                {
+                    userId = nextSpeakerId,
+                    word = "(Mất kết nối)",
+                    source = "disconnect",
+                    roundNumber = room.RoundNumber,
+                    currentTurnIndex = submittedTurnIndex
+                });
+
+                if (roundOver)
+                {
+                    _roomManager.StartVotingPhase(roomId);
+                    await _roomManager.UpdateGameSessionPhaseAsync(room);
+                    await BroadcastVotingStarted(roomId, room);
+                }
+                else
+                {
+                    await _hubContext.Clients.Group(roomId).SendAsync("TurnEnded", new
+                    {
+                        nextTurnIndex = room.CurrentTurnIndex
+                    });
+                    await BroadcastTurnStarted(roomId, room);
+                }
+                return;
+            }
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             room.CurrentTurnEndTime = now + (room.Settings.DescribeDuration * 1000);
 
             _ = EndTurnAfterTimeout(roomId, room.RoundNumber, room.CurrentTurnIndex, room.CurrentTurnEndTime);
 
-            return _hubContext.Clients.Group(roomId).SendAsync("TurnStarted", new
+            await _hubContext.Clients.Group(roomId).SendAsync("TurnStarted", new
             {
                 currentSpeakerId = room.TurnOrder[room.CurrentTurnIndex],
                 currentTurnIndex = room.CurrentTurnIndex,
@@ -667,7 +701,7 @@ namespace ServerUndercover.Hubs
                         {
                             // Check if voting phase should end because the total alive players decreased
                             int totalVotes = updatedRoom.Votes.Count;
-                            if (totalVotes == updatedRoom.Players.Count(p => !p.Value.IsEliminated))
+                            if (totalVotes >= updatedRoom.Players.Count(p => !p.Value.IsEliminated && p.Value.IsConnected))
                             {
                                 await ResolveVotingPhase(roomId);
                             }
@@ -1137,7 +1171,7 @@ namespace ServerUndercover.Hubs
             await BroadcastVoteCounts(roomId, room);
 
             // Kiểm tra xem tất cả đã vote chưa (tự động kết thúc sớm)
-            int aliveCount = room.Players.Values.Count(p => !p.IsEliminated);
+            int aliveCount = room.Players.Values.Count(p => !p.IsEliminated && p.IsConnected);
             if (room.Votes.Count >= aliveCount)
             {
                 await ResolveVotingPhase(roomId);
@@ -1378,19 +1412,29 @@ namespace ServerUndercover.Hubs
 
                     // Chuyển sang đoán từ
                     room.Phase = GamePhase.WhiteHatGuess;
-                    room.WhiteHatEndTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (20 * 1000);
-                    _ = EndWhiteHatGuessAfterTimeout(roomId, room.WhiteHatEndTime, whiteHatToGuess.UserId);
-
-                    await _roomManager.UpdateGameSessionPhaseAsync(room);
-                    await SendRoomUpdatedToGroup(roomId, room);
-                        
-                    await _hubContext.Clients.Group(roomId).SendAsync("WhiteHatOpportunity", new
+                    
+                    if (!whiteHatToGuess.IsConnected)
                     {
-                        pendingWinner = winCheck.WinnerRole,
-                        timeLeft = 20,
-                        whiteHatDisplayName = whiteHatToGuess?.DisplayName,
-                        whiteHatUserId = whiteHatToGuess?.UserId
-                    });
+                        // Mũ Trắng đã mất kết nối, bỏ qua thời gian chờ
+                        room.WhiteHatEndTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                        _ = EndWhiteHatGuessAfterTimeout(roomId, room.WhiteHatEndTime, whiteHatToGuess.UserId);
+                    }
+                    else
+                    {
+                        room.WhiteHatEndTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (20 * 1000);
+                        _ = EndWhiteHatGuessAfterTimeout(roomId, room.WhiteHatEndTime, whiteHatToGuess.UserId);
+
+                        await _roomManager.UpdateGameSessionPhaseAsync(room);
+                        await SendRoomUpdatedToGroup(roomId, room);
+                            
+                        await _hubContext.Clients.Group(roomId).SendAsync("WhiteHatOpportunity", new
+                        {
+                            pendingWinner = winCheck.WinnerRole,
+                            timeLeft = 20,
+                            whiteHatDisplayName = whiteHatToGuess?.DisplayName,
+                            whiteHatUserId = whiteHatToGuess?.UserId
+                        });
+                    }
                     return;
                 }
 
