@@ -68,12 +68,12 @@ export default function PlayWithFriends() {
 
     connection.on("RoomCreated", (room: any) => {
       setIsLoading(false);
-      router.push(`/room/${room.roomId}`);
+      router.push(`/room?roomId=${room.roomId}`);
     });
 
     connection.on("RoomJoined", (room: any) => {
       setIsLoading(false);
-      router.push(`/room/${room.roomId}`);
+      router.push(`/room?roomId=${room.roomId}`);
     });
 
     connection.on("RoomError", (message: string) => {

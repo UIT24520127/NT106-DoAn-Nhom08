@@ -242,11 +242,11 @@ export default function MainMenu() {
     connection.on("WaitingForPlayers", (message: string) => { setSearchStatus(`⏳ ${message}`); });
     connection.on("RoomJoined", (room: any) => {
       setSearchStatus(`🎉 Đã tìm thấy phòng - Đang vào sảnh...`);
-      setTimeout(() => { router.push(`/room/${room.roomId}`); }, 1000);
+      setTimeout(() => { router.push(`/room?roomId=${room.roomId}`); }, 1000);
     });
     connection.on("RoomCreated", (room: any) => {
       setSearchStatus(`🎉 Đã tạo phòng mới - Đang vào sảnh...`);
-      setTimeout(() => { router.push(`/room/${room.roomId}`); }, 1000);
+      setTimeout(() => { router.push(`/room?roomId=${room.roomId}`); }, 1000);
     });
     connection.on("RoomError", (message: string) => { setSearchStatus(`❌ ${message}`); });
     try {

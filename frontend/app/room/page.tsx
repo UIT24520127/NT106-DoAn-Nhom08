@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import * as signalR from "@microsoft/signalr";
 import { Users, LogOut, Play, Crown, CheckCircle2, XCircle, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, Copy } from "lucide-react";
 import { getSignalRConnection } from "@/lib/signalRConnection";
@@ -20,9 +20,10 @@ interface RoomSettings {
   roundTransitionDuration: number;
 }
 
-export default function RoomPage() {
+function RoomPageContent() {
   const { playClick, playReady, playStart, playAlert, playBGM } = useGameSound();
-  const { roomId } = useParams();
+  const searchParams = useSearchParams();
+  const roomId = searchParams.get('roomId');
   const router = useRouter();
   const [hubConnection, setHubConnection] = useState<signalR.HubConnection | null>(null);
   const [roomState, setRoomState] = useState<any>(null);
@@ -75,7 +76,7 @@ export default function RoomPage() {
     });
 
     connection.on("GameStarted", (room: any) => {
-      router.push(`/game/${room.roomId}`);
+      router.push(`/game?roomId=${room.roomId}`);
     });
 
     connection.on("LoadingPhaseStarted", (data: { timeoutSeconds?: number; totalCount?: number; startedAt?: number }) => {
@@ -85,7 +86,7 @@ export default function RoomPage() {
         totalCount: data.totalCount ?? 0,
         startedAt: data.startedAt ?? Date.now(),
       }));
-      router.push(`/game/${roomCode}`);
+      router.push(`/game?roomId=${roomCode}`);
     });
 
     connection.on("RoomError", (message: string) => {
@@ -175,7 +176,7 @@ export default function RoomPage() {
   const roomCode = Array.isArray(roomId) ? roomId[0] : String(roomId ?? "");
   const backgroundImage = useMemo(() => {
     const images = ["/bg1.jpg", "/bg2.jpg", "/bg3.jpg", "/bg4.jpg"];
-    const hash = roomCode.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    const hash = roomCode.split("").reduce((sum: number, char: string) => sum + char.charCodeAt(0), 0);
     return images[hash % images.length];
   }, [roomCode]);
 
@@ -537,5 +538,18 @@ export default function RoomPage() {
       )}
 
     </div>
+  );
+}
+
+export default function RoomPage() {
+  return (
+    <Suspense fallback={
+      <div className="h-screen w-screen bg-[#1a1c23] flex flex-col items-center justify-center gap-4">
+        <div className="w-16 h-16 border-4 border-[#3b82f6]/20 border-t-[#e6a822] rounded-full animate-spin"></div>
+        <p className="text-gray-400 text-sm tracking-widest uppercase">Đang tải phòng...</p>
+      </div>
+    }>
+      <RoomPageContent />
+    </Suspense>
   );
 }

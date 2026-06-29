@@ -153,7 +153,7 @@ export default function FriendList({ token, onAvatarClick, onChat, showInvite = 
   };
 
   const handleInvite = async (id: string, username: string) => {
-    const roomId = window.location.pathname.split("/room/")[1];
+    const roomId = new URLSearchParams(window.location.search).get('roomId');
     
     if (!roomId) {
       setInviteError("Bạn cần ở trong một phòng để có thể mời bạn bè.");

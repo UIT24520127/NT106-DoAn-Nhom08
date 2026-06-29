@@ -1,8 +1,8 @@
 "use client";
 const getLS = () => typeof window !== 'undefined' ? (window as any).sessionStorage : null;
 
-import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import React, { useEffect, useState, useRef, useCallback, useMemo, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
     HubConnection,
     HubConnectionBuilder,
@@ -134,10 +134,10 @@ function Notification({ messages }: { messages: { id: string; type: 'info' | 'wa
 // ================================
 // Main component
 // ================================
-export default function GameRoomPage() {
-    const params = useParams();
+function GamePageContent() {
+    const searchParams = useSearchParams();
     const router = useRouter();
-    const roomId = params.roomId as string;
+    const roomId = searchParams.get('roomId') as string;
     
     const gameSounds = useGameSound();
     const { playClick, playStart, playReady, playAlert, stopBGM, playGameBGM, stopGameBGM, playLose, playWin } = gameSounds;
@@ -471,7 +471,7 @@ export default function GameRoomPage() {
         leaveVoice(connection); // dọn voice trước khi rời trang game
         try { await connection.invoke("BackToLobby"); }
         catch (e) { console.error("PlayAgain error:", e); }
-        router.push(`/room/${roomId}`);
+        router.push(`/room?roomId=${roomId}`);
     };
 
     const handleUpdateSettings = async (newSettings: any) => {
@@ -1801,5 +1801,17 @@ export default function GameRoomPage() {
     );
 }
 
+export default function GamePage() {
+    return (
+        <Suspense fallback={
+            <div className="h-screen w-screen bg-[#1a1c23] flex flex-col items-center justify-center gap-4">
+                <div className="w-16 h-16 border-4 border-[#3b82f6]/20 border-t-[#e6a822] rounded-full animate-spin"></div>
+                <p className="text-gray-400 text-sm tracking-widest uppercase">Đang tải game...</p>
+            </div>
+        }>
+            <GamePageContent />
+        </Suspense>
+    );
+}
 // Helper — move outside component to avoid recreation
 function canSkip() { return true; } // Logic thực sẽ do server control

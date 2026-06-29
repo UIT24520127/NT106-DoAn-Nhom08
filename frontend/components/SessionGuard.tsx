@@ -93,7 +93,7 @@ export default function SessionGuard() {
     setIsClosingInvite(true);
     setTimeout(() => {
       if (invite) {
-        router.push(`/room/${invite.roomId}`);
+        router.push(`/room?roomId=${invite.roomId}`);
       }
       setInvite(null);
       setIsClosingInvite(false);
@@ -135,8 +135,8 @@ export default function SessionGuard() {
             lastSeen: Date.now()
           }).then(() => {
             // Khi kết nối thành công, đặt trạng thái tùy thuộc vào trang đang đứng
-            const isInGame = window.location.pathname.includes("/game/");
-            const isInRoom = window.location.pathname.includes("/room/");
+            const isInGame = window.location.pathname.includes("/game");
+            const isInRoom = window.location.pathname.includes("/room");
             let currentStatus = "Online";
             if (isInGame) currentStatus = "In-Match";
             else if (isInRoom) currentStatus = "In-Room";
