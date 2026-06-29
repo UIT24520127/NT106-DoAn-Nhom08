@@ -1,7 +1,6 @@
 "use client";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { API_URL, getToken } from "@/lib/auth";
 
 export default function LoadingScreen() {
@@ -58,13 +57,11 @@ export default function LoadingScreen() {
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-[#1c2331] text-white">
       {/* Ảnh Logo 2 mặt */}
-      <Image 
+      <img 
         src="/logo.png" 
         alt="Undercover Logo" 
-        width={300} 
-        height={300} 
-        className="rounded-full shadow-[0_0_30px_rgba(255,255,255,0.1)]"
-        priority
+        style={{ width: '300px', height: '300px' }}
+        className="rounded-full shadow-[0_0_30px_rgba(255,255,255,0.1)] object-cover"
       />
       
       {/* Chữ Loading nhấp nháy */}

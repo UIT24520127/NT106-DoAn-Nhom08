@@ -111,7 +111,7 @@ export default function LoginPage() {
       if (isTauri) {
         // Chạy trên Desktop Tauri -> dùng Plugin Native
         console.log("Sử dụng Tauri Google Auth Plugin...");
-        
+
         // Timeout 60 giây (1 phút) để tránh bị kẹt nút "Đang kết nối..." mãi mãi nếu user tắt trình duyệt
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error("Timeout_Browser_Closed")), 60000);
@@ -170,13 +170,13 @@ export default function LoginPage() {
           scopes: ['openid', 'email', 'profile'],
           successHtmlResponse: successHtml
         });
-        
+
         const response: any = await Promise.race([pluginPromise, timeoutPromise]);
-        
+
         if (!response.idToken) {
           throw new Error("Không nhận được idToken từ Google");
         }
-        
+
         const credential = GoogleAuthProvider.credential(response.idToken);
         const result = await signInWithCredential(auth, credential);
         idToken = await result.user.getIdToken();
@@ -213,7 +213,7 @@ export default function LoginPage() {
       console.error("Google login error:", err);
       const errMsg = err.message || err.toString();
       if (errMsg.includes("Timeout_Browser_Closed")) {
-         showPopup("Đã hủy bỏ", "Bạn đã đóng trình duyệt hoặc quá thời gian đăng nhập. Vui lòng thử lại.", false);
+        showPopup("Đã hủy bỏ", "Bạn đã đóng trình duyệt hoặc quá thời gian đăng nhập. Vui lòng thử lại.", false);
       } else if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
         showPopup("Thất bại", "Lỗi Google: " + errMsg, false);
       }
@@ -228,16 +228,16 @@ export default function LoginPage() {
       showPopup("Lỗi", "Vui lòng nhập tên hiển thị mới!", false);
       return;
     }
-    
+
     try {
       const syncRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/auth/google-sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uid: googleNamePrompt.uid, username: googleNewName.trim() }),
       });
-      
+
       const data = await syncRes.json();
-      
+
       if (syncRes.status === 409) {
         showPopup("Lỗi", data.message, false);
       } else if (syncRes.ok) {
@@ -477,14 +477,13 @@ export default function LoginPage() {
       {popup.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
           <div className="bg-[#fcf8e8] w-full max-w-sm border-4 border-[#3e2723] rounded p-6 text-center shadow-[8px_8px_0_#3e2723] animate-scale-in relative overflow-hidden">
-            
+
             {/* Background pattern */}
             <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#3e2723 2px, transparent 2px)', backgroundSize: '16px 16px' }}></div>
-            
+
             {/* Icon trạng thái */}
-            <div className={`mx-auto w-16 h-16 rounded-full border-4 flex items-center justify-center mb-4 ${
-              popup.isSuccess ? "bg-green-100 border-green-600 text-green-600" : "bg-red-100 border-[#9b111e] text-[#9b111e]"
-            }`}>
+            <div className={`mx-auto w-16 h-16 rounded-full border-4 flex items-center justify-center mb-4 ${popup.isSuccess ? "bg-green-100 border-green-600 text-green-600" : "bg-red-100 border-[#9b111e] text-[#9b111e]"
+              }`}>
               {popup.isSuccess ? (
                 <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
               ) : (
@@ -518,15 +517,15 @@ export default function LoginPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
           <div className="bg-[#fcf8e8] w-full max-w-sm border-4 border-[#3e2723] rounded p-6 shadow-[8px_8px_0_#3e2723] animate-scale-in relative overflow-hidden">
             <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#3e2723 2px, transparent 2px)', backgroundSize: '16px 16px' }}></div>
-            
+
             <div className="relative z-10">
               <h2 className="text-2xl font-black text-[#3e2723] text-center mb-2 uppercase tracking-wide">Tân Binh Mới</h2>
               <div className="w-12 h-1 bg-[#3e2723]/20 mx-auto mb-4 rounded-full"></div>
-              
+
               <p className="text-sm text-[#6d4c41] font-bold text-center mb-5 leading-relaxed">
                 Chào mừng bạn! Hãy chọn một <span className="text-[#9b111e]">tên hiển thị</span> ấn tượng để tham gia ván chơi.
               </p>
-              
+
               <form onSubmit={handleGoogleNameSubmit} className="flex flex-col gap-4">
                 <input
                   type="text"
