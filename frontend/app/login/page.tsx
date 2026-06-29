@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { saveToken } from "@/lib/auth";
-import { signInWithRedirect, getRedirectResult } from "firebase/auth";
+import { signInWithRedirect, getRedirectResult, signInWithPopup } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { useGameSound } from "@/hooks/useGameSound";
 
@@ -140,10 +140,34 @@ export default function LoginPage() {
     if (isGoogleLoggingIn) return;
     setIsGoogleLoggingIn(true);
     try {
-      await signInWithRedirect(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      const idToken = await user.getIdToken();
+
+      const checkRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/user/profile/${user.uid}`);
+      if (checkRes.ok) {
+        saveToken(idToken);
+        sessionStorage.setItem("userId", user.uid);
+        console.log("Đã đăng nhập Google, userId:", user.uid);
+        showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
+      } else if (checkRes.status === 404) {
+        const displayName = user.displayName || "Google User";
+        setGoogleNamePrompt({
+          isOpen: true,
+          uid: user.uid,
+          defaultName: displayName,
+          idToken: idToken
+        });
+        setGoogleNewName(displayName);
+      } else {
+        showPopup("Lỗi kết nối", "Không thể kiểm tra thông tin tài khoản.", false);
+      }
     } catch (err: any) {
       console.error("Google login error:", err);
-      showPopup("Thất bại", "Không thể kết nối đến Google.", false);
+      if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+        showPopup("Thất bại", "Đăng nhập bằng Google thất bại.", false);
+      }
+    } finally {
       setIsGoogleLoggingIn(false);
     }
   };
