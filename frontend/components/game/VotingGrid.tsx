@@ -54,7 +54,6 @@ export default function VotingGrid({
   isWhiteHatGuessing = false, whiteHatId, whiteHatTimeLeft = 0,
 }: VotingGridProps) {
   const { playClick, playVote } = useGameSound();
-  const [historyPlayer, setHistoryPlayer] = useState<VotePlayer | null>(null);
   const [whiteHatEndTime, setWhiteHatEndTime] = useState<number>(0);
 
   useEffect(() => {
@@ -337,11 +336,6 @@ export default function VotingGrid({
 
               <div style={{ position: "relative" }}>
                 <div
-                  onClick={e => {
-                    e.stopPropagation();
-                    setHistoryPlayer(player);
-                  }}
-                  title="Xem lịch sử mô tả"
                   style={{
                   width: 72, height: 72, borderRadius: "50%",
                   background: `radial-gradient(circle at 35% 35%, ${isVotedByMe ? "rgba(157,78,221,0.35)" : isLeading ? "rgba(255,59,59,0.25)" : "rgba(0,242,254,0.15)"}, #0B0C10)`,
@@ -592,60 +586,6 @@ export default function VotingGrid({
           </button>
         )}
       </div>
-
-      {/* ── HISTORY MODAL ── */}
-      {historyPlayer && (
-        <div style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          zIndex: 100, backdropFilter: "blur(8px)",
-        }} onClick={() => setHistoryPlayer(null)}>
-          <div style={{
-            background: "linear-gradient(160deg, #1A1A2E, #0B0C10)",
-            border: "1.5px solid rgba(0,242,254,0.2)",
-            borderRadius: 24, padding: "28px 32px", maxWidth: 400, width: "90%",
-            boxShadow: "0 8px 48px rgba(0,0,0,0.7)",
-          }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
-              <div style={{
-                width: 52, height: 52, borderRadius: "50%",
-                background: "rgba(0,242,254,0.12)", border: "2px solid rgba(0,242,254,0.35)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 20, fontWeight: 900, color: "#00F2FE",
-              }}>
-                {historyPlayer.displayName.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div style={{ color: "#fff", fontWeight: 800, fontSize: 18 }}>{historyPlayer.displayName}</div>
-                <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 2 }}>Lịch sử miêu tả</div>
-              </div>
-            </div>
-            {historyPlayer.descriptionHistory && historyPlayer.descriptionHistory.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {historyPlayer.descriptionHistory.map((word, i) => (
-                  <div key={i} style={{
-                    background: "rgba(0,242,254,0.05)", border: "1px solid rgba(0,242,254,0.12)",
-                    borderRadius: 10, padding: "8px 14px",
-                    color: "#00F2FE", fontSize: 14, fontWeight: 700,
-                    fontFamily: "'Courier New', monospace",
-                  }}>
-                    <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginRight: 8 }}>#{i + 1}</span>
-                    {word}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, textAlign: "center" }}>Chưa có lịch sử.</p>
-            )}
-            <button onClick={() => { playClick(); setHistoryPlayer(null); }} style={{
-              marginTop: 20, width: "100%", padding: "10px",
-              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 12, color: "rgba(255,255,255,0.5)", cursor: "pointer",
-              fontSize: 13, fontWeight: 700, fontFamily: "'Nunito', 'Inter', sans-serif",
-            }}>Đóng</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

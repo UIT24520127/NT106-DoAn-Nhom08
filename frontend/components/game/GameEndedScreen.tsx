@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useGameSound } from "@/hooks/useGameSound";
 
@@ -97,12 +97,17 @@ export default function GameEndedScreen({
 
   const isWinner = myRole === winner || (winner === "Civilian" && myRole === "Civilian");
 
+  const playedSound = useRef(false);
+
   useEffect(() => {
-    stopGameBGM();
-    if (isWinner) {
-      playWin();
-    } else {
-      playLose();
+    if (!playedSound.current) {
+      playedSound.current = true;
+      stopGameBGM();
+      if (isWinner) {
+        playWin();
+      } else {
+        playLose();
+      }
     }
     
     const t1 = setTimeout(() => setPhase("banner"), 200);
