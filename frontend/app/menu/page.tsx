@@ -150,10 +150,18 @@ export default function MainMenu() {
       console.error("Lỗi đọc cache avatar:", e);
     }
 
-    const requestsRef = ref(realtimeDb, `friendRequests/${uid}`);
-    const unsubRequests = onValue(requestsRef, (snap) => {
+    // Lắng nghe lời mời kết bạn từ Firebase Realtime Database
+    const reqRef = ref(realtimeDb, `friendRequests/${uid}`);
+    const unsubRequests = onValue(reqRef, (snap) => {
       setPendingCount(snap.exists() ? Object.keys(snap.val()).length : 0);
     });
+
+    // ÉP BACKEND ĐỒNG BỘ: Gọi ngầm API 1 lần duy nhất khi vào Menu
+    // Để Backend đẩy danh sách bạn bè & lời mời từ SQL sang Firebase RTDB
+    if (stored) {
+      axios.get(`${API_URL}/api/friends`, { headers: { Authorization: `Bearer ${stored}` } }).catch(() => {});
+      axios.get(`${API_URL}/api/friends/requests/pending`, { headers: { Authorization: `Bearer ${stored}` } }).catch(() => {});
+    }
 
     const unreadRef = ref(realtimeDb, `unread_messages/${uid}`);
     const unsubUnread = onValue(unreadRef, (snap) => {

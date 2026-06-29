@@ -118,6 +118,13 @@ function RoomPageContent() {
       unsubRequests = onValue(requestsRef, (snap) => {
         setPendingCount(snap.exists() ? Object.keys(snap.val()).length : 0);
       });
+
+      // ÉP BACKEND ĐỒNG BỘ: Gọi ngầm API 1 lần duy nhất khi vào Phòng
+      const storedToken = sessionStorage.getItem("token");
+      if (storedToken) {
+        axios.get(`${API_URL}/api/friends`, { headers: { Authorization: `Bearer ${storedToken}` } }).catch(() => {});
+        axios.get(`${API_URL}/api/friends/requests/pending`, { headers: { Authorization: `Bearer ${storedToken}` } }).catch(() => {});
+      }
     }
 
     return () => {

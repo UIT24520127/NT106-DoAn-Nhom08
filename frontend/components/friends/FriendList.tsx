@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { API_URL } from "@/lib/auth";
 import FriendCard from "./FriendCard";
@@ -52,6 +52,8 @@ export default function FriendList({ token, onAvatarClick, onChat, showInvite = 
     return () => unsubscribe();
   }, []);
 
+  const hasSyncedRef = useRef(false);
+
   // 1.5 Lấy danh sách avatar của bạn bè từ Backend API (Có dùng Cache để tối ưu)
   useEffect(() => {
     const fetchFriendsAvatars = async () => {
@@ -81,10 +83,12 @@ export default function FriendList({ token, onAvatarClick, onChat, showInvite = 
       }
     };
 
-    if (token && friends.length > 0) {
+    if (token) {
       // Kiểm tra xem có người bạn nào chưa có trong cache không
       const missingAvatars = friends.some(f => !globalAvatarsCache[f.id]);
-      if (missingAvatars) {
+      // Ép gọi API 1 lần đầu tiên để Backend đồng bộ danh sách xuống Firebase RTDB
+      if (!hasSyncedRef.current || missingAvatars) {
+        hasSyncedRef.current = true;
         fetchFriendsAvatars();
       } else {
         setAvatarsMap({ ...globalAvatarsCache });

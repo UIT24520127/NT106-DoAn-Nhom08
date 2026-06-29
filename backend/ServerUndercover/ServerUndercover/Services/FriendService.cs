@@ -262,7 +262,26 @@ namespace ServerUndercover.Services
             });
 
             var results = await Task.WhenAll(tasks);
-            return results.ToList();
+            var pendingRequests = results.ToList();
+
+            // ĐỒNG BỘ: Đẩy danh sách pending requests lên Firebase RTDB để badge đỏ hoạt động chính xác
+            try
+            {
+                var rtdbReqRef = _firebaseClient.Child("friendRequests").Child(userId);
+                
+                // Tránh xóa nguyên node làm mất realtime event liên tục, chỉ Push những request đang có
+                foreach (var req in pendingRequests)
+                {
+                    long timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    await rtdbReqRef.Child(req["id"].ToString()).PutAsync(timestamp);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Firebase Sync Error] Pending Requests: {ex.Message}");
+            }
+
+            return pendingRequests;
         }
         
         public async Task<List<Dictionary<string, object>>> SearchUsersAsync(string searchQuery, string currentUserId)
