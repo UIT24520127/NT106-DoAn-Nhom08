@@ -82,6 +82,12 @@ export default function FriendSearch({ token, onAvatarClick }: { token: string; 
       />
       {loading && <p className="text-xs text-gray-500 mt-2 italic">Đang tìm kiếm...</p>}
       
+      {!loading && query.length >= 2 && results.length === 0 && (
+        <p className="text-xs text-gray-400 mt-3 text-center italic py-2">
+          Không tìm thấy người chơi nào phù hợp. (Lưu ý: Bạn phải gõ đúng chữ hoa/chữ thường, ví dụ: "Minh")
+        </p>
+      )}
+
       {results.length > 0 && (
         <ul className="mt-3 space-y-2">
           {results.map((user) => (

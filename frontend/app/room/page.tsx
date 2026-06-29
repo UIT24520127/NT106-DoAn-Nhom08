@@ -9,6 +9,8 @@ import { realtimeDb } from "@/lib/firebase";
 import FriendModal from "@/components/friends/FriendModal";
 import SettingsModal from "@/components/SettingsModal";
 import { useGameSound } from "@/hooks/useGameSound";
+import axios from "axios";
+import { API_URL } from "@/lib/auth";
 
 interface RoomSettings {
   maxPlayers: number;

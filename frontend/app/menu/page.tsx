@@ -10,6 +10,7 @@ import { getSignalRConnection } from "@/lib/signalRConnection";
 import { ref, onValue } from "firebase/database";      
 import { realtimeDb } from "@/lib/firebase";            
 import { useRouter } from "next/navigation";
+import axios from "axios";
 import { useGameSound } from "@/hooks/useGameSound";
 import SettingsModal from "@/components/SettingsModal";
 
