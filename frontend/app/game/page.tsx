@@ -1415,11 +1415,11 @@ function GamePageContent() {
 
     if (gamePhase === 'loading' && loadingSync) {
         return (
-            <div style={pageRootStyle}>
+            <>
                 {overlayElements}
-                
                 {leaveRoomButton}
-                <LoadingPhaseScreen
+                <div style={pageRootStyle}>
+                    <LoadingPhaseScreen
                     players={loadingPlayers}
                     readyPlayerIds={loadingReadyPlayerIds}
                     readyCount={loadingSync.readyCount}
@@ -1430,35 +1430,37 @@ function GamePageContent() {
                     spectatorReason={loadingSync.spectatorReason}
                     backgroundImage={backgroundImage}
                 />
-            </div>
+                </div>
+            </>
         );
     }
 
     // Role Revealing
     if (gamePhase === 'roleRevealing' && mySecret) {
         return (
-            <div style={pageRootStyle}>
+            <>
                 {overlayElements}
-                
                 {leaveRoomButton}
-                <RoleRevealingScreen
+                <div style={pageRootStyle}>
+                    <RoleRevealingScreen
                     role={mySecret.role}
                     word={mySecret.word}
                     backgroundImage={backgroundImage}
                     onReadyToContinue={handleRoleRevealAdvance}
                 />
-            </div>
+                </div>
+            </>
         );
     }
 
     // Round Transition
     if (gamePhase === 'roundTransition' && transitionData) {
         return (
-            <div style={pageRootStyle}>
+            <>
                 {overlayElements}
-                
                 {leaveRoomButton}
-                <RoundTransitionScreen
+                <div style={pageRootStyle}>
+                    <RoundTransitionScreen
                     roundNumber={transitionData.roundNumber}
                     isTieVote={transitionData.isTieVote}
                     eliminatedPlayerName={transitionData.eliminatedPlayerName}
@@ -1470,17 +1472,19 @@ function GamePageContent() {
                     }}
                     backgroundImage={backgroundImage}
                 />
-            </div>
+                </div>
+            </>
         );
     }
 
     // Game Ended
     if (gamePhase === 'gameEnded' && gameEndedData) {
         return (
-            <div style={pageRootStyle}>
+            <>
                 {overlayElements}
                 {leaveRoomButton}
-                <GameEndedScreen
+                <div style={pageRootStyle}>
+                    <GameEndedScreen
                     winner={gameEndedData.winner}
                     myRole={mySecret?.role ?? 'Civilian'}
                     myWord={mySecret?.word ?? ''}
@@ -1491,18 +1495,19 @@ function GamePageContent() {
                     onPlayAgain={handlePlayAgain}
                     backgroundImage={backgroundImage}
                 />
-            </div>
+                </div>
+            </>
         );
     }
 
     // Describing Phase
     if (gamePhase === 'describing') {
         return (
-            <div style={pageRootStyle}>
+            <>
                 {overlayElements}
-                
                 {leaveRoomButton}
-                {showWhiteHatGuess && isMyWhiteHatGuess && (
+                <div style={pageRootStyle}>
+                    {showWhiteHatGuess && isMyWhiteHatGuess && (
                     <WhiteHatGuessOverlay
                         isWhiteHat={true}
                         onGuess={handleWhiteHatGuess}
@@ -1581,7 +1586,8 @@ function GamePageContent() {
                 >
                     <BookOpen size={16} /> LỊCH SỬ MÔ TẢ
                 </button>
-            </div>
+                </div>
+            </>
         );
     }
 
@@ -1741,14 +1747,14 @@ function GamePageContent() {
     }
 
     return (
-        <div 
-          className="relative min-h-screen w-screen bg-cover bg-center overflow-x-hidden overflow-y-auto flex flex-col items-center pt-20 pb-28 custom-scrollbar"
-          style={{ backgroundImage: `linear-gradient(180deg, rgba(7,9,17,0.9) 0%, rgba(7,9,17,0.62) 44%, rgba(4,5,10,0.96) 100%), url(${backgroundImage})` }}
-        >
+        <>
             {overlayElements}
             {leaveRoomButton}
-
-            {/* Background ambient glow */}
+            <div 
+              className="relative min-h-screen w-screen bg-cover bg-center overflow-x-hidden overflow-y-auto flex flex-col items-center pt-20 pb-28 custom-scrollbar"
+              style={{ backgroundImage: `linear-gradient(180deg, rgba(7,9,17,0.9) 0%, rgba(7,9,17,0.62) 44%, rgba(4,5,10,0.96) 100%), url(${backgroundImage})` }}
+            >
+                {/* Background ambient glow */}
             <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(230,168,34,0.08)_0%,transparent_60%)]" />
             <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full h-[300px] pointer-events-none bg-[radial-gradient(ellipse_60%_80%_at_50%_100%,rgba(99,102,241,0.06)_0%,transparent_70%)]" />
 
@@ -1974,7 +1980,8 @@ function GamePageContent() {
                 </div>
             )}
 
-        </div>
+            </div>
+        </>
     );
 }
 
