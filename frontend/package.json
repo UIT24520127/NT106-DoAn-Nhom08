@@ -1,29 +1,14 @@
 {
   "name": "undercover-game",
   "version": "0.1.0",
-  "main": "main.js",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "electron:dev": "concurrently \"next dev\" \"electron .\"",
-    "build:electron": "next build && electron-builder"
-  },
-  "build": {
-    "appId": "com.undercover.game",
-    "productName": "Undercover Game",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "out/**/*",
-      "main.js",
-      "package.json"
-    ],
-    "win": {
-      "target": "nsis"
-    }
+    "tauri": "tauri",
+    "dev:tauri": "tauri dev",
+    "build:tauri": "tauri build"
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.0",
@@ -38,16 +23,13 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/howler": "^2.2.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/simple-peer": "^9.11.9",
     "autoprefixer": "^10.4.27",
-    "concurrently": "^9.2.1",
-    "electron": "^42.5.0",
-    "electron-builder": "^26.15.3",
-    "electron-serve": "^3.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "postcss": "^8.5.8",

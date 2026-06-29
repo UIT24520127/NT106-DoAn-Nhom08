@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { X, Volume2, Mic, Music, Settings2 } from "lucide-react";
+import { X, Volume2, Mic, Music, Settings2, Monitor } from "lucide-react";
 import {
   getMenuBgmVolume, getGameBgmVolume,
   getSfxUiVolume, getSfxLobbyVolume, getSfxGameplayVolume, getSfxEndgameVolume,
@@ -17,8 +17,32 @@ interface SettingsModalProps {
 }
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<"BGM" | "SFX" | "VOICE">("BGM");
+  const [activeTab, setActiveTab] = useState<"BGM" | "SFX" | "VOICE" | "DISPLAY">("BGM");
   const { playClick } = useGameSound();
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    setIsFullscreen(!!document.fullscreenElement);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    playClick();
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen().catch((err) => {
+        console.error("Error attempting to enable fullscreen:", err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      }
+    }
+  };
 
   const [vols, setVols] = useState({
     menuBgm: 0, gameBgm: 0,
@@ -43,7 +67,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     return subscribeSound(updateVols);
   }, []);
 
-  const handleTabClick = (tab: "BGM" | "SFX" | "VOICE") => {
+  const handleTabClick = (tab: "BGM" | "SFX" | "VOICE" | "DISPLAY") => {
     playClick();
     setActiveTab(tab);
   };
@@ -73,7 +97,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800">
           <div className="flex items-center gap-2 text-white font-bold text-lg">
             <Settings2 className="text-[#e6a822]" />
-            Cài Đặt Âm Thanh
+            Cài Đặt Hệ Thống
           </div>
           <button onClick={() => { playClick(); onClose(); }} className="text-gray-400 hover:text-white transition">
             <X size={24} />
@@ -103,6 +127,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             <Mic size={18} />
             <span>Voice Chat</span>
           </button>
+          <button 
+            onClick={() => handleTabClick("DISPLAY")}
+            className={`flex-1 py-3 text-sm font-bold flex flex-col items-center gap-1 transition ${activeTab === "DISPLAY" ? "text-[#e6a822] border-b-2 border-[#e6a822]" : "text-gray-400 hover:text-gray-200"}`}
+          >
+            <Monitor size={18} />
+            <span>Hiển Thị</span>
+          </button>
         </div>
 
         {/* Content */}
@@ -130,6 +161,23 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
               <p className="text-xs text-gray-500 mt-4 italic">
                 * Lưu ý: Tùy chỉnh Âm lượng Mic có thể phụ thuộc vào quyền điều khiển thiết bị của trình duyệt.
               </p>
+            </div>
+          )}
+
+          {activeTab === "DISPLAY" && (
+            <div className="animate-fadeIn">
+              <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
+                <div className="flex flex-col">
+                  <span className="text-white font-bold text-sm">Chế độ toàn màn hình</span>
+                  <span className="text-gray-400 text-xs mt-1">Phóng to ứng dụng ra toàn màn hình</span>
+                </div>
+                <button
+                  onClick={toggleFullscreen}
+                  className={`px-6 py-2 rounded-lg font-bold text-sm transition-all ${isFullscreen ? "bg-[#e6a822] text-black" : "bg-white/10 text-white hover:bg-white/20"}`}
+                >
+                  {isFullscreen ? "TẮT" : "BẬT"}
+                </button>
+              </div>
             </div>
           )}
         </div>

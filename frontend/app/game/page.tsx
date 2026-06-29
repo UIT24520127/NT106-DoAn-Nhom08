@@ -1417,7 +1417,7 @@ function GamePageContent() {
         return (
             <div style={pageRootStyle}>
                 {overlayElements}
-                <Notification messages={notifications} />
+                
                 {leaveRoomButton}
                 <LoadingPhaseScreen
                     players={loadingPlayers}
@@ -1439,7 +1439,7 @@ function GamePageContent() {
         return (
             <div style={pageRootStyle}>
                 {overlayElements}
-                <Notification messages={notifications} />
+                
                 {leaveRoomButton}
                 <RoleRevealingScreen
                     role={mySecret.role}
@@ -1456,7 +1456,7 @@ function GamePageContent() {
         return (
             <div style={pageRootStyle}>
                 {overlayElements}
-                <Notification messages={notifications} />
+                
                 {leaveRoomButton}
                 <RoundTransitionScreen
                     roundNumber={transitionData.roundNumber}
@@ -1500,7 +1500,7 @@ function GamePageContent() {
         return (
             <div style={pageRootStyle}>
                 {overlayElements}
-                <Notification messages={notifications} />
+                
                 {leaveRoomButton}
                 {showWhiteHatGuess && isMyWhiteHatGuess && (
                     <WhiteHatGuessOverlay
@@ -1590,7 +1590,7 @@ function GamePageContent() {
         return (
             <>
                 {overlayElements}
-                <Notification messages={notifications} />
+                
                 {leaveRoomButton}
                 {showWhiteHatGuess && isMyWhiteHatGuess && (
                     <WhiteHatGuessOverlay
@@ -1752,7 +1752,7 @@ function GamePageContent() {
             <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(230,168,34,0.08)_0%,transparent_60%)]" />
             <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full h-[300px] pointer-events-none bg-[radial-gradient(ellipse_60%_80%_at_50%_100%,rgba(99,102,241,0.06)_0%,transparent_70%)]" />
 
-            <Notification messages={notifications} />
+            
 
             {/* ── SECRET WORD DISPLAY (Only when game starts/roles are revealed) ── */}
             {mySecret && (

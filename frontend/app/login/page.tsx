@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { saveToken } from "@/lib/auth";
-import { signInWithPopup } from "firebase/auth";
+import { signInWithRedirect, getRedirectResult } from "firebase/auth";
 import { auth, googleProvider } from "@/lib/firebase";
 import { useGameSound } from "@/hooks/useGameSound";
 
@@ -18,6 +18,46 @@ export default function LoginPage() {
       router.push("/menu");
     }
   }, [router]);
+
+  // Xử lý kết quả trả về từ Google (sau khi redirect)
+  useEffect(() => {
+    const checkRedirectResult = async () => {
+      try {
+        setIsGoogleLoggingIn(true); // Hiển thị trạng thái loading trong lúc Google xử lý
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const user = result.user;
+          const idToken = await user.getIdToken();
+
+          const checkRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/user/profile/${user.uid}`);
+          if (checkRes.ok) {
+            saveToken(idToken);
+            sessionStorage.setItem("userId", user.uid);
+            console.log("Đã đăng nhập Google, userId:", user.uid);
+            showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
+          } else if (checkRes.status === 404) {
+            const displayName = user.displayName || "Google User";
+            setGoogleNamePrompt({
+              isOpen: true,
+              uid: user.uid,
+              defaultName: displayName,
+              idToken: idToken
+            });
+            setGoogleNewName(displayName);
+          } else {
+            showPopup("Lỗi kết nối", "Không thể kiểm tra thông tin tài khoản.", false);
+          }
+        }
+      } catch (err: any) {
+        console.error("Google login redirect error:", err);
+        showPopup("Thất bại", "Đăng nhập bằng Google thất bại.", false);
+      } finally {
+        setIsGoogleLoggingIn(false);
+      }
+    };
+    checkRedirectResult();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isGoogleLoggingIn, setIsGoogleLoggingIn] = useState(false);
@@ -100,42 +140,10 @@ export default function LoginPage() {
     if (isGoogleLoggingIn) return;
     setIsGoogleLoggingIn(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      const idToken = await user.getIdToken();
-
-      const checkRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://doanuit.online"}/api/user/profile/${user.uid}`);
-      if (checkRes.ok) {
-        saveToken(idToken);
-        sessionStorage.setItem("userId", user.uid);
-        console.log("Đã đăng nhập Google, userId:", user.uid);
-        showPopup("Thành công!", "Đăng nhập bằng Google thành công!", true, true);
-      } else if (checkRes.status === 404) {
-        // Bắt buộc hỏi tên cho user mới chưa có trong hệ thống, không lưu token ngay để tránh bị redirect
-        const displayName = user.displayName || "Google User";
-        setGoogleNamePrompt({
-          isOpen: true,
-          uid: user.uid,
-          defaultName: displayName,
-          idToken: idToken
-        });
-        setGoogleNewName(displayName);
-      } else {
-        showPopup("Lỗi kết nối", "Không thể kiểm tra thông tin tài khoản.", false);
-      }
+      await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
       console.error("Google login error:", err);
-      const errStr = err.toString();
-      if (err.code === 'auth/popup-closed-by-user' || 
-          err.code === 'auth/cancelled-popup-request' || 
-          err.name === 'NotAllowedError' || 
-          errStr.includes('dismissed') || 
-          errStr.includes('Cross-Origin-Opener-Policy')) {
-        showPopup("Hủy đăng nhập", "Bạn đã hủy đăng nhập hoặc trình duyệt chặn popup.", false);
-      } else {
-        showPopup("Thất bại", "Đăng nhập bằng Google thất bại.", false);
-      }
-    } finally {
+      showPopup("Thất bại", "Không thể kết nối đến Google.", false);
       setIsGoogleLoggingIn(false);
     }
   };
@@ -439,7 +447,7 @@ export default function LoginPage() {
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => { playClick(); setGoogleNamePrompt({ isOpen: false, uid: "", defaultName: "" }); }}
+                  onClick={() => { playClick(); setGoogleNamePrompt({ isOpen: false, uid: "", defaultName: "", idToken: "" }); }}
                   className="flex-1 font-bold py-2.5 rounded bg-gray-300 hover:bg-gray-400 text-gray-800 transition-colors"
                 >
                   HỦY

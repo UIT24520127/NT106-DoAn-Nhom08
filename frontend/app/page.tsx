@@ -2,21 +2,57 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { API_URL, getToken } from "@/lib/auth";
 
 export default function LoadingScreen() {
   const router = useRouter();
 
   useEffect(() => {
-    // Đợi 3 giây (3000ms) rồi tự động chuyển sang trang login
-    const timer = setTimeout(() => {
-      const token = sessionStorage.getItem("token");
-      if (token) {
-        router.push("/menu");
-      } else {
-        router.push("/login");
+    let isMounted = true;
+    
+    const checkAuth = async () => {
+      const token = getToken();
+      const userId = sessionStorage.getItem("userId");
+
+      if (!token || !userId) {
+        if (isMounted) router.push("/login");
+        return;
       }
-    }, 3000);
-    return () => clearTimeout(timer);
+
+      try {
+        // Gọi API để đánh thức backend và xác thực user
+        const res = await fetch(`${API_URL}/api/User/profile/${userId}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          }
+        });
+
+        if (res.ok) {
+          if (isMounted) router.push("/menu");
+        } else {
+          sessionStorage.removeItem("token");
+          sessionStorage.removeItem("userId");
+          sessionStorage.removeItem("username");
+          if (isMounted) router.push("/login");
+        }
+      } catch (err) {
+        // Nếu lỗi mạng, vẫn chuyển vào menu để SessionGuard xử lý tiếp
+        console.warn("Lỗi kết nối tới server:", err);
+        if (isMounted) router.push("/menu");
+      }
+    };
+
+    // Chờ tối thiểu 1s để màn hình loading hiển thị logo mượt mà
+    const timer = setTimeout(() => {
+      checkAuth();
+    }, 1000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
   }, [router]);
 
   return (
