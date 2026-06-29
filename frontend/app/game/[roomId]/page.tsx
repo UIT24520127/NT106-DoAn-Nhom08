@@ -8,7 +8,7 @@ import {
     HubConnectionBuilder,
     HubConnectionState
 } from '@microsoft/signalr';
-import { Shield, MessageSquare, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, CheckCircle2, LogOut, Key, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
+import { Shield, MessageSquare, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, CheckCircle2, LogOut, Key, Mic, MicOff, Volume2, VolumeX, BookOpen } from 'lucide-react';
 import ChatBox from '@/components/ChatBox';
 import RoleRevealingScreen from '@/components/game/RoleRevealingScreen';
 import DescribingPhase from '@/components/game/DescribingPhase';
@@ -234,6 +234,10 @@ export default function GameRoomPage() {
     const [currentUserId, setCurrentUserId] = useState<string>("");
     const [isChatOpen, setIsChatOpen] = useState(false);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
+
+    // Lịch sử mô tả toàn ván
+    const [globalDescriptionHistory, setGlobalDescriptionHistory] = useState<Record<string, { displayName: string, words: string[] }>>({});
+    const [showGlobalHistoryModal, setShowGlobalHistoryModal] = useState(false);
 
     // Lắng nghe thay đổi âm lượng voice output
     useEffect(() => {
@@ -645,6 +649,87 @@ export default function GameRoomPage() {
             {confirmLeaveOverlay}
             {voiceControls}
             {showSettingsModal && <SettingsModal onClose={() => setShowSettingsModal(false)} />}
+            {showGlobalHistoryModal && (
+                <div style={{
+                  position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  zIndex: 2500, backdropFilter: "blur(8px)",
+                }} onClick={() => setShowGlobalHistoryModal(false)}>
+                  <div style={{
+                    background: "linear-gradient(160deg, #1A1A2E, #0B0C10)",
+                    border: "1.5px solid rgba(230,168,34,0.3)",
+                    borderRadius: 24, padding: "28px 32px", maxWidth: 500, width: "90%",
+                    maxHeight: "80vh", overflowY: "auto",
+                    boxShadow: "0 8px 48px rgba(0,0,0,0.7)",
+                  }} onClick={e => e.stopPropagation()} className="custom-scrollbar">
+                    <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
+                      <div style={{
+                        width: 52, height: 52, borderRadius: "50%",
+                        background: "rgba(230,168,34,0.12)", border: "2px solid rgba(230,168,34,0.35)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        color: "#e6a822",
+                      }}>
+                        <BookOpen size={24} />
+                      </div>
+                      <div>
+                        <div style={{ color: "#e6a822", fontWeight: 800, fontSize: 18 }}>LỊCH SỬ MÔ TẢ</div>
+                        <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 2 }}>Tất cả người chơi trong ván này</div>
+                      </div>
+                    </div>
+
+                    {Object.keys(globalDescriptionHistory).length > 0 ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                        {Object.entries(globalDescriptionHistory).map(([uid, playerHistory]) => (
+                          <div key={uid} style={{
+                            background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)",
+                            borderRadius: 16, padding: "14px",
+                          }}>
+                            <div style={{ color: "#fff", fontWeight: 800, fontSize: 15, marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                              <div style={{
+                                 width: 24, height: 24, borderRadius: "50%", background: "rgba(255,255,255,0.1)",
+                                 display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: "bold"
+                              }}>
+                                 {playerHistory.displayName.charAt(0).toUpperCase()}
+                              </div>
+                              {playerHistory.displayName}
+                            </div>
+                            {playerHistory.words.length > 0 ? (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                  {playerHistory.words.map((word, i) => (
+                                    <div key={i} style={{
+                                      background: "rgba(0,242,254,0.05)", border: "1px solid rgba(0,242,254,0.12)",
+                                      borderRadius: 10, padding: "6px 12px",
+                                      color: "#00F2FE", fontSize: 13, fontWeight: 700,
+                                      fontFamily: "'Courier New', monospace",
+                                    }}>
+                                      <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginRight: 6 }}>#{i + 1}</span>
+                                      {word}
+                                    </div>
+                                  ))}
+                                </div>
+                            ) : (
+                                <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 13, fontStyle: "italic" }}>Chưa có mô tả</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14, textAlign: "center", padding: "40px 0" }}>Chưa có lịch sử mô tả nào trong ván này.</p>
+                    )}
+
+                    <button onClick={() => { playClick(); setShowGlobalHistoryModal(false); }} style={{
+                      marginTop: 24, width: "100%", padding: "12px",
+                      background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 14, color: "rgba(255,255,255,0.8)", cursor: "pointer",
+                      fontSize: 14, fontWeight: 800, fontFamily: "'Nunito', 'Inter', sans-serif",
+                      transition: "all 0.2s"
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+                    onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+                    >Đóng</button>
+                  </div>
+                </div>
+            )}
         </>
     );
 
@@ -866,6 +951,9 @@ export default function GameRoomPage() {
                     isSpectator: spectatorIds.includes(storedUserId) || prev.isSpectator,
                 }
                 : prev);
+            
+            // Xoá lịch sử mô tả khi ván mới bắt đầu
+            setGlobalDescriptionHistory({});
         });
 
         // All players ready → start game
@@ -935,6 +1023,19 @@ export default function GameRoomPage() {
                             descriptionHistory: [...(player.descriptionHistory ?? []), data.word],
                         },
                     },
+                };
+            });
+
+            // Cập nhật lịch sử tổng để không bị reset khi qua vòng
+            setGlobalDescriptionHistory(prev => {
+                const displayName = roomStateRef.current?.players[data.userId]?.displayName || "Player";
+                const currentWords = prev[data.userId]?.words || [];
+                return {
+                    ...prev,
+                    [data.userId]: {
+                        displayName,
+                        words: [...currentWords, data.word]
+                    }
                 };
             });
         });
@@ -1444,6 +1545,42 @@ export default function GameRoomPage() {
                     typingSync={typingSync}
                     onTyping={(text) => connection?.invoke("SyncTyping", text)}
                 />
+
+                <button
+                    onClick={() => setShowGlobalHistoryModal(true)}
+                    style={{
+                        position: "fixed",
+                        top: 24,
+                        left: 190,
+                        zIndex: 1000,
+                        background: "rgba(230,168,34,0.15)",
+                        border: "1px solid rgba(230,168,34,0.3)",
+                        backdropFilter: "blur(12px)",
+                        color: "#e6a822",
+                        borderRadius: 14,
+                        padding: "10px 20px",
+                        cursor: "pointer",
+                        fontWeight: 800,
+                        fontSize: 14,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                        boxShadow: "0 4px 15px rgba(0,0,0,0.2)",
+                    }}
+                    onMouseEnter={e => {
+                        e.currentTarget.style.background = "rgba(230,168,34,0.25)";
+                        e.currentTarget.style.transform = "translateY(-2px)";
+                        e.currentTarget.style.boxShadow = "0 8px 25px rgba(230,168,34,0.3)";
+                    }}
+                    onMouseLeave={e => {
+                        e.currentTarget.style.background = "rgba(230,168,34,0.15)";
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 4px 15px rgba(0,0,0,0.2)";
+                    }}
+                >
+                    <BookOpen size={16} /> LỊCH SỬ MÔ TẢ
+                </button>
             </div>
         );
     }
@@ -1518,6 +1655,42 @@ export default function GameRoomPage() {
                     }}
                     backgroundImage={backgroundImage}
                 />
+
+                <button
+                    onClick={() => setShowGlobalHistoryModal(true)}
+                    style={{
+                        position: "fixed",
+                        top: 24,
+                        left: 190,
+                        zIndex: 1000,
+                        background: "rgba(230,168,34,0.15)",
+                        border: "1px solid rgba(230,168,34,0.3)",
+                        backdropFilter: "blur(12px)",
+                        color: "#e6a822",
+                        borderRadius: 14,
+                        padding: "10px 20px",
+                        cursor: "pointer",
+                        fontWeight: 800,
+                        fontSize: 14,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                        boxShadow: "0 4px 15px rgba(0,0,0,0.2)",
+                    }}
+                    onMouseEnter={e => {
+                        e.currentTarget.style.background = "rgba(230,168,34,0.25)";
+                        e.currentTarget.style.transform = "translateY(-2px)";
+                        e.currentTarget.style.boxShadow = "0 8px 25px rgba(230,168,34,0.3)";
+                    }}
+                    onMouseLeave={e => {
+                        e.currentTarget.style.background = "rgba(230,168,34,0.15)";
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "0 4px 15px rgba(0,0,0,0.2)";
+                    }}
+                >
+                    <BookOpen size={16} /> LỊCH SỬ MÔ TẢ
+                </button>
             </>
         );
     }

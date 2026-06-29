@@ -125,8 +125,13 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error("Google login error:", err);
-      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
-        showPopup("Hủy đăng nhập", "Đã hủy đăng nhập bằng Google.", false);
+      const errStr = err.toString();
+      if (err.code === 'auth/popup-closed-by-user' || 
+          err.code === 'auth/cancelled-popup-request' || 
+          err.name === 'NotAllowedError' || 
+          errStr.includes('dismissed') || 
+          errStr.includes('Cross-Origin-Opener-Policy')) {
+        showPopup("Hủy đăng nhập", "Bạn đã hủy đăng nhập hoặc trình duyệt chặn popup.", false);
       } else {
         showPopup("Thất bại", "Đăng nhập bằng Google thất bại.", false);
       }
