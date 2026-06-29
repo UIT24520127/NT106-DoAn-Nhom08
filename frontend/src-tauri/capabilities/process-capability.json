@@ -1,0 +1,9 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema/capability.json",
+  "identifier": "process-capability",
+  "description": "Cho phép thoát ứng dụng qua plugin-process",
+  "windows": ["main"],
+  "permissions": [
+    "process:allow-exit"
+  ]
+}

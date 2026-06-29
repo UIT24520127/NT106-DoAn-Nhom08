@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { X, Volume2, Mic, Music, Settings2, Monitor } from "lucide-react";
+import { X, Volume2, Mic, Music, Settings2, Monitor, LogOut, Power, AlertTriangle } from "lucide-react";
 import {
   getMenuBgmVolume, getGameBgmVolume,
   getSfxUiVolume, getSfxLobbyVolume, getSfxGameplayVolume, getSfxEndgameVolume,
@@ -14,9 +14,10 @@ import { useGameSound } from "@/hooks/useGameSound";
 
 interface SettingsModalProps {
   onClose: () => void;
+  onLogout?: () => void;
 }
 
-export default function SettingsModal({ onClose }: SettingsModalProps) {
+export default function SettingsModal({ onClose, onLogout }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<"BGM" | "SFX" | "VOICE" | "DISPLAY">("BGM");
   const { playClick } = useGameSound();
 
@@ -165,7 +166,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           )}
 
           {activeTab === "DISPLAY" && (
-            <div className="animate-fadeIn">
+            <div className="animate-fadeIn space-y-4">
+              {/* Chế độ toàn màn hình */}
               <div className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
                 <div className="flex flex-col">
                   <span className="text-white font-bold text-sm">Chế độ toàn màn hình</span>
@@ -177,6 +179,67 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                 >
                   {isFullscreen ? "TẮT" : "BẬT"}
                 </button>
+              </div>
+
+              {/* Divider */}
+              <div className="border-t border-gray-700/60 pt-2">
+                <p className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-3 flex items-center gap-1.5">
+                  <AlertTriangle size={11} className="text-yellow-500" />
+                  Khu vực nguy hiểm
+                </p>
+
+                {/* Nút Đăng xuất */}
+                <div className="p-4 bg-orange-500/5 rounded-xl border border-orange-500/20 mb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-orange-400 font-bold text-sm flex items-center gap-1.5">
+                        <LogOut size={14} /> Đăng xuất tài khoản
+                      </span>
+                      <span className="text-gray-500 text-xs mt-1">
+                        Thoát phiên đăng nhập, quay về màn hình Login.
+                        <br />
+                        <span className="text-yellow-600">★ Vẫn giữ lại dữ liệu game trên Server.</span>
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => { if (onLogout) onLogout(); }}
+                      className="px-4 py-2 rounded-lg font-bold text-sm bg-orange-500/20 text-orange-400 border border-orange-500/30 hover:bg-orange-500/40 hover:text-orange-300 transition-all active:scale-95 flex-shrink-0"
+                    >
+                      ĐĂNG XUẤT
+                    </button>
+                  </div>
+                </div>
+
+                {/* Nút Thoát Game */}
+                <div className="p-4 bg-red-500/5 rounded-xl border border-red-500/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex flex-col">
+                      <span className="text-red-400 font-bold text-sm flex items-center gap-1.5">
+                        <Power size={14} /> Thoát game hoàn toàn
+                      </span>
+                      <span className="text-gray-500 text-xs mt-1">
+                        Đóng hoàn toàn ứng dụng Undercover.
+                        <br />
+                        <span className="text-red-600">⚠ Khác với Đăng xuất — sẽ tắt ứng dụng.</span>
+                      </span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        playClick();
+                        try {
+                          const { exit } = await import('@tauri-apps/plugin-process');
+                          await exit(0);
+                        } catch {
+                          // Fallback: nếu không chạy trong Tauri (web mode)
+                          window.close();
+                        }
+                      }}
+                      className="px-4 py-2 rounded-lg font-bold text-sm bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/40 hover:text-red-300 transition-all active:scale-95 flex-shrink-0"
+                    >
+                      THOÁT
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

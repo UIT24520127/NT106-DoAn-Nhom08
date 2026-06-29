@@ -1,7 +1,7 @@
 "use client";
 const getLS = () => typeof window !== 'undefined' ? (window as any).localStorage : null;
 import { useState, useEffect, useRef } from "react";
-import { Users, Settings, LogOut, X, User } from "lucide-react";
+import { Users, Settings, X, User } from "lucide-react";
 import { logout, API_URL } from "@/lib/auth";
 import UserProfile from "@/components/UserProfile";
 import FriendModal from "@/components/friends/FriendModal"; 
@@ -322,17 +322,9 @@ export default function MainMenu() {
           >
             <Settings size={24} color="white" strokeWidth={2.5} />
           </button>
-          
-          <button
-            onClick={() => { playClick(); handleLogout(); }}
-            className={`bg-[#1a1c23] p-3 rounded-2xl border-2 transition shadow-lg border-transparent hover:border-red-500 text-red-500 ml-3`}
-            title="Đăng xuất"
-          >
-            <LogOut size={24} strokeWidth={2.5} />
-          </button>
         </div>
 
-        {showSettingsMenu && <SettingsModal onClose={() => setShowSettingsMenu(false)} />}
+        {showSettingsMenu && <SettingsModal onClose={() => setShowSettingsMenu(false)} onLogout={handleLogout} />}
 
         <button
           onClick={() => { playClick(); setShowGuide(true); }}
