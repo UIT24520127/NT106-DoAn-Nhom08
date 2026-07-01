@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useGameSound } from "@/hooks/useGameSound";
 
 interface CountdownTimerProps {
   /** Unix milliseconds timestamp khi vote kết thúc */
@@ -9,6 +10,17 @@ interface CountdownTimerProps {
 
 export default function CountdownTimer({ endTime, onExpired }: CountdownTimerProps) {
   const [timeLeft, setTimeLeft] = useState(0);
+  const onExpiredRef = useRef(onExpired);
+  const gameSounds = useGameSound();
+  const gameSoundsRef = useRef(gameSounds);
+
+  useEffect(() => {
+    onExpiredRef.current = onExpired;
+  }, [onExpired]);
+
+  useEffect(() => {
+    gameSoundsRef.current = gameSounds;
+  }, [gameSounds]);
 
   useEffect(() => {
     const calc = () => Math.max(0, Math.floor((endTime - Date.now()) / 1000));
@@ -17,14 +29,20 @@ export default function CountdownTimer({ endTime, onExpired }: CountdownTimerPro
     const interval = setInterval(() => {
       const remaining = calc();
       setTimeLeft(remaining);
+
+      // Phát âm thanh đếm ngược 10s khi còn đúng 10 giây
+      if (remaining === 10) {
+        if (gameSoundsRef.current.playCountdown10s) gameSoundsRef.current.playCountdown10s();
+      }
+
       if (remaining === 0) {
         clearInterval(interval);
-        onExpired?.();
+        onExpiredRef.current?.();
       }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [endTime, onExpired]);
+  }, [endTime]);
 
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;

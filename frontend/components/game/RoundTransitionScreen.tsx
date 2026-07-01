@@ -40,12 +40,18 @@ export default function RoundTransitionScreen({
   useEffect(() => {
     const interval = setInterval(() => {
       setCountdown(c => {
-        if (c <= 1) { clearInterval(interval); onCountdownEnd(); return 0; }
+        if (c <= 1) { clearInterval(interval); return 0; }
         return c - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [onCountdownEnd]);
+  }, []);
+
+  useEffect(() => {
+    if (countdown === 0) {
+      onCountdownEnd();
+    }
+  }, [countdown, onCountdownEnd]);
 
   return (
     <div style={{
@@ -129,6 +135,7 @@ export default function RoundTransitionScreen({
           position: "relative", overflow: "hidden",
           boxShadow: `0 0 60px ${accentGlow}15, 0 24px 60px rgba(0,0,0,0.7)`,
           animation: phase === "reveal" || phase === "next" ? "rt-spot-in 0.5s cubic-bezier(0.34,1.56,0.64,1) both" : "none",
+          opacity: phase === "reveal" || phase === "next" ? 1 : 0,
         }}>
           {/* Top accent line */}
           <div style={{
@@ -195,6 +202,8 @@ export default function RoundTransitionScreen({
                   background: `${roleInfo.color}0D`,
                   border: `1.5px solid ${roleInfo.color}35`,
                   animation: phase === "next" ? "rt-role-glow 2.5s ease-in-out infinite, rt-reveal 0.5s ease 0.3s both" : "none",
+                  opacity: phase === "next" ? 1 : 0,
+                  transition: "opacity 0.4s ease",
                 }}>
                   <span style={{ fontSize: 28 }}>{roleInfo.icon}</span>
                   <div style={{ textAlign: "left" }}>
@@ -217,6 +226,9 @@ export default function RoundTransitionScreen({
                   border: "1px solid rgba(255,255,255,0.08)",
                   borderRadius: 14, padding: "10px 20px",
                   color: "rgba(255,255,255,0.3)", fontSize: 14, fontStyle: "italic",
+                  animation: phase === "next" ? "rt-reveal 0.5s ease 0.3s both" : "none",
+                  opacity: phase === "next" ? 1 : 0,
+                  transition: "opacity 0.4s ease",
                 }}>
                   🔒 Vai trò được giữ bí mật
                 </div>
@@ -238,7 +250,7 @@ export default function RoundTransitionScreen({
             <div>
               <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 4px" }}>Vòng tiếp theo</p>
               <p style={{ color: "#fff", fontWeight: 900, fontSize: 20, margin: 0 }}>
-                Vòng <span style={{ color: "#00F2FE", textShadow: "0 0 12px rgba(0,242,254,0.6)" }}>{roundNumber + 1}</span>
+                Vòng <span style={{ color: "#00F2FE", textShadow: "0 0 12px rgba(0,242,254,0.6)" }}>{roundNumber}</span>
               </p>
             </div>
             <div style={{ textAlign: "right" }}>

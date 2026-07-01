@@ -68,12 +68,12 @@ export default function PlayWithFriends() {
 
     connection.on("RoomCreated", (room: any) => {
       setIsLoading(false);
-      router.push(`/room/${room.roomId}`);
+      router.push(`/room?roomId=${room.roomId}`);
     });
 
     connection.on("RoomJoined", (room: any) => {
       setIsLoading(false);
-      router.push(`/room/${room.roomId}`);
+      router.push(`/room?roomId=${room.roomId}`);
     });
 
     connection.on("RoomError", (message: string) => {
@@ -144,7 +144,7 @@ export default function PlayWithFriends() {
   };
 
   return (
-    <div className="relative h-screen w-screen bg-[url('/bg.png')] bg-cover bg-center overflow-hidden flex flex-col">
+    <div className="relative h-screen w-screen bg-[url('/bg.jpg')] bg-cover bg-center overflow-hidden flex flex-col">
       {/* OVERLAY TỐI ĐỂ DỄ NHÌN HƠN */}
       <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] pointer-events-none"></div>
 

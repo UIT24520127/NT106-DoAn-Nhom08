@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -84,9 +84,9 @@ const GAME_BACKGROUNDS = ['/bg1.jpg', '/bg2.jpg', '/bg3.jpg', '/bg4.png'];
 // ================================
 function Notification({ messages }: { messages: { id: string; type: 'info' | 'warning' | 'result'; text: string }[] }) {
     const typeStyle = {
-        info: { bg: "rgba(99,102,241,0.12)", border: "rgba(99,102,241,0.3)", color: "#818cf8", prefix: "ℹ️" },
-        warning: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", color: "#fbbf24", prefix: "⚠️" },
-        result: { bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", color: "#f87171", prefix: "📢" },
+        info: { bg: "rgba(99,102,241,0.12)", border: "rgba(99,102,241,0.3)", color: "#818cf8", prefix: "Γä╣∩╕Å" },
+        warning: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.3)", color: "#fbbf24", prefix: "ΓÜá∩╕Å" },
+        result: { bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", color: "#f87171", prefix: "≡ƒôó" },
     };
     if (messages.length === 0) return null;
     return (
@@ -129,37 +129,37 @@ export default function GameRoomPage() {
     const roomId = params.roomId as string;
     const [connection, setConnection] = useState<HubConnection | null>(null);
 
-    // ── Secret & Phase ──────────────────────
+    // ΓöÇΓöÇ Secret & Phase ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [mySecret, setMySecret] = useState<{ role: string; word: string } | null>(null);
     const [gamePhase, setGamePhase] = useState<GamePhase>('lobby');
     const [isWaitingForTurnOrder, setIsWaitingForTurnOrder] = useState(false);
 
     const [loadingSync, setLoadingSync] = useState<LoadingSyncState | null>(null);
 
-    // ── Turn / Describing ───────────────────
+    // ΓöÇΓöÇ Turn / Describing ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [turnOrder, setTurnOrder] = useState<string[]>([]);
     const [currentTurnIndex, setCurrentTurnIndex] = useState(0);
     const [roundNumber, setRoundNumber] = useState(1);
     const [turnEndTime, setTurnEndTime] = useState<number | undefined>(undefined);
     const [describeDuration, setDescribeDuration] = useState(30);
 
-    // ── Voting ──────────────────────────────
+    // ΓöÇΓöÇ Voting ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [voteEndTime, setVoteEndTime] = useState(Date.now() + 60000);
     const [voteCounts, setVoteCounts] = useState<VoteCounts>({});
     const [hasVoted, setHasVoted] = useState(false);
     const [myVoteTarget, setMyVoteTarget] = useState<string | null>(null);
 
-    // ── Round Transition ────────────────────
+    // ΓöÇΓöÇ Round Transition ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [transitionData, setTransitionData] = useState<RoundTransitionData | null>(null);
 
-    // ── Game Ended ──────────────────────────
+    // ΓöÇΓöÇ Game Ended ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [gameEndedData, setGameEndedData] = useState<GameEndedData | null>(null);
 
-    // ── White Hat ───────────────────────────
+    // ΓöÇΓöÇ White Hat ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [showWhiteHatGuess, setShowWhiteHatGuess] = useState(false);
     const [pendingWinner, setPendingWinner] = useState<string | null>(null);
 
-    // ── Voice ────────────────────────────────
+    // ΓöÇΓöÇ Voice ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [isMicOn, setIsMicOn] = useState(false);
     const [isSpeakerOn, setIsSpeakerOn] = useState(true);
     const [isJoinedVoice, setIsJoinedVoice] = useState(false);
@@ -167,14 +167,14 @@ export default function GameRoomPage() {
     const peers = useRef<Record<string, PeerInstance>>({});
     const remoteAudios = useRef<Record<string, HTMLAudioElement>>({});
 
-    // ── Room / UI ───────────────────────────
+    // ΓöÇΓöÇ Room / UI ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [roomState, setRoomState] = useState<RoomState | null>(null);
     const roomStateRef = useRef<RoomState | null>(null);
     const [currentUser, setCurrentUser] = useState<string>("");
     const [currentUserId, setCurrentUserId] = useState<string>("");
     const [isChatOpen, setIsChatOpen] = useState(false);
 
-    // ── Settings ────────────────────────────
+    // ΓöÇΓöÇ Settings ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [showSettings, setShowSettings] = useState(false);
     const [localSettings, setLocalSettings] = useState<any>({
         describeDuration: 30,
@@ -183,7 +183,7 @@ export default function GameRoomPage() {
         roundTransitionDuration: 5,
     });
 
-    // ── Notifications ───────────────────────
+    // ΓöÇΓöÇ Notifications ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     const [notifications, setNotifications] = useState<{ id: string; type: 'info' | 'warning' | 'result'; text: string }[]>([]);
     const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
     const addNotif = (text: string, type: 'info' | 'warning' | 'result' = 'info') => {
@@ -217,7 +217,7 @@ export default function GameRoomPage() {
             audio.srcObject = stream;
             audio.muted = !isSpeakerOn;
         });
-        peer.on('connect', () => console.log(`✅ P2P connected: ${targetId}`));
+        peer.on('connect', () => console.log(`Γ£à P2P connected: ${targetId}`));
         peer.on('error', (err: any) => { console.error('Peer error:', err); cleanupPeer(targetId); });
         peer.on('close', () => cleanupPeer(targetId));
         return peer;
@@ -238,7 +238,7 @@ export default function GameRoomPage() {
             await activeConn.invoke("StartVoiceChat", roomId);
             setIsJoinedVoice(true);
         } catch (err) {
-            console.error("❌ Mic access denied:", err);
+            console.error("Γ¥î Mic access denied:", err);
         }
     };
 
@@ -279,7 +279,7 @@ export default function GameRoomPage() {
             await connection.invoke("SubmitVote", targetUserId);
             setMyVoteTarget(targetUserId);
             setHasVoted(true);
-            addNotif(`Đã bầu cho ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
+            addNotif(`─É├ú bß║ºu cho ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
         } catch (e) { console.error("Vote error:", e); }
     };
 
@@ -288,7 +288,7 @@ export default function GameRoomPage() {
         try {
             await connection.invoke("ChangeVote", targetUserId);
             setMyVoteTarget(targetUserId);
-            addNotif(`Đã đổi vote sang ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
+            addNotif(`─É├ú ─æß╗òi vote sang ${roomState?.players[targetUserId]?.displayName ?? targetUserId}`, 'info');
         } catch (e) { console.error("ChangeVote error:", e); }
     };
 
@@ -375,7 +375,7 @@ export default function GameRoomPage() {
                 e.currentTarget.style.boxShadow = "0 4px 15px rgba(0,0,0,0.2)";
             }}
         >
-            <LogOut size={16} /> RỜI PHÒNG
+            <LogOut size={16} /> Rß╗£I PH├ÆNG
         </button>
     );
 
@@ -389,9 +389,9 @@ export default function GameRoomPage() {
                 boxShadow: '0 24px 70px rgba(0,0,0,0.7)', padding: '28px 26px', border: '1px solid rgba(255,255,255,0.06)',
                 color: '#fff', textAlign: 'center', lineHeight: 1.6,
             }}>
-                <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>Xác nhận rời phòng</div>
+                <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 12 }}>X├íc nhß║¡n rß╗¥i ph├▓ng</div>
                 <div style={{ color: 'rgba(255,255,255,0.82)', marginBottom: 24, fontSize: 15 }}>
-                    Bạn có chắc muốn rời phòng? Bạn sẽ mất kết nối với ván đấu hiện tại.
+                    Bß║ín c├│ chß║»c muß╗æn rß╗¥i ph├▓ng? Bß║ín sß║╜ mß║Ñt kß║┐t nß╗æi vß╗¢i v├ín ─æß║Ñu hiß╗çn tß║íi.
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 12, flexWrap: 'wrap' }}>
                     <button
@@ -401,14 +401,14 @@ export default function GameRoomPage() {
                             background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.14)',
                             cursor: 'pointer', fontWeight: 700,
                         }}
-                    >Hủy</button>
+                    >Hß╗ºy</button>
                     <button
                         onClick={handleLeaveRoom}
                         style={{
                             minWidth: 120, padding: '10px 16px', borderRadius: 12,
                             background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700,
                         }}
-                    >Rời phòng</button>
+                    >Rß╗¥i ph├▓ng</button>
                 </div>
             </div>
         </div>
@@ -466,7 +466,7 @@ export default function GameRoomPage() {
             .withAutomaticReconnect()
             .build();
 
-        // ── Room events ──────────────────────────
+        // ΓöÇΓöÇ Room events ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         newConn.on("RoomJoined", (room: RoomState) => {
             setRoomState(room);
             newConn.invoke("GetRoomState", roomId).catch(console.error);
@@ -497,7 +497,7 @@ export default function GameRoomPage() {
             if (me?.displayName) setCurrentUser(me.displayName);
         });
 
-        // ── Voice events ─────────────────────────
+        // ΓöÇΓöÇ Voice events ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         newConn.on('UserJoinedVoice', async (newcomerId: string) => {
             if (!peers.current[newcomerId]) {
                 const peer = await createPeer(newcomerId, newConn, true);
@@ -514,15 +514,15 @@ export default function GameRoomPage() {
         });
         newConn.on('PlayerDisconnected', (id: string) => cleanupPeer(id));
 
-        // ── Game phase events ────────────────────
+        // ΓöÇΓöÇ Game phase events ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
-        // 1. Nhận vai trò bí mật → chuyển sang phase roleRevealing
+        // 1. Nhß║¡n vai tr├▓ b├¡ mß║¡t ΓåÆ chuyß╗ân sang phase roleRevealing
         newConn.on("ReceiveSecretWord", (data: { role: string; word: string }) => {
             setMySecret(data);
             setGamePhase('roleRevealing');
             addNotif(data.word
-                ? `Bạn đã nhận từ khóa: ${data.word}`
-                : 'Bạn đã nhận vai trò. Chờ bắt đầu lượt miêu tả.',
+                ? `Bß║ín ─æ├ú nhß║¡n tß╗½ kh├│a: ${data.word}`
+                : 'Bß║ín ─æ├ú nhß║¡n vai tr├▓. Chß╗¥ bß║»t ─æß║ºu l╞░ß╗út mi├¬u tß║ú.',
                 'info');
         });
 
@@ -531,13 +531,13 @@ export default function GameRoomPage() {
             setMySecret(data);
             setGamePhase('roleRevealing');
             addNotif(data.word
-                ? `Bạn đã nhận từ khóa: ${data.word}`
-                : 'Bạn đã nhận vai trò. Chờ bắt đầu lượt miêu tả.',
+                ? `Bß║ín ─æ├ú nhß║¡n tß╗½ kh├│a: ${data.word}`
+                : 'Bß║ín ─æ├ú nhß║¡n vai tr├▓. Chß╗¥ bß║»t ─æß║ºu l╞░ß╗út mi├¬u tß║ú.',
                 'info');
         });
 
         newConn.on("ReturnedToLobby", () => {
-            console.log("Phòng đã được reset bởi chủ phòng. Bạn có thể tự bấm Chơi Lại.");
+            console.log("Ph├▓ng ─æ├ú ─æ╞░ß╗úc reset bß╗ƒi chß╗º ph├▓ng. Bß║ín c├│ thß╗â tß╗▒ bß║Ñm Ch╞íi Lß║íi.");
         });
 
         newConn.on("LoadingPhaseStarted", async (data: { timeoutSeconds?: number; totalCount?: number; startedAt?: number; readyCount?: number; readyPlayerIds?: string[] }) => {
@@ -615,7 +615,7 @@ export default function GameRoomPage() {
                     : [...(prev?.spectatorIds ?? []), storedUserId],
                 activePlayerIds: prev?.activePlayerIds ?? [],
             }));
-            addNotif(data.reason ?? "Kết nối của bạn hơi chậm. Bạn đang quan sát ván này.", 'warning');
+            addNotif(data.reason ?? "Kß║┐t nß╗æi cß╗ºa bß║ín h╞íi chß║¡m. Bß║ín ─æang quan s├ít v├ín n├áy.", 'warning');
         });
 
         newConn.on("SpectatorUpdated", (data: { spectatorIds?: string[]; activePlayerIds?: string[] }) => {
@@ -642,12 +642,12 @@ export default function GameRoomPage() {
                 : prev);
         });
 
-        // All players ready → start game
+        // All players ready ΓåÆ start game
         newConn.on("AllPlayersReady", () => {
             setIsWaitingForTurnOrder(true);
         });
 
-        // 2. Thứ tự lượt nói
+        // 2. Thß╗⌐ tß╗▒ l╞░ß╗út n├│i
         newConn.on("TurnOrderGenerated", (data: { roundNumber: number; turnOrder: string[] }) => {
             setTurnOrder(data.turnOrder);
             setCurrentTurnIndex(0);
@@ -655,10 +655,10 @@ export default function GameRoomPage() {
             setIsWaitingForTurnOrder(false);
             setLoadingSync(null);
             setGamePhase('describing');
-            addNotif(`Vòng ${data.roundNumber} bắt đầu! Thứ tự đã được random.`, 'info');
+            addNotif(`V├▓ng ${data.roundNumber} bß║»t ─æß║ºu! Thß╗⌐ tß╗▒ ─æ├ú ─æ╞░ß╗úc random.`, 'info');
         });
 
-        // 3. Lượt nói bắt đầu
+        // 3. L╞░ß╗út n├│i bß║»t ─æß║ºu
         newConn.on("TurnStarted", (data: {
             currentSpeakerId: string;
             currentTurnIndex: number;
@@ -674,14 +674,14 @@ export default function GameRoomPage() {
             const speaker = players.find((p: any) => p.userId === data.currentSpeakerId) as any;
             if (speaker) {
                 if (data.currentSpeakerId === storedUserId) {
-                    addNotif('Đến lượt bạn miêu tả!', 'result');
+                    addNotif('─Éß║┐n l╞░ß╗út bß║ín mi├¬u tß║ú!', 'result');
                 } else {
-                    addNotif(`Đến lượt ${speaker.displayName} miêu tả.`, 'info');
+                    addNotif(`─Éß║┐n l╞░ß╗út ${speaker.displayName} mi├¬u tß║ú.`, 'info');
                 }
             }
         });
 
-        // 4. Lượt nói kết thúc / skip
+        // 4. L╞░ß╗út n├│i kß║┐t th├║c / skip
         newConn.on("TurnEnded", (data: { nextTurnIndex: number }) => {
             setCurrentTurnIndex(data.nextTurnIndex);
         });
@@ -689,7 +689,7 @@ export default function GameRoomPage() {
             setCurrentTurnIndex(data.nextTurnIndex);
         });
 
-        // 5. Bắt đầu vote
+        // 5. Bß║»t ─æß║ºu vote
         newConn.on("DescriptionSubmitted", (data: { userId: string; word: string }) => {
             setRoomState(prev => {
                 if (!prev || !prev.players[data.userId]) return prev;
@@ -715,7 +715,7 @@ export default function GameRoomPage() {
             setVoteCounts({});
             setLoadingSync(null);
             setGamePhase('voting');
-            addNotif('Vòng bình chọn bắt đầu!', 'result');
+            addNotif('V├▓ng b├¼nh chß╗ìn bß║»t ─æß║ºu!', 'result');
         });
 
         // 6. Vote count update realtime
@@ -770,9 +770,9 @@ export default function GameRoomPage() {
             setGamePhase('roundTransition');
 
             if (!data.isTieVote && data.eliminatedPlayer) {
-                addNotif(`${data.eliminatedPlayer.displayName} bị loại với số phiếu cao nhất.`, 'result');
+                addNotif(`${data.eliminatedPlayer.displayName} bß╗ï loß║íi vß╗¢i sß╗æ phiß║┐u cao nhß║Ñt.`, 'result');
             } else if (data.isTieVote) {
-                addNotif('Hòa phiếu! Không ai bị loại.', 'warning');
+                addNotif('H├▓a phiß║┐u! Kh├┤ng ai bß╗ï loß║íi.', 'warning');
             }
 
             // Update room state players eliminated status
@@ -793,7 +793,7 @@ export default function GameRoomPage() {
             }
         });
 
-        // 8. Player eliminated (có thể server gửi riêng)
+        // 8. Player eliminated (c├│ thß╗â server gß╗¡i ri├¬ng)
         newConn.on("PlayerEliminated", (data: { userId: string; displayName: string }) => {
             setRoomState(prev => {
                 if (!prev) return prev;
@@ -833,7 +833,7 @@ export default function GameRoomPage() {
             setRoomState(room);
         });
 
-        // ── Start connection ─────────────────────
+        // ΓöÇΓöÇ Start connection ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         const start = async () => {
             if (newConn.state === HubConnectionState.Disconnected) {
                 try {
@@ -882,7 +882,7 @@ export default function GameRoomPage() {
                     }
                 } catch (err: any) {
                     if (!err.message?.includes("stopped during negotiation")) {
-                        console.error("❌ SignalR Error:", err);
+                        console.error("Γ¥î SignalR Error:", err);
                     }
                 }
             }
@@ -1094,7 +1094,7 @@ export default function GameRoomPage() {
                         onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"}
                     >
                         <Key size={20} />
-                        ĐOÁN TỪ KHÓA
+                        ─ÉO├üN Tß╗¬ KH├ôA
                     </button>
                 )}
                 <DescribingPhase
@@ -1133,7 +1133,7 @@ export default function GameRoomPage() {
                         <ChatBox
                             connection={connection}
                             roomId={roomId}
-                            currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
+                            currentUser={currentUser || sessionStorage.getItem("username") || "Ng╞░ß╗¥i ch╞íi"}
                             playerCount={currentPlayerCount}
                         />
                     )}
@@ -1173,7 +1173,7 @@ export default function GameRoomPage() {
                         onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"}
                     >
                         <Key size={20} />
-                        ĐOÁN TỪ KHÓA
+                        ─ÉO├üN Tß╗¬ KH├ôA
                     </button>
                 )}
                 <VotingGrid
@@ -1190,7 +1190,7 @@ export default function GameRoomPage() {
                     onChangeVote={handleChangeVote}
                     onSkip={handleSkipVoting}
                     onTimerExpired={() => {
-                        addNotif('Thời gian vote đã hết!', 'warning');
+                        addNotif('Thß╗¥i gian vote ─æ├ú hß║┐t!', 'warning');
                     }}
                     backgroundImage={backgroundImage}
                 />
@@ -1216,7 +1216,7 @@ export default function GameRoomPage() {
                         <ChatBox
                             connection={connection}
                             roomId={roomId}
-                            currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
+                            currentUser={currentUser || sessionStorage.getItem("username") || "Ng╞░ß╗¥i ch╞íi"}
                             playerCount={currentPlayerCount}
                         />
                     )}
@@ -1265,7 +1265,7 @@ export default function GameRoomPage() {
                             }}
                         >
                             <Settings size={16} style={{ color: "#e6a822" }} />
-                            <span style={{ fontWeight: 700, fontSize: 14, flex: 1, textAlign: "left" }}>Cài đặt phòng</span>
+                            <span style={{ fontWeight: 700, fontSize: 14, flex: 1, textAlign: "left" }}>C├ái ─æß║╖t ph├▓ng</span>
                             {showSettings ? <ChevronUp size={16} style={{ color: "rgba(255,255,255,0.4)" }} /> : <ChevronDown size={16} style={{ color: "rgba(255,255,255,0.4)" }} />}
                         </button>
                         {showSettings && (
@@ -1273,7 +1273,7 @@ export default function GameRoomPage() {
                                 <div>
                                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                                         <Clock size={13} style={{ color: "#22c55e" }} />
-                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Thời gian nói</span>
+                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Thß╗¥i gian n├│i</span>
                                         <span style={{ marginLeft: "auto", color: "#22c55e", fontWeight: 800, fontSize: 13 }}>{localSettings.describeDuration}s</span>
                                     </div>
                                     <input type="range" min={15} max={60} step={5} value={localSettings.describeDuration} onChange={e => handleUpdateSettings({ describeDuration: Number(e.target.value) })} style={{ width: "100%", accentColor: "#22c55e" }} />
@@ -1281,7 +1281,7 @@ export default function GameRoomPage() {
                                 <div>
                                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                                         <Vote size={13} style={{ color: "#e6a822" }} />
-                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Thời gian vote</span>
+                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Thß╗¥i gian vote</span>
                                         <span style={{ marginLeft: "auto", color: "#e6a822", fontWeight: 800, fontSize: 13 }}>{localSettings.voteDuration}s</span>
                                     </div>
                                     <input type="range" min={30} max={90} step={15} value={localSettings.voteDuration} onChange={e => handleUpdateSettings({ voteDuration: Number(e.target.value) })} style={{ width: "100%", accentColor: "#e6a822" }} />
@@ -1289,7 +1289,7 @@ export default function GameRoomPage() {
                                 <div>
                                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                                         <Clock size={13} style={{ color: "#6366f1" }} />
-                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Chờ giữa vòng</span>
+                                        <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, fontWeight: 600 }}>Chß╗¥ giß╗»a v├▓ng</span>
                                         <span style={{ marginLeft: "auto", color: "#6366f1", fontWeight: 800, fontSize: 13 }}>{localSettings.roundTransitionDuration}s</span>
                                     </div>
                                     <input type="range" min={5} max={10} step={1} value={localSettings.roundTransitionDuration} onChange={e => handleUpdateSettings({ roundTransitionDuration: Number(e.target.value) })} style={{ width: "100%", accentColor: "#6366f1" }} />
@@ -1299,11 +1299,11 @@ export default function GameRoomPage() {
                     </div>
                 )}
 
-                {/* ── SECRET WORD DISPLAY (Only when game starts/roles are revealed) ── */}
+                {/* ΓöÇΓöÇ SECRET WORD DISPLAY (Only when game starts/roles are revealed) ΓöÇΓöÇ */}
                 {mySecret && (
                     <div style={{ marginBottom: 40, textAlign: "center" }}>
                         <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 10, letterSpacing: "0.3em", textTransform: "uppercase", margin: "0 0 10px" }}>
-                            Từ khóa bí mật
+                            Tß╗½ kh├│a b├¡ mß║¡t
                         </p>
                         <div
                             onClick={() => setIsChatOpen(p => p)}
@@ -1322,7 +1322,7 @@ export default function GameRoomPage() {
                     </div>
                 )}
 
-                {/* ── PLAYER GRID ── */}
+                {/* ΓöÇΓöÇ PLAYER GRID ΓöÇΓöÇ */}
                 <div style={{
                     display: "grid",
                     gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
@@ -1376,12 +1376,12 @@ export default function GameRoomPage() {
                                     {player.displayName}
                                 </div>
                                 {player.userId === currentUserId && (
-                                    <div style={{ color: "rgba(230,168,34,0.6)", fontSize: 10, marginTop: 2 }}>(Bạn)</div>
+                                    <div style={{ color: "rgba(230,168,34,0.6)", fontSize: 10, marginTop: 2 }}>(Bß║ín)</div>
                                 )}
                             </div>
 
                             {player.isEliminated && (
-                                <span style={{ fontSize: 18 }}>❌</span>
+                                <span style={{ fontSize: 18 }}>Γ¥î</span>
                             )}
 
                             {/* Ready Status (only show in lobby before game starts) */}
@@ -1394,7 +1394,7 @@ export default function GameRoomPage() {
                                         color: "#22c55e", padding: "4px 12px", borderRadius: 99,
                                         fontSize: 11, fontWeight: 800, letterSpacing: "0.06em",
                                     }}>
-                                        <CheckCircle2 size={12} /> SẴN SÀNG
+                                        <CheckCircle2 size={12} /> Sß║┤N S├ÇNG
                                     </div>
                                 ) : (
                                     <div style={{
@@ -1404,7 +1404,7 @@ export default function GameRoomPage() {
                                         padding: "4px 12px", borderRadius: 99,
                                         fontSize: 11, fontWeight: 600,
                                     }}>
-                                        Đang chờ...
+                                        ─Éang chß╗¥...
                                     </div>
                                 )
                             )}
@@ -1438,7 +1438,7 @@ export default function GameRoomPage() {
                                 onMouseEnter={e => !isMyPlayerReady && ((e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)")}
                                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"}
                             >
-                                {isMyPlayerReady ? "✖ HỦY SẴN SÀNG" : "✓ SẴN SÀNG"}
+                                {isMyPlayerReady ? "Γ£û Hß╗ªY Sß║┤N S├ÇNG" : "Γ£ô Sß║┤N S├ÇNG"}
                             </button>
                         )}
 
@@ -1464,13 +1464,13 @@ export default function GameRoomPage() {
                                 onMouseEnter={e => canStart && ((e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)")}
                                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "translateY(0)"}
                             >
-                                BẮT ĐẦU GAME
+                                Bß║«T ─Éß║ªU GAME
                             </button>
                         )}
                     </div>
                 )}
 
-                {/* ── VOICE CONTROLS ── */}
+                {/* ΓöÇΓöÇ VOICE CONTROLS ΓöÇΓöÇ */}
                 {isJoinedVoice && (
                     <div style={{
                         position: "fixed", bottom: 24, right: 24,
@@ -1494,7 +1494,7 @@ export default function GameRoomPage() {
                                     transition: "all 0.2s",
                                 }}
                             >
-                                {isSpeakerOn ? "🔊" : "🔇"}
+                                {isSpeakerOn ? "≡ƒöè" : "≡ƒöç"}
                             </button>
                             <button
                                 onClick={toggleMic}
@@ -1507,7 +1507,7 @@ export default function GameRoomPage() {
                                     transition: "all 0.2s",
                                 }}
                             >
-                                {isMicOn ? "🎙️" : "🚫"}
+                                {isMicOn ? "≡ƒÄÖ∩╕Å" : "≡ƒÜ½"}
                             </button>
                         </div>
 
@@ -1523,7 +1523,7 @@ export default function GameRoomPage() {
                                 transition: "all 0.2s",
                             }}
                         >
-                            {isChatOpen ? "✖" : "💬"}
+                            {isChatOpen ? "Γ£û" : "≡ƒÆ¼"}
                         </button>
                     </div>
                 )}
@@ -1536,7 +1536,7 @@ export default function GameRoomPage() {
                         animation: "pulse-opacity 1.5s ease-in-out infinite",
                     }}>
                         <style>{`@keyframes pulse-opacity { 0%,100%{opacity:0.5;} 50%{opacity:1;} }`}</style>
-                        🎤 Đang kết nối voice...
+                        ≡ƒÄñ ─Éang kß║┐t nß╗æi voice...
                     </div>
                 )}
 
@@ -1549,7 +1549,7 @@ export default function GameRoomPage() {
                         <ChatBox
                             connection={connection}
                             roomId={roomId}
-                            currentUser={currentUser || sessionStorage.getItem("username") || "Người chơi"}
+                            currentUser={currentUser || sessionStorage.getItem("username") || "Ng╞░ß╗¥i ch╞íi"}
                             playerCount={currentPlayerCount}
                         />
                     )}
@@ -1559,5 +1559,5 @@ export default function GameRoomPage() {
     );
 }
 
-// Helper — move outside component to avoid recreation
-function canSkip() { return true; } // Logic thực sẽ do server control
+// Helper ΓÇö move outside component to avoid recreation
+function canSkip() { return true; } // Logic thß╗▒c sß║╜ do server control

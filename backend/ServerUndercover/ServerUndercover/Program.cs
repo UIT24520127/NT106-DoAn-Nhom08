@@ -35,7 +35,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 // 1. Đăng ký Controller & SignalR
 builder.Services.AddControllers();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 10 * 1024 * 1024; // 10MB
+});
 builder.Services.AddSingleton<ServerUndercover.Services.RoomManagerService>();
 builder.Services.AddMemoryCache(); // 👈 Thêm để cache đăng ký tạm thời
 
@@ -48,7 +51,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowNextJs", policy =>
     {
-        policy.SetIsOriginAllowed(origin => new Uri(origin).Host == "localhost" || new Uri(origin).Host == "127.0.0.1") // Cho phép tất cả các cổng localhost
+        policy.SetIsOriginAllowed(origin => true) // Cho phép mọi domain (cần thiết nếu frontend deploy Vercel ngẫu nhiên)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials(); // Bắt buộc phải có dòng này cho SignalR

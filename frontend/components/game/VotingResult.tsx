@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useGameSound } from "@/hooks/useGameSound";
 
 interface VotingResultProps {
   isDraw: boolean;
@@ -17,6 +18,13 @@ export default function VotingResult({
 }: VotingResultProps) {
   const [visible, setVisible] = useState(true);
   const [countdown, setCountdown] = useState(autoDismissSeconds);
+  const { playLoai } = useGameSound();
+
+  useEffect(() => {
+    if (!isDraw) {
+      playLoai();
+    }
+  }, [isDraw, playLoai]);
 
   useEffect(() => {
     const interval = setInterval(() => {

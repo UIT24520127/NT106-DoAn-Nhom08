@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using ServerUndercover.Models.State;
 using Firebase.Database;
 using Firebase.Database.Query;
+using Microsoft.Extensions.Configuration;
 
 namespace ServerUndercover.Services
 {
@@ -16,16 +17,51 @@ namespace ServerUndercover.Services
         // Theo dõi Session của User (UserId -> ConnectionId)
         private readonly ConcurrentDictionary<string, string> _userConnections = new();
 
+        // Thành viên voice chat của mỗi phòng (RoomId -> tập ConnectionId đang trong voice)
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _voiceMembers = new();
+
+        public List<string> GetVoiceMembers(string roomId)
+            => _voiceMembers.TryGetValue(roomId, out var set) ? set.Keys.ToList() : new List<string>();
+
+        public void AddVoiceMember(string roomId, string connectionId)
+            => _voiceMembers.GetOrAdd(roomId, _ => new ConcurrentDictionary<string, byte>())[connectionId] = 0;
+
+        public void RemoveVoiceMember(string roomId, string connectionId)
+        {
+            if (_voiceMembers.TryGetValue(roomId, out var set)) set.TryRemove(connectionId, out _);
+        }
+
+        public void RemoveVoiceMemberEverywhere(string connectionId)
+        {
+            foreach (var set in _voiceMembers.Values) set.TryRemove(connectionId, out _);
+        }
+
         //Cấp từ khi bắt đầu ván mới, xóa khi ván kết thúc
         private readonly List<WordPair> _localWordPool = new(); // Kho từ tạm thời trên RAM
+
+        // Trí nhớ các cặp từ ĐÃ TỪNG sinh ra (kể cả đã tiêu thụ) -> tránh sinh trùng lại.
+        // Khóa được chuẩn hóa (trim + thường hóa + sắp xếp) nên (A,B) và (B,A) coi là một.
+        // Mọi truy cập tới _seenPairKeys đều nằm trong lock (_localWordPool).
+        private readonly HashSet<string> _seenPairKeys = new(StringComparer.OrdinalIgnoreCase);
         private readonly FirebaseClient _firebaseClient;
         private readonly IHttpClientFactory _httpClientFactory;
 
-        // Constructor nhận cả FirebaseClient và IHttpClientFactory từ DI
-        public RoomManagerService(Firebase.Database.FirebaseClient firebaseClient, IHttpClientFactory httpClientFactory)
+        // Khóa Gemini đọc từ config (User Secrets / biến môi trường) - KHÔNG hard-code, KHÔNG commit.
+        private readonly string _geminiApiKey;
+
+        // Constructor nhận FirebaseClient, IHttpClientFactory và IConfiguration từ DI
+        public RoomManagerService(Firebase.Database.FirebaseClient firebaseClient, IHttpClientFactory httpClientFactory, IConfiguration config)
         {
             _firebaseClient = firebaseClient;
             _httpClientFactory = httpClientFactory;
+
+            // Ưu tiên config "Gemini:ApiKey" (appsettings.Development.json / User Secrets / env Gemini__ApiKey),
+            // nếu rỗng thì thử biến môi trường GEMINI_API_KEY. Rỗng/null đều coi như CHƯA cấu hình.
+            _geminiApiKey = new[]
+            {
+                config["Gemini:ApiKey"],
+                Environment.GetEnvironmentVariable("GEMINI_API_KEY")
+            }.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)) ?? string.Empty;
 
             // Kích hoạt nạp từ khóa từ Firebase lên RAM ngầm ngay khi Server khởi động (dotnet run)
             _ = InitializeWordPoolAsync();
@@ -65,9 +101,15 @@ namespace ServerUndercover.Services
             }
         }
 
-        public void RemoveConnection(string userId)
+        public void RemoveConnection(string userId, string connectionId)
         {
-            _userConnections.TryRemove(userId, out _);
+            if (_userConnections.TryGetValue(userId, out string? currentConnectionId))
+            {
+                if (currentConnectionId == connectionId)
+                {
+                    _userConnections.TryRemove(userId, out _);
+                }
+            }
         }
 
         public string? GetConnectionId(string userId)
@@ -92,7 +134,7 @@ namespace ServerUndercover.Services
             return roomId;
         }
 
-        public Room? CreateRoom(string hostId, string displayName, bool isPublic, GameSettings settings, out string errorMessage)
+        public Room? CreateRoom(string hostId, string displayName, string avatar, bool isPublic, GameSettings settings, out string errorMessage)
         {
             errorMessage = string.Empty;
 
@@ -126,6 +168,7 @@ namespace ServerUndercover.Services
             {
                 UserId = hostId,
                 DisplayName = displayName,
+                Avatar = avatar,
                 ConnectionId = GetConnectionId(hostId) ?? string.Empty,
                 IsConnected = true,
                 IsReady = true // Host mặc định ready
@@ -139,7 +182,7 @@ namespace ServerUndercover.Services
             return room;
         }
 
-        public Room? JoinRoom(string roomId, string userId, string displayName, out string errorMessage)
+        public Room? JoinRoom(string roomId, string userId, string displayName, string avatar, out string errorMessage)
         {
             errorMessage = string.Empty;
 
@@ -169,6 +212,7 @@ namespace ServerUndercover.Services
                     existingPlayer.ConnectionId = GetConnectionId(userId) ?? string.Empty;
                     existingPlayer.IsConnected = true;
                     existingPlayer.DisconnectedAt = null;
+                    existingPlayer.Avatar = avatar;
                 }
                 return room;
             }
@@ -205,6 +249,7 @@ namespace ServerUndercover.Services
             {
                 UserId = userId,
                 DisplayName = displayName,
+                Avatar = avatar,
                 ConnectionId = GetConnectionId(userId) ?? string.Empty,
                 IsConnected = true
             };
@@ -302,14 +347,61 @@ namespace ServerUndercover.Services
                     .Child("WordBank/AvailableWords")
                     .OnceSingleAsync<List<WordPair>>();
 
+                // Lịch sử các cặp đã từng sinh (để không sinh lại sau khi server khởi động lại)
+                List<string>? seenKeys = null;
+                try
+                {
+                    seenKeys = await _firebaseClient
+                        .Child("WordBank/SeenKeys")
+                        .OnceSingleAsync<List<string>>();
+                }
+                catch { /* Không có lịch sử cũng không sao */ }
+
                 if (wordsArray != null && wordsArray.Any())
                 {
+                    int validCount;
+                    bool hadDuplicates;
+                    List<WordPair> poolSnapshot;
+                    List<string> seenSnapshot;
+
                     lock (_localWordPool)
                     {
                         _localWordPool.Clear();
-                        _localWordPool.AddRange(wordsArray.Where(w => w != null));
+                        _seenPairKeys.Clear();
+
+                        // Nạp lịch sử cũ trước
+                        if (seenKeys != null)
+                            foreach (var k in seenKeys)
+                                if (!string.IsNullOrWhiteSpace(k)) _seenPairKeys.Add(k);
+
+                        // Nạp kho hiện tại, tự lọc trùng NGAY TRONG danh sách tải về
+                        var poolKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                        validCount = 0;
+                        foreach (var w in wordsArray)
+                        {
+                            if (!IsValidPair(w)) continue;
+                            validCount++;
+                            var key = NormalizePairKey(w);
+                            if (poolKeys.Add(key)) // chưa có trong kho hiện tại
+                            {
+                                _localWordPool.Add(w);
+                                _seenPairKeys.Add(key);
+                            }
+                        }
+
+                        hadDuplicates = _localWordPool.Count < validCount;
+                        poolSnapshot = new List<WordPair>(_localWordPool);
+                        seenSnapshot = new List<string>(_seenPairKeys);
                     }
-                    Console.WriteLine($"[WORD-INIT] 🎉 THÀNH CÔNG: RAM đã nạp đầy {_localWordPool.Count} cặp từ khóa từ Firebase!");
+
+                    Console.WriteLine($"[WORD-INIT] 🎉 Nạp {poolSnapshot.Count} cặp từ (đã lọc trùng) từ Firebase. Lịch sử: {seenSnapshot.Count} khóa.");
+
+                    // Nếu kho trên Firebase đang chứa cặp trùng -> ghi đè lại bản đã làm sạch
+                    if (hadDuplicates)
+                    {
+                        Console.WriteLine("[WORD-INIT] Phát hiện cặp trùng trên Firebase, đang ghi lại bản đã làm sạch...");
+                        await SyncToFirebaseAsync(poolSnapshot, seenSnapshot);
+                    }
                 }
                 else
                 {
@@ -332,6 +424,7 @@ namespace ServerUndercover.Services
         {
             WordPair selectedPair;
             bool needRefill = false;
+            List<WordPair>? syncSnapshot = null;
 
             lock (_localWordPool)
             {
@@ -351,6 +444,11 @@ namespace ServerUndercover.Services
                     needRefill = true;
                     _isRefilling = true; // Khóa lại ngay lập tức, phòng khác không được gọi trùng
                 }
+                else
+                {
+                    // Chụp snapshot NGAY TRONG lock để tránh ghi Firebase từ list đang bị thread khác sửa
+                    syncSnapshot = new List<WordPair>(_localWordPool);
+                }
             }
 
             // Thực hiện gọi API ngầm không giữ chân luồng (Không dùng await ở đây)
@@ -367,10 +465,10 @@ namespace ServerUndercover.Services
                     }
                 });
             }
-            else
+            else if (syncSnapshot != null)
             {
-                // Đồng bộ danh sách bớt từ lên Firebase bình thường
-                _ = _firebaseClient.Child("WordBank/AvailableWords").PutAsync(_localWordPool);
+                // Đồng bộ danh sách bớt từ lên Firebase bình thường (ghi đè bằng snapshot ổn định)
+                _ = _firebaseClient.Child("WordBank/AvailableWords").PutAsync(syncSnapshot);
             }
 
             return selectedPair;
@@ -381,12 +479,19 @@ namespace ServerUndercover.Services
         /// </summary>
         private async Task RefillFirebaseFromSampleWordsAsync()
         {
+            // Thiếu key -> không gọi Gemini, dùng kho dự phòng luôn (tránh request 400/403 vô ích).
+            if (string.IsNullOrWhiteSpace(_geminiApiKey))
+            {
+                Console.WriteLine("[GEMINI-ERROR] ⚠️ Chưa cấu hình GEMINI API KEY. Hãy đặt 'Gemini:ApiKey' (User Secrets) hoặc biến môi trường GEMINI_API_KEY. Tạm dùng kho dự phòng.");
+                await LoadFallbackSampleWordsAsync();
+                return;
+            }
+
             try
             {
                 var httpClient = _httpClientFactory.CreateClient();
 
-                string apiKey = "AIzaSyAeqcYI6kzgkSidDLWfLcEXyb9rSGCbcm4";
-                string geminiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}";
+                string geminiUrl = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_geminiApiKey}";
 
                 var requestBody = new
                 {
@@ -399,11 +504,13 @@ namespace ServerUndercover.Services
                     ⚠️ QUY TẮC TẠO TỪ KHÓA BẮT BUỘC (QUYẾT ĐỊNH SỰ SỐNG CÒN CỦA GAME):
                     1. 'civilian' (Dân thường) và 'undercover' (Kẻ ẩn danh) phải là HAI THỰC THỂ CÙNG CẤP, thuộc cùng một nhóm phân loại lớn nhưng KHÔNG ĐƯỢC bao hàm nhau.
                     2. TUYỆT ĐỐI KHÔNG được chọn từ khóa theo kiểu 'Từ cha - Từ con' (Ví dụ SAI: Trái cây - Quả táo, Động vật - Con chó, Nước uống - Cà phê).
-                    3. Ví dụ ĐÚNG về cặp từ cùng cấp: 
+                    3. Ví dụ ĐÚNG về cặp từ cùng cấp (không dùng lại những từ này): 
                        - [""civilian"": ""Quả Táo"", ""undercover"": ""Quả Lê""] (Cùng là trái cây dạng quả tròn)
-                       - [""civilian"": ""Xe máy"", ""undercover"": ""Xe đạp""] (Cùng là phương tiện 2 bánh)
-                       - [""civilian"": ""Trà sữa"", ""undercover"": ""Cà phê""] (Cùng là đồ uống phổ biến của giới trẻ)
+                       - [""civilian"": ""Bút chì"", ""undercover"": ""Bút bi""] (Cùng là dụng cụ viết)
+                       - [""civilian"": ""Mùa xuân"", ""undercover"": ""Mùa thu""] (Cùng là mùa trong năm)
                        - [""civilian"": ""Hà Nội"", ""undercover"": ""TP. Hồ Chí Minh""] (Cùng là thành phố lớn)
+                    4. TUYỆT ĐỐI KHÔNG được đưa lại 4 cặp ví dụ ở mục 3 (Quả Táo/Quả Lê, Bút chì/Bút bi, Mùa xuân/Mùa thu, Hà Nội/TP. Hồ Chí Minh) vào kết quả. Các ví dụ đó CHỈ để minh họa quy tắc, KHÔNG phải đáp án.
+                    5. Hãy sinh các cặp KHÁC HOÀN TOÀN, sáng tạo và đa dạng chủ đề (ẩm thực, địa danh, đồ vật, nghề nghiệp, con vật, thể thao, công nghệ, phim ảnh...).
 
                     Định dạng trả về bắt buộc phải là một mảng JSON thô thuần túy, không nằm trong khối nháy markdown (không kèm ```json), không giải thích hay chào hỏi gì thêm. 
                     Cấu trúc mảng chuẩn: [{""civilian"":""Từ_Dân_Thường"",""undercover"":""Từ_Kẻ_Ẩn_Danh""}]"                } } }
@@ -438,34 +545,26 @@ namespace ServerUndercover.Services
 
                         if (apiWords != null && apiWords.Any())
                         {
-                            int addedCount = 0;
+                            int addedCount;
+                            List<WordPair> poolSnapshot;
+                            List<string> seenSnapshot;
 
                             lock (_localWordPool)
                             {
-                                foreach (var word in apiWords.Where(w => w != null))
-                                {
-                                    // LỌC TRÙNG: Kiểm tra xem cặp từ này (hoặc từ hoán đổi vị trí) đã tồn tại trong kho RAM chưa
-                                    bool isDuplicate = _localWordPool.Any(w =>
-                                        w.Civilian.Trim().Equals(word.Civilian.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                                        w.Undercover.Trim().Equals(word.Undercover.Trim(), StringComparison.OrdinalIgnoreCase) ||
-                                        w.Civilian.Trim().Equals(word.Undercover.Trim(), StringComparison.OrdinalIgnoreCase));
+                                int before = _localWordPool.Count;
+                                // TryAddPairUnlocked đã lọc trùng với cả kho hiện tại LẪN lịch sử đã sinh
+                                foreach (var word in apiWords)
+                                    TryAddPairUnlocked(word);
 
-                                    if (!isDuplicate)
-                                    {
-                                        _localWordPool.Add(word);
-                                        addedCount++;
-                                    }
-                                }
+                                addedCount = _localWordPool.Count - before;
+                                poolSnapshot = new List<WordPair>(_localWordPool);
+                                seenSnapshot = new List<string>(_seenPairKeys);
                             }
 
-                            // Đồng bộ sạch mảng mới gộp lên Firebase
-                            await _firebaseClient.Child("WordBank/AvailableWords").DeleteAsync();
-                            await _firebaseClient.Child("WordBank/AvailableWords").PutAsync(_localWordPool);
+                            // Ghi đè kho + lịch sử lên Firebase bằng snapshot ổn định (PutAsync thay thế toàn bộ node)
+                            await SyncToFirebaseAsync(poolSnapshot, seenSnapshot);
 
-                            lock (_localWordPool)
-                            {
-                                Console.WriteLine($"[GEMINI-AI] 🤖 AI sinh 20 từ. Đã lọc và nạp thêm {addedCount} từ mới. Tổng kho trên RAM: {_localWordPool.Count}");
-                            }
+                            Console.WriteLine($"[GEMINI-AI] 🤖 AI sinh {apiWords.Count} cặp. Đã lọc và nạp thêm {addedCount} cặp mới. Tổng kho RAM: {poolSnapshot.Count}");
                             return;
                         }
                     }
@@ -480,13 +579,14 @@ namespace ServerUndercover.Services
                 Console.WriteLine($"[GEMINI-ERROR] Thất bại khi xử lý sinh từ: {ex.Message}");
             }
 
-            LoadFallbackSampleWords();
+            await LoadFallbackSampleWordsAsync();
         }
 
         /// <summary>
-        /// Kho từ dự phòng khẩn cấp khi Google API hoặc kết nối internet gặp sự cố
+        /// Kho từ dự phòng khẩn cấp khi Google API hoặc kết nối internet gặp sự cố.
+        /// Lọc trùng nên gọi nhiều lần cũng không nhồi lặp cặp từ vào kho/Firebase.
         /// </summary>
-        private void LoadFallbackSampleWords()
+        private async Task LoadFallbackSampleWordsAsync()
         {
             Console.WriteLine("[WORD-REFILL] Đang kích hoạt kho từ dự phòng (Fallback)...");
             var fallbackWords = new List<WordPair>
@@ -498,11 +598,69 @@ namespace ServerUndercover.Services
                 new WordPair { Civilian = "Trà sữa", Undercover = "Cà phê" }
             };
 
+            int addedCount;
+            List<WordPair> poolSnapshot;
+            List<string> seenSnapshot;
+
             lock (_localWordPool)
             {
-                _localWordPool.AddRange(fallbackWords);
+                int before = _localWordPool.Count;
+                foreach (var word in fallbackWords)
+                    TryAddPairUnlocked(word);
+
+                addedCount = _localWordPool.Count - before;
+                poolSnapshot = new List<WordPair>(_localWordPool);
+                seenSnapshot = new List<string>(_seenPairKeys);
             }
-            _ = _firebaseClient.Child("WordBank/AvailableWords").PutAsync(_localWordPool);
+
+            Console.WriteLine($"[WORD-REFILL] Fallback nạp thêm {addedCount} cặp mới (đã lọc trùng). Tổng kho RAM: {poolSnapshot.Count}");
+            await SyncToFirebaseAsync(poolSnapshot, seenSnapshot);
+        }
+
+        // ===================== Helper: lọc trùng & đồng bộ =====================
+
+        /// <summary>Chuẩn hóa cặp từ thành 1 khóa duy nhất (trim + thường hóa + sắp xếp 2 từ).</summary>
+        private static string NormalizePairKey(WordPair w)
+        {
+            string a = (w.Civilian ?? string.Empty).Trim().ToLowerInvariant();
+            string b = (w.Undercover ?? string.Empty).Trim().ToLowerInvariant();
+            return string.CompareOrdinal(a, b) <= 0 ? $"{a}|{b}" : $"{b}|{a}";
+        }
+
+        /// <summary>Cặp hợp lệ: cả hai từ không rỗng và không trùng nhau.</summary>
+        private static bool IsValidPair(WordPair? w)
+        {
+            if (w == null) return false;
+            string a = (w.Civilian ?? string.Empty).Trim();
+            string b = (w.Undercover ?? string.Empty).Trim();
+            return a.Length > 0 && b.Length > 0 && !a.Equals(b, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// Thêm 1 cặp vào kho nếu hợp lệ và CHƯA TỪNG xuất hiện (so cả kho hiện tại lẫn lịch sử).
+        /// Bắt buộc gọi bên trong lock (_localWordPool). Trả về true nếu đã thêm.
+        /// </summary>
+        private bool TryAddPairUnlocked(WordPair w)
+        {
+            if (!IsValidPair(w)) return false;
+            string key = NormalizePairKey(w);
+            if (!_seenPairKeys.Add(key)) return false; // đã thấy -> bỏ qua
+            _localWordPool.Add(w);
+            return true;
+        }
+
+        /// <summary>Ghi đè kho từ hiện tại và lịch sử khóa lên Firebase (best-effort).</summary>
+        private async Task SyncToFirebaseAsync(List<WordPair> poolSnapshot, List<string> seenSnapshot)
+        {
+            try
+            {
+                await _firebaseClient.Child("WordBank/AvailableWords").PutAsync(poolSnapshot);
+                await _firebaseClient.Child("WordBank/SeenKeys").PutAsync(seenSnapshot);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WORD-SYNC-ERROR] Lỗi đồng bộ kho từ lên Firebase: {ex.Message}");
+            }
         }
 
         #endregion
@@ -539,10 +697,14 @@ namespace ServerUndercover.Services
             room.Votes.Clear();
             foreach (var p in room.Players.Values)
                 p.VoteCount = 0;
+                
+            room.ExtendVoteRequests.Clear();
+            room.HasExtendedVote = false;
+            room.SkipVoteRequests.Clear();
 
             room.Phase = GamePhase.Voting;
-            // 3 phút tính từ bây giờ, dùng Unix milliseconds để client dễ đồng bộ
-            room.VoteEndTime = DateTimeOffset.UtcNow.AddMinutes(3).ToUnixTimeMilliseconds();
+            // Dùng Unix milliseconds để client dễ đồng bộ
+            room.VoteEndTime = DateTimeOffset.UtcNow.AddSeconds(room.Settings.VoteDuration).ToUnixTimeMilliseconds();
         }
 
         public record VoteCastResult(bool Success, int NewVoteCount, string ErrorMessage);
@@ -562,16 +724,22 @@ namespace ServerUndercover.Services
             if (voterId == targetId)
                 return new VoteCastResult(false, 0, "Không thể vote cho chính mình.");
 
-            if (!room.Players.TryGetValue(targetId, out var target) || target.IsEliminated)
+            if (targetId != "NO_VOTE" && (!room.Players.TryGetValue(targetId, out var target) || target.IsEliminated))
                 return new VoteCastResult(false, 0, "Mục tiêu không hợp lệ.");
 
             if (room.Votes.ContainsKey(voterId))
                 return new VoteCastResult(false, 0, "Bạn đã vote rồi.");
 
             room.Votes[voterId] = targetId;
-            target.VoteCount++;
+            
+            int newVoteCount = 0;
+            if (targetId != "NO_VOTE" && room.Players.TryGetValue(targetId, out var validTarget))
+            {
+                validTarget.VoteCount++;
+                newVoteCount = validTarget.VoteCount;
+            }
 
-            return new VoteCastResult(true, target.VoteCount, string.Empty);
+            return new VoteCastResult(true, newVoteCount, string.Empty);
         }
 
         public VoteCastResult ChangeVote(string roomId, string voterId, string targetId)
@@ -585,24 +753,55 @@ namespace ServerUndercover.Services
             if (voterId == targetId)
                 return new VoteCastResult(false, 0, "Khong the vote cho chinh minh.");
 
-            if (!room.Players.TryGetValue(targetId, out var newTarget) || newTarget.IsEliminated)
+            if (targetId != "NO_VOTE" && (!room.Players.TryGetValue(targetId, out var newTarget) || newTarget.IsEliminated))
                 return new VoteCastResult(false, 0, "Muc tieu khong hop le.");
 
             if (!room.Votes.TryGetValue(voterId, out var oldTargetId))
                 return new VoteCastResult(false, 0, "Ban chua vote.");
 
             if (oldTargetId == targetId)
-                return new VoteCastResult(true, newTarget.VoteCount, string.Empty);
+            {
+                int currentVoteCount = 0;
+                if (targetId != "NO_VOTE" && room.Players.TryGetValue(targetId, out var t)) currentVoteCount = t.VoteCount;
+                return new VoteCastResult(true, currentVoteCount, string.Empty);
+            }
 
-            if (room.Players.TryGetValue(oldTargetId, out var oldTarget) && oldTarget.VoteCount > 0)
+            if (oldTargetId != "NO_VOTE" && room.Players.TryGetValue(oldTargetId, out var oldTarget) && oldTarget.VoteCount > 0)
             {
                 oldTarget.VoteCount--;
             }
 
             room.Votes[voterId] = targetId;
-            newTarget.VoteCount++;
+            
+            int newVoteCount = 0;
+            if (targetId != "NO_VOTE" && room.Players.TryGetValue(targetId, out var validNewTarget))
+            {
+                validNewTarget.VoteCount++;
+                newVoteCount = validNewTarget.VoteCount;
+            }
 
-            return new VoteCastResult(true, newTarget.VoteCount, string.Empty);
+            return new VoteCastResult(true, newVoteCount, string.Empty);
+        }
+
+        public VoteCastResult RevokeVote(string roomId, string voterId)
+        {
+            if (!_rooms.TryGetValue(roomId, out Room? room))
+                return new VoteCastResult(false, 0, "Phòng không tồn tại.");
+
+            if (room.Phase != GamePhase.Voting)
+                return new VoteCastResult(false, 0, "Hiện không phải phase vote.");
+
+            if (!room.Votes.TryGetValue(voterId, out var oldTargetId))
+                return new VoteCastResult(false, 0, "Bạn chưa vote.");
+
+            if (oldTargetId != "NO_VOTE" && room.Players.TryGetValue(oldTargetId, out var oldTarget) && oldTarget.VoteCount > 0)
+            {
+                oldTarget.VoteCount--;
+            }
+
+            room.Votes.TryRemove(voterId, out _);
+
+            return new VoteCastResult(true, 0, string.Empty);
         }
 
         public record VoteResolution(bool IsDraw, string? EliminatedUserId, string? EliminatedDisplayName);
@@ -616,13 +815,16 @@ namespace ServerUndercover.Services
             if (!_rooms.TryGetValue(roomId, out Room? room))
                 return new VoteResolution(true, null, null);
 
-            // Đếm phiếu
+            room.RoundNumber++; // Tăng vòng chơi bất kể có ai bị loại hay không
+
+            // Đếm phiếu (loại bỏ phiếu "NO_VOTE")
             var voteCounts = room.Votes.Values
+                .Where(v => v != "NO_VOTE")
                 .GroupBy(v => v)
                 .ToDictionary(g => g.Key, g => g.Count());
 
             if (!voteCounts.Any())
-                return new VoteResolution(true, null, null); // Không ai vote → hòa
+                return new VoteResolution(true, null, null); // Không ai vote hợp lệ → hòa
 
             int maxVotes = voteCounts.Values.Max();
             var topPlayers = voteCounts.Where(kv => kv.Value == maxVotes).ToList();
@@ -631,12 +833,16 @@ namespace ServerUndercover.Services
             if (topPlayers.Count > 1)
                 return new VoteResolution(true, null, null);
 
+            // Yêu cầu số phiếu lớn hơn phân nửa số người chơi còn sống
+            int aliveCount = room.Players.Values.Count(p => !p.IsEliminated);
+            if (maxVotes <= aliveCount / 2)
+                return new VoteResolution(true, null, null);
+
             string eliminatedId = topPlayers[0].Key;
             if (!room.Players.TryGetValue(eliminatedId, out var eliminatedPlayer))
                 return new VoteResolution(true, null, null);
 
             eliminatedPlayer.IsEliminated = true;
-            room.RoundNumber++;
 
             return new VoteResolution(false, eliminatedId, eliminatedPlayer.DisplayName);
         }
@@ -662,18 +868,25 @@ namespace ServerUndercover.Services
 
         public async Task UpdateGameSessionPhaseAsync(Room room)
         {
-            if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
+            try
+            {
+                if (string.IsNullOrEmpty(room.CurrentGameSessionId)) return;
 
-            await _firebaseClient
-                .Child("gameSessions")
-                .Child(room.RoomId)
-                .Child(room.CurrentGameSessionId)
-                .PatchAsync(new
-                {
-                    phase = room.Phase.ToString(),
-                    roundNumber = room.RoundNumber,
-                    updatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                });
+                await _firebaseClient
+                    .Child("gameSessions")
+                    .Child(room.RoomId)
+                    .Child(room.CurrentGameSessionId)
+                    .PatchAsync(new
+                    {
+                        phase = room.Phase.ToString(),
+                        roundNumber = room.RoundNumber,
+                        updatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Firebase Error] UpdateGameSessionPhaseAsync: {ex.Message}");
+            }
         }
 
         public async Task RecordDescriptionAsync(Room room, string userId, string text, string source, int turnIndex)
@@ -741,13 +954,32 @@ namespace ServerUndercover.Services
             int aliveBlackHats = alive.Count(p => p.Role == "BlackHat");
             int aliveWhiteHats = alive.Count(p => p.Role == "WhiteHat");
             int aliveCivilians = alive.Count(p => p.Role == "Civilian");
+            int totalAlive = alive.Count;
 
+            // Nếu chỉ còn đúng 2 người sống và có 1 Mũ Trắng
+            if (totalAlive == 2 && aliveWhiteHats == 1)
+            {
+                if (aliveCivilians == 1)
+                    return new WinCheckResult(true, "Civilian", "Chỉ còn 1 Dân và 1 Mũ Trắng!");
+                if (aliveBlackHats == 1)
+                    return new WinCheckResult(true, "BlackHat", "Chỉ còn 1 Mũ Đen và 1 Mũ Trắng!");
+            }
+
+            // NẾU MŨ TRẮNG CÒN SỐNG VÀ totalAlive > 2, THÌ GAME CHƯA KẾT THÚC!
+            // Cứ vote liên tục cho đến khi Mũ Trắng chết hoặc chỉ còn 2 người.
+            if (aliveWhiteHats > 0 && totalAlive > 2)
+            {
+                return new WinCheckResult(false, null, string.Empty);
+            }
+
+            // Các điều kiện bên dưới chỉ áp dụng khi Mũ Trắng ĐÃ CHẾT (aliveWhiteHats == 0) hoặc totalAlive <= 2
+            
             // Điều kiện 3: Dân thắng — không còn BlackHat và WhiteHat nào sống
             if (aliveBlackHats == 0 && aliveWhiteHats == 0)
                 return new WinCheckResult(true, "Civilian", "Dân thường đã tiêu diệt toàn bộ kẻ thù!");
 
-            // Điều kiện 2: Đen thắng — BlackHat >= Civilian còn sống
-            if (aliveBlackHats >= aliveCivilians)
+            // Điều kiện 2: Đen thắng — BlackHat >= Civilian còn sống (và phải có ít nhất 1 BlackHat)
+            if (aliveBlackHats > 0 && aliveBlackHats >= aliveCivilians)
                 return new WinCheckResult(true, "BlackHat", "Mũ Đen đã chiếm đa số!");
 
             return new WinCheckResult(false, null, string.Empty);

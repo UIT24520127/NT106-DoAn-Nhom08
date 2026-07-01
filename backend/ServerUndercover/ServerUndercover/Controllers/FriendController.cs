@@ -24,7 +24,7 @@ namespace ServerUndercover.Controllers
 
         private string GetUserId()
         {
-            return User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("user_id")?.Value ?? "";
+            return (User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.FindFirst("user_id")?.Value ?? "").Trim();
         }
 
         [HttpGet]
@@ -150,6 +150,32 @@ namespace ServerUndercover.Controllers
                 return BadRequest(new { message = error });
 
             return Ok(new { message = "Đã hủy kết bạn" });
+        }
+
+        [HttpGet("message/{friendshipId}")]
+        public async Task<IActionResult> GetMessages(string friendshipId, [FromQuery] long? beforeTimestamp)
+        {
+            string userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            var messages = await _friendService.GetMessagesAsync(friendshipId, beforeTimestamp);
+            return Ok(messages);
+        }
+
+        [HttpPost("message")]
+        public async Task<IActionResult> SendMessage([FromBody] SendMessageDto request)
+        {
+            string userId = GetUserId();
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            if (string.IsNullOrEmpty(request.FriendshipId) || string.IsNullOrEmpty(request.Text))
+                return BadRequest(new { message = "Vui lòng cung cấp FriendshipId và Text" });
+
+            string error = await _friendService.SendMessageAsync(userId, request);
+            if (!string.IsNullOrEmpty(error))
+                return BadRequest(new { message = error });
+
+            return Ok(new { message = "Đã gửi tin nhắn" });
         }
     }
 }

@@ -1,31 +1,37 @@
 {
   "name": "undercover-game",
   "version": "0.1.0",
-  "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "tauri": "tauri",
+    "dev:tauri": "tauri dev",
+    "build:tauri": "tauri build"
   },
   "dependencies": {
+    "@choochmeque/tauri-plugin-google-auth-api": "^0.6.0-rc.1",
     "@microsoft/signalr": "^10.0.0",
+    "@tauri-apps/plugin-process": "^2.3.1",
     "axios": "^1.15.2",
     "firebase": "^12.10.0",
     "lucide-react": "^0.577.0",
     "next": "^16.1.7",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "simple-peer": "^9.11.1"
+    "simple-peer": "^9.11.1",
+    "use-sound": "^5.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/howler": "^2.2.13",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/simple-peer": "^9.11.9",
     "autoprefixer": "^10.4.27",
-    "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "postcss": "^8.5.8",

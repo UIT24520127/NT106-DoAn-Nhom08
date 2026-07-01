@@ -1,10 +1,12 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import CountdownTimer from "./CountdownTimer";
+import { useGameSound } from "@/hooks/useGameSound";
 
 interface VotePlayer {
   userId: string;
   displayName: string;
+  avatar?: string;
   role: string;
   isEliminated: boolean;
   voteCount: number;
@@ -16,33 +18,65 @@ interface VotingGridProps {
   myUserId: string;
   voteEndTime: number;
   realtimeVoteCounts: Record<string, number>;
+  realtimeVotes?: Record<string, string>;
+  totalVotesCast?: number;
   hasVoted: boolean;
   myVoteTarget: string | null;
   canSkip: boolean;
   isHost: boolean;
   isEliminated: boolean;
+  extendVoteCount?: number;
+  extendRequiredCount?: number;
+  hasRequestedExtend?: boolean;
+  isTimeExtended?: boolean;
+  skipVoteCount?: number;
+  skipRequiredCount?: number;
+  hasSkippedVote?: boolean;
+  onExtendVote?: () => void;
   onVote: (targetUserId: string) => void;
   onChangeVote: (targetUserId: string) => void;
+  onRevokeVote?: () => void;
   onSkip: () => void;
   onTimerExpired: () => void;
   backgroundImage?: string;
+  isWhiteHatGuessing?: boolean;
+  whiteHatId?: string | null;
+  whiteHatTimeLeft?: number;
 }
 
 export default function VotingGrid({
-  players, myUserId, voteEndTime, realtimeVoteCounts,
+  players, myUserId, voteEndTime, realtimeVoteCounts, realtimeVotes = {}, totalVotesCast = 0,
   hasVoted, myVoteTarget, canSkip, isHost, isEliminated,
-  onVote, onChangeVote, onSkip, onTimerExpired,
+  extendVoteCount = 0, extendRequiredCount = 0, hasRequestedExtend = false, isTimeExtended = false,
+  skipVoteCount = 0, skipRequiredCount = 0, hasSkippedVote = false, onExtendVote,
+  onVote, onChangeVote, onRevokeVote, onSkip, onTimerExpired,
   backgroundImage,
+  isWhiteHatGuessing = false, whiteHatId, whiteHatTimeLeft = 0,
 }: VotingGridProps) {
-  const [historyPlayer, setHistoryPlayer] = useState<VotePlayer | null>(null);
+  const { playClick, playVote } = useGameSound();
+  const [whiteHatEndTime, setWhiteHatEndTime] = useState<number>(0);
+
+  useEffect(() => {
+    if (isWhiteHatGuessing && whiteHatTimeLeft > 0) {
+      setWhiteHatEndTime(Date.now() + whiteHatTimeLeft * 1000);
+    }
+  }, [isWhiteHatGuessing, whiteHatTimeLeft]);
   const [changingVote, setChangingVote] = useState(false);
   const prevCounts = useRef<Record<string, number>>({});
   const [pulsing, setPulsing] = useState<Record<string, boolean>>({});
   const [hovering, setHovering] = useState<string | null>(null);
 
-  const alivePlayers = players.filter(p => !p.isEliminated);
-  const deadPlayers = players.filter(p => p.isEliminated);
+  const alivePlayers = isWhiteHatGuessing 
+    ? players // In White Hat guess, show all players (including WhiteHat)
+    : players.filter(p => !p.isEliminated);
+  const deadPlayers = isWhiteHatGuessing 
+    ? [] // Hide dead players list during White Hat guess to focus on the spotlight
+    : players.filter(p => p.isEliminated);
   const maxVotes = Math.max(0, ...alivePlayers.map(p => realtimeVoteCounts[p.userId] ?? p.voteCount ?? 0));
+  const noVoters = Object.entries(realtimeVotes)
+    .filter(([_, targetId]) => targetId === "NO_VOTE")
+    .map(([voterId]) => players.find(p => p.userId === voterId))
+    .filter(Boolean) as VotePlayer[];
 
   useEffect(() => {
     const newPulsing: Record<string, boolean> = {};
@@ -86,18 +120,7 @@ export default function VotingGrid({
           0%, 100% { text-shadow: 0 0 20px rgba(255,59,59,0.6), 0 0 60px rgba(255,59,59,0.2); }
           50%       { text-shadow: 0 0 40px rgba(255,59,59,0.9), 0 0 100px rgba(255,59,59,0.4); }
         }
-        @keyframes vg-scanline {
-          from { background-position: 0 0; }
-          to   { background-position: 0 100vh; }
-        }
       `}</style>
-
-      {/* Scanline */}
-      <div style={{
-        position: "fixed", inset: 0, pointerEvents: "none",
-        backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 6px)",
-        backgroundSize: "100% 6px", animation: "vg-scanline 12s linear infinite", zIndex: 0,
-      }} />
 
       {/* Ambient */}
       <div style={{
@@ -110,22 +133,33 @@ export default function VotingGrid({
         textAlign: "center", padding: "32px 0 20px",
         zIndex: 1, width: "100%", maxWidth: 860,
       }}>
-        <p style={{ color: "rgba(255,59,59,0.5)", fontSize: 10, letterSpacing: "0.4em", textTransform: "uppercase", margin: "0 0 8px" }}>
-          — Vòng Bình Chọn —
+        <p style={{ color: isWhiteHatGuessing ? "rgba(255,215,0,0.5)" : "rgba(255,59,59,0.5)", fontSize: 10, letterSpacing: "0.4em", textTransform: "uppercase", margin: "0 0 8px" }}>
+          — {isWhiteHatGuessing ? "Cơ Hội Cuối Cùng" : "Vòng Bình Chọn"} —
         </p>
         <h1 style={{
-          fontSize: 30, fontWeight: 900, color: "#FF3B3B",
-          animation: "vg-header-glow 2.5s ease-in-out infinite",
+          fontSize: 30, fontWeight: 900, color: isWhiteHatGuessing ? "#FFD700" : "#FF3B3B",
+          animation: isWhiteHatGuessing ? "none" : "vg-header-glow 2.5s ease-in-out infinite",
+          textShadow: isWhiteHatGuessing ? "0 0 20px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 215, 0, 0.2)" : undefined,
           margin: "0 0 20px", letterSpacing: "0.06em", textTransform: "uppercase",
         }}>
-          🎯 AI LÀ KẺ ĐÁNG NGHI?
+          {isWhiteHatGuessing ? "MŨ TRẮNG ĐANG ĐOÁN TỪ KHÓA" : "🎯 AI LÀ KẺ ĐÁNG NGHI?"}
         </h1>
 
-        <CountdownTimer endTime={voteEndTime} onExpired={onTimerExpired} />
+        <CountdownTimer 
+          endTime={isWhiteHatGuessing ? whiteHatEndTime : voteEndTime} 
+          onExpired={isWhiteHatGuessing ? () => {} : onTimerExpired} 
+        />
 
         {/* Status pill */}
         <div style={{ marginTop: 14 }}>
-          {isEliminated ? (
+          {isWhiteHatGuessing ? (
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              background: "rgba(255,215,0,0.07)", border: "1px solid rgba(255,215,0,0.2)",
+              borderRadius: 99, padding: "7px 18px",
+              color: "#FFD700", fontSize: 13, fontWeight: 700,
+            }}>⏳ Chờ mũ trắng đưa ra quyết định...</div>
+          ) : isEliminated ? (
             <div style={{
               display: "inline-flex", alignItems: "center", gap: 6,
               background: "rgba(255,59,59,0.07)", border: "1px solid rgba(255,59,59,0.2)",
@@ -140,9 +174,11 @@ export default function VotingGrid({
                 borderRadius: 99, padding: "7px 18px",
                 color: "#9D4EDD", fontSize: 13, fontWeight: 700,
               }}>
-                ✅ Đã bầu cho <strong style={{ color: "#fff", marginLeft: 4 }}>{players.find(p => p.userId === myVoteTarget)?.displayName}</strong>
+                ✅ {myVoteTarget === "NO_VOTE" ? "Đã chọn Không vote" : 
+                  <span>Đã bầu cho <strong style={{ color: "#fff", marginLeft: 4 }}>{players.find(p => p.userId === myVoteTarget)?.displayName}</strong></span>
+                }
               </div>
-              <button onClick={() => setChangingVote(true)} style={{
+              <button onClick={() => { playClick(); setChangingVote(true); }} style={{
                 background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
                 borderRadius: 99, padding: "7px 16px", color: "rgba(255,255,255,0.45)",
                 fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s",
@@ -150,6 +186,14 @@ export default function VotingGrid({
                 onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = "#fff"}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.45)"}
               >🔄 Đổi vote</button>
+              <button onClick={() => { playClick(); if(onRevokeVote) onRevokeVote(); }} style={{
+                background: "rgba(255,59,59,0.05)", border: "1px solid rgba(255,59,59,0.2)",
+                borderRadius: 99, padding: "7px 16px", color: "#FF3B3B",
+                fontSize: 12, fontWeight: 700, cursor: "pointer", transition: "all 0.2s",
+              }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,59,59,0.15)"}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,59,59,0.05)"}
+              >🔙 Thu hồi</button>
             </div>
           ) : changingVote ? (
             <div style={{
@@ -175,55 +219,97 @@ export default function VotingGrid({
       }}>
         {alivePlayers.map(player => {
           const isMe = player.userId === myUserId;
+          const isSpotlight = isWhiteHatGuessing && player.userId === whiteHatId;
           const isVotedByMe = myVoteTarget === player.userId;
           const votes = realtimeVoteCounts[player.userId] ?? player.voteCount ?? 0;
           const isLeading = votes > 0 && votes === maxVotes && maxVotes > 0;
           const isPulsing = pulsing[player.userId];
           const isHovered = hovering === player.userId;
-          const canVote = !isMe && !isEliminated && (!hasVoted || changingVote);
+          const canVote = !isWhiteHatGuessing && !isMe && !isEliminated && (!hasVoted || changingVote);
+          const votersForThisPlayer = Object.entries(realtimeVotes)
+            .filter(([_, targetId]) => targetId === player.userId)
+            .map(([voterId]) => players.find(p => p.userId === voterId))
+            .filter(Boolean) as VotePlayer[];
+          const hasPlayerVoted = realtimeVotes[player.userId] !== undefined;
 
           return (
             <div key={player.userId}
               onClick={() => {
                 if (!canVote) return;
+                playVote();
                 if (changingVote) { onChangeVote(player.userId); setChangingVote(false); }
                 else onVote(player.userId);
               }}
               onMouseEnter={() => canVote && !isVotedByMe && setHovering(player.userId)}
               onMouseLeave={() => setHovering(null)}
               style={{
-                background: isVotedByMe
-                  ? "linear-gradient(160deg, rgba(157,78,221,0.12) 0%, rgba(255,255,255,0.02) 100%)"
-                  : isLeading
-                    ? "linear-gradient(160deg, rgba(255,59,59,0.08) 0%, rgba(255,255,255,0.02) 100%)"
-                    : isHovered
-                      ? "linear-gradient(160deg, rgba(255,59,59,0.06) 0%, rgba(255,255,255,0.02) 100%)"
-                      : "rgba(255,255,255,0.025)",
-                border: isVotedByMe
-                  ? "2px solid rgba(157,78,221,0.55)"
-                  : isLeading
-                    ? "1.5px solid rgba(255,59,59,0.35)"
-                    : isHovered
-                      ? "1.5px solid rgba(255,59,59,0.25)"
-                      : "1.5px solid rgba(255,255,255,0.06)",
+                position: "relative",
                 borderRadius: 22,
                 padding: "24px 18px 18px",
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
                 cursor: canVote ? "pointer" : "default",
-                transition: "all 0.2s ease",
-                backdropFilter: "blur(16px)",
-                animation: isVotedByMe
-                  ? "vg-voted-glow 2.5s ease-in-out infinite"
-                  : isHovered && canVote
-                    ? "vg-card-hover 0.2s ease forwards"
-                    : "none",
-                position: "relative",
+                opacity: (isWhiteHatGuessing && !isSpotlight) ? 0.3 : 1,
+                filter: (isWhiteHatGuessing && !isSpotlight) ? "grayscale(100%)" : "none",
+                transform: isSpotlight ? "scale(1.05)" : "scale(1)",
+                border: isSpotlight
+                  ? "2px solid #FFD700"
+                  : isVotedByMe
+                    ? "2px solid rgba(157,78,221,0.55)"
+                    : isLeading
+                      ? "1.5px solid rgba(255,59,59,0.35)"
+                      : isHovered
+                        ? "1.5px solid rgba(255,59,59,0.25)"
+                        : "1.5px solid rgba(255,255,255,0.06)",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                zIndex: isSpotlight ? 10 : 1,
+                boxShadow: isSpotlight ? "0 0 30px rgba(255,215,0,0.4)" : "none",
               }}
             >
+              {/* GLASS BACKGROUND LAYER */}
+              <div style={{
+                position: "absolute",
+                inset: 0,
+                zIndex: -1,
+                borderRadius: "inherit",
+                background: isSpotlight
+                  ? "linear-gradient(160deg, rgba(255,215,0,0.15) 0%, rgba(255,255,255,0.02) 100%)"
+                  : isVotedByMe
+                    ? "linear-gradient(160deg, rgba(157,78,221,0.12) 0%, rgba(255,255,255,0.02) 100%)"
+                    : isLeading
+                      ? "linear-gradient(160deg, rgba(255,59,59,0.08) 0%, rgba(255,255,255,0.02) 100%)"
+                      : isHovered
+                        ? "linear-gradient(160deg, rgba(255,59,59,0.06) 0%, rgba(255,255,255,0.02) 100%)"
+                        : "rgba(255,255,255,0.025)",
+                backdropFilter: "blur(16px)",
+                WebkitBackdropFilter: "blur(16px)",
+                transition: "background 0.2s ease, box-shadow 0.2s ease",
+                animation: isSpotlight
+                  ? "vg-voted-glow 2.5s ease-in-out infinite" // Reuse pulse animation or make a yellow one
+                  : isVotedByMe
+                    ? "vg-voted-glow 2.5s ease-in-out infinite"
+                    : isHovered && canVote
+                      ? "vg-card-hover 0.2s ease forwards"
+                      : "none",
+              }} />
+
+              {/* Spotlight Status Text */}
+              {isSpotlight && (
+                <div style={{
+                  position: "absolute", bottom: -20, left: "50%", transform: "translateX(-50%)",
+                  background: "#FFD700", color: "#000",
+                  padding: "4px 12px", borderRadius: 12,
+                  fontSize: 11, fontWeight: 900,
+                  whiteSpace: "nowrap", zIndex: 20,
+                  boxShadow: "0 4px 12px rgba(255,215,0,0.5)",
+                }}>
+                  ĐANG SUY NGHĨ...
+                </div>
+              )}
+
               {/* Top badges */}
               {isMe && (
                 <div style={{
-                  position: "absolute", top: -9, left: "50%", transform: "translateX(-50%)",
+                  position: "absolute", top: -9, left: 12,
                   background: "linear-gradient(135deg, #FFD700, #FF9800)",
                   color: "#000", fontSize: 9, fontWeight: 900, padding: "2px 12px", borderRadius: 99,
                   letterSpacing: "0.1em", whiteSpace: "nowrap",
@@ -248,26 +334,37 @@ export default function VotingGrid({
                 }}>🔴 DẪN ĐẦU</div>
               )}
 
-              {/* Avatar */}
-              <div
-                onClick={e => {
-                  e.stopPropagation();
-                  setHistoryPlayer(player);
-                }}
-                title="Xem lịch sử mô tả"
-                style={{
-                width: 72, height: 72, borderRadius: "50%",
-                background: `radial-gradient(circle at 35% 35%, ${isVotedByMe ? "rgba(157,78,221,0.35)" : isLeading ? "rgba(255,59,59,0.25)" : "rgba(0,242,254,0.15)"}, #0B0C10)`,
-                border: `3px solid ${isVotedByMe ? "#9D4EDD" : isLeading ? "#FF3B3B" : "rgba(0,242,254,0.4)"}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 26, fontWeight: 900,
-                color: isVotedByMe ? "#9D4EDD" : isLeading ? "#FF3B3B" : "#00F2FE",
-                boxShadow: `0 0 16px ${isVotedByMe ? "rgba(157,78,221,0.4)" : isLeading ? "rgba(255,59,59,0.3)" : "rgba(0,242,254,0.2)"}`,
-                transition: "all 0.25s",
-                flexShrink: 0,
-                cursor: "pointer",
-              }}>
-                {player.displayName.charAt(0).toUpperCase()}
+              <div style={{ position: "relative" }}>
+                <div
+                  style={{
+                  width: 72, height: 72, borderRadius: "50%",
+                  background: `radial-gradient(circle at 35% 35%, ${isVotedByMe ? "rgba(157,78,221,0.35)" : isLeading ? "rgba(255,59,59,0.25)" : "rgba(0,242,254,0.15)"}, #0B0C10)`,
+                  border: `3px solid ${isVotedByMe ? "#9D4EDD" : isLeading ? "#FF3B3B" : "rgba(0,242,254,0.4)"}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 26, fontWeight: 900,
+                  color: isVotedByMe ? "#9D4EDD" : isLeading ? "#FF3B3B" : "#00F2FE",
+                  boxShadow: `0 0 16px ${isVotedByMe ? "rgba(157,78,221,0.4)" : isLeading ? "rgba(255,59,59,0.3)" : "rgba(0,242,254,0.2)"}`,
+                  transition: "all 0.25s",
+                  flexShrink: 0,
+                  cursor: "pointer",
+                  overflow: "hidden",
+                }}>
+                  {player.avatar ? (
+                    <img src={player.avatar} alt={player.displayName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    player.displayName.charAt(0).toUpperCase()
+                  )}
+                </div>
+                {hasPlayerVoted && (
+                  <div style={{
+                    position: "absolute", bottom: -2, right: -2,
+                    background: "#10B981", color: "#fff",
+                    borderRadius: "50%", width: 22, height: 22,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, border: "2px solid #0B0C10",
+                    boxShadow: "0 0 8px rgba(16,185,129,0.5)", zIndex: 10
+                  }} title="Đã chốt phiếu">✓</div>
+                )}
               </div>
 
               {/* Name */}
@@ -297,20 +394,47 @@ export default function VotingGrid({
                 <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>phiếu</span>
               </div>
 
+              {/* Voters Avatars Overlapping */}
+              {votersForThisPlayer.length > 0 && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginTop: -4 }}>
+                  {votersForThisPlayer.map((voter, idx) => (
+                    <div key={voter.userId} style={{
+                      width: 24, height: 24, borderRadius: "50%",
+                      border: "2px solid #0B0C10",
+                      background: "rgba(255,255,255,0.1)",
+                      marginLeft: idx === 0 ? 0 : -8,
+                      zIndex: votersForThisPlayer.length - idx,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      overflow: "hidden", fontSize: 10, fontWeight: "bold"
+                    }} title={voter.displayName}>
+                      {voter.avatar ? (
+                        <img src={voter.avatar} alt={voter.displayName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ) : voter.displayName.charAt(0).toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Vote button */}
               <button
                 onClick={e => {
                   e.stopPropagation();
+                  if (isVotedByMe && !changingVote) {
+                    playClick();
+                    if (onRevokeVote) onRevokeVote();
+                    return;
+                  }
                   if (!canVote) return;
+                  playVote();
                   if (changingVote) { onChangeVote(player.userId); setChangingVote(false); }
                   else onVote(player.userId);
                 }}
-                disabled={!canVote}
+                disabled={!canVote && !(isVotedByMe && !changingVote)}
                 style={{
                   width: "100%", padding: "10px 0",
                   borderRadius: 14, border: "none",
                   fontWeight: 900, fontSize: 13, letterSpacing: "0.06em",
-                  cursor: canVote ? "pointer" : "not-allowed",
+                  cursor: canVote || (isVotedByMe && !changingVote) ? "pointer" : "not-allowed",
                   transition: "all 0.2s",
                   background: isMe
                     ? "rgba(255,255,255,0.04)"
@@ -329,7 +453,7 @@ export default function VotingGrid({
                 }}
               >
                 {isMe ? "(Bạn)"
-                  : isVotedByMe && !changingVote ? "✅ Đã bầu"
+                  : isVotedByMe && !changingVote ? "🔙 Hủy bầu"
                   : changingVote ? "🔄 Chọn"
                   : "🗳️ VOTE"}
               </button>
@@ -369,92 +493,99 @@ export default function VotingGrid({
         </div>
       )}
 
-      {/* ── HOST SKIP / SKIP VOTE ── */}
+      {/* ── EXTEND VOTE / SKIP VOTE / NO VOTE ── */}
       <div style={{
         position: "fixed", bottom: 24, right: 24, zIndex: 50,
         display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10,
       }}>
-        {!hasVoted && !isEliminated && !changingVote && (
-          <button onClick={onSkip} style={{
+        {/* Kéo dài thời gian */}
+        {!isEliminated && onExtendVote && !isTimeExtended && (
+          <button onClick={() => { playClick(); onExtendVote(); }} style={{
             padding: "10px 20px", borderRadius: 12,
-            background: "rgba(255,255,255,0.05)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            color: "rgba(255,255,255,0.4)", fontSize: 13, fontWeight: 700,
-            cursor: "pointer", letterSpacing: "0.06em", transition: "all 0.2s",
-            fontFamily: "'Nunito', 'Inter', sans-serif",
+            background: extendVoteCount > 0 ? "rgba(16,185,129,0.2)" : "rgba(16,185,129,0.12)",
+            border: "1px solid rgba(16,185,129,0.35)",
+            color: "#10B981",
+            fontWeight: 800, fontSize: 13, cursor: "pointer", transition: "all 0.2s",
+            boxShadow: "0 4px 15px rgba(0,0,0,0.2)",
           }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#fff"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.09)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(255,255,255,0.4)"; (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; }}
-          >⏭ Bỏ qua</button>
-        )}
-        {isHost && (
-          <button onClick={onSkip} disabled={!canSkip} style={{
-            padding: "10px 20px", borderRadius: 12,
-            background: canSkip ? "rgba(157,78,221,0.12)" : "rgba(255,255,255,0.03)",
-            border: `1px solid ${canSkip ? "rgba(157,78,221,0.35)" : "rgba(255,255,255,0.06)"}`,
-            color: canSkip ? "#9D4EDD" : "rgba(255,255,255,0.18)",
-            fontSize: 13, fontWeight: 700, cursor: canSkip ? "pointer" : "not-allowed",
-            letterSpacing: "0.06em", transition: "all 0.2s",
-            fontFamily: "'Nunito', 'Inter', sans-serif",
-          }}>
-            {canSkip ? "⏭️ Kết thúc vote sớm" : "⏳ Chờ..."}
+            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(16,185,129,0.25)"}
+            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = extendVoteCount > 0 ? "rgba(16,185,129,0.2)" : "rgba(16,185,129,0.12)"}
+          >
+            ⏳ {hasRequestedExtend 
+                  ? `Đã xin thêm phút (${extendVoteCount}/${extendRequiredCount}) - Nhấn để hủy` 
+                  : extendVoteCount > 0 
+                    ? `Thêm một phút (${extendVoteCount}/${extendRequiredCount})`
+                    : "Thêm một phút"}
           </button>
         )}
-      </div>
 
-      {/* ── HISTORY MODAL ── */}
-      {historyPlayer && (
-        <div style={{
-          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          zIndex: 100, backdropFilter: "blur(8px)",
-        }} onClick={() => setHistoryPlayer(null)}>
-          <div style={{
-            background: "linear-gradient(160deg, #1A1A2E, #0B0C10)",
-            border: "1.5px solid rgba(0,242,254,0.2)",
-            borderRadius: 24, padding: "28px 32px", maxWidth: 400, width: "90%",
-            boxShadow: "0 8px 48px rgba(0,0,0,0.7)",
-          }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20 }}>
-              <div style={{
-                width: 52, height: 52, borderRadius: "50%",
-                background: "rgba(0,242,254,0.12)", border: "2px solid rgba(0,242,254,0.35)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 20, fontWeight: 900, color: "#00F2FE",
-              }}>
-                {historyPlayer.displayName.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div style={{ color: "#fff", fontWeight: 800, fontSize: 18 }}>{historyPlayer.displayName}</div>
-                <div style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 2 }}>Lịch sử miêu tả</div>
-              </div>
-            </div>
-            {historyPlayer.descriptionHistory && historyPlayer.descriptionHistory.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {historyPlayer.descriptionHistory.map((word, i) => (
-                  <div key={i} style={{
-                    background: "rgba(0,242,254,0.05)", border: "1px solid rgba(0,242,254,0.12)",
-                    borderRadius: 10, padding: "8px 14px",
-                    color: "#00F2FE", fontSize: 14, fontWeight: 700,
-                    fontFamily: "'Courier New', monospace",
-                  }}>
-                    <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginRight: 8 }}>#{i + 1}</span>
-                    {word}
+        {/* Không vote (Trắng phiếu) */}
+        {!isEliminated && (!hasVoted || myVoteTarget === "NO_VOTE") && !changingVote && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {noVoters.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center" }}>
+                {noVoters.map((voter, idx) => (
+                  <div key={voter.userId} style={{
+                    width: 24, height: 24, borderRadius: "50%",
+                    border: "2px solid #0B0C10",
+                    background: "rgba(255,255,255,0.1)",
+                    marginLeft: idx === 0 ? 0 : -8,
+                    zIndex: noVoters.length - idx,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    overflow: "hidden", fontSize: 10, fontWeight: "bold"
+                  }} title={voter.displayName}>
+                    {voter.avatar ? (
+                      <img src={voter.avatar} alt={voter.displayName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ) : voter.displayName.charAt(0).toUpperCase()}
                   </div>
                 ))}
               </div>
-            ) : (
-              <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, textAlign: "center" }}>Chưa có lịch sử.</p>
             )}
-            <button onClick={() => setHistoryPlayer(null)} style={{
-              marginTop: 20, width: "100%", padding: "10px",
-              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 12, color: "rgba(255,255,255,0.5)", cursor: "pointer",
-              fontSize: 13, fontWeight: 700, fontFamily: "'Nunito', 'Inter', sans-serif",
-            }}>Đóng</button>
+            <button onClick={() => {
+              playClick();
+              if (myVoteTarget === "NO_VOTE" && onRevokeVote) {
+                onRevokeVote();
+              } else {
+                onVote("NO_VOTE");
+              }
+            }} style={{
+              padding: "10px 20px", borderRadius: 12,
+              background: myVoteTarget === "NO_VOTE" ? "rgba(255,59,59,0.15)" : "rgba(255,59,59,0.08)",
+              border: "1px solid rgba(255,59,59,0.25)",
+              color: "#FF3B3B", fontSize: 13, fontWeight: 700,
+              cursor: "pointer", letterSpacing: "0.06em", transition: "all 0.2s",
+              fontFamily: "'Nunito', 'Inter', sans-serif",
+              display: "flex", alignItems: "center", gap: 6,
+            }}
+              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,59,59,0.2)"}
+              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = myVoteTarget === "NO_VOTE" ? "rgba(255,59,59,0.15)" : "rgba(255,59,59,0.08)"}
+            >
+              {myVoteTarget === "NO_VOTE" ? "🔙 Hủy Không vote" : "❌ Không vote"}
+            </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Bỏ qua vòng vote */}
+        {!isEliminated && !changingVote && (
+          <button onClick={() => { playClick(); onSkip(); }} style={{
+            padding: "10px 20px", borderRadius: 12,
+            background: skipVoteCount > 0 ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            color: "rgba(255,255,255,0.7)",
+            fontWeight: 800, fontSize: 13, cursor: "pointer", transition: "all 0.2s",
+            boxShadow: "0 4px 15px rgba(0,0,0,0.2)",
+          }}
+            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.2)"}
+            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = skipVoteCount > 0 ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.05)"}
+          >
+            ⏭️ {hasSkippedVote 
+                  ? `Đã xin bỏ qua (${skipVoteCount}/${skipRequiredCount}) - Nhấn để hủy` 
+                  : skipVoteCount > 0 
+                    ? `Bỏ qua vòng vote (${skipVoteCount}/${skipRequiredCount})`
+                    : "Bỏ qua vòng vote"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
