@@ -2,8 +2,10 @@
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import * as signalR from "@microsoft/signalr";
-import { Users, LogOut, Play, Crown, CheckCircle2, XCircle, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, Copy } from "lucide-react";
+import { Users, LogOut, Play, Crown, CheckCircle2, XCircle, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, Copy, Mic, MicOff, Volume2, VolumeX, MessageSquare } from "lucide-react";
 import { getSignalRConnection } from "@/lib/signalRConnection";
+import { useVoiceChat } from "@/hooks/useVoiceChat";
+import ChatBox from "@/components/ChatBox";
 import { ref, onValue } from "firebase/database";
 import { realtimeDb } from "@/lib/firebase";
 import FriendModal from "@/components/friends/FriendModal";
@@ -44,6 +46,9 @@ function RoomPageContent() {
   });
   const [popup, setPopup] = useState({ isOpen: false, title: "", message: "", redirectOnClose: false });
   const [hasUnread, setHasUnread] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const roomCode = Array.isArray(roomId) ? roomId[0] : String(roomId ?? "");
+  const { isMicOn, isSpeakerOn, toggleMic, toggleSpeaker, isJoinedVoice, joinVoiceChat, leaveVoice } = useVoiceChat(hubConnection, roomCode);
 
   // Phát nhạc chờ khi vào phòng
   useEffect(() => {
@@ -108,10 +113,14 @@ function RoomPageContent() {
 
     if (connection.state === signalR.HubConnectionState.Disconnected) {
       connection.start()
-        .then(() => { connection.invoke("JoinRoom", roomId); })
+        .then(() => { 
+            connection.invoke("JoinRoom", roomId); 
+            joinVoiceChat(connection);
+        })
         .catch(err => console.log("SignalR Connection Info: ", err.toString()));
     } else if (connection.state === signalR.HubConnectionState.Connected) {
       connection.invoke("JoinRoom", roomId);
+      joinVoiceChat(connection);
     }
 
     let unsubRequests: () => void = () => {};
@@ -136,8 +145,9 @@ function RoomPageContent() {
       connection.off("RoomError");
       connection.off("KickedFromRoom");
       unsubRequests();
+      leaveVoice(connection);
     };
-  }, [roomId, router, playStart]);
+  }, [roomId, router, playStart, joinVoiceChat, leaveVoice]);
 
   const handleLeaveRoom = async () => {
     playClick();
@@ -182,7 +192,6 @@ function RoomPageContent() {
     }
   };
 
-  const roomCode = Array.isArray(roomId) ? roomId[0] : String(roomId ?? "");
   const backgroundImage = useMemo(() => {
     const images = ["/bg1.jpg", "/bg2.jpg", "/bg3.jpg", "/bg4.jpg"];
     const hash = roomCode.split("").reduce((sum: number, char: string) => sum + char.charCodeAt(0), 0);
@@ -250,6 +259,63 @@ function RoomPageContent() {
     >
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(230,168,34,0.08)_0%,transparent_60%)]" />
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full h-[300px] pointer-events-none bg-[radial-gradient(ellipse_60%_80%_at_50%_100%,rgba(99,102,241,0.06)_0%,transparent_70%)]" />
+
+      {/* Overlay UI */}
+      {isJoinedVoice ? (
+        <div className="fixed top-6 right-6 z-[500] flex items-center gap-2 bg-black/50 backdrop-blur-xl border border-white/10 px-3 py-2 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
+          {/* Speaker Button */}
+          <button
+            onClick={toggleSpeaker}
+            title={isSpeakerOn ? "Tắt loa" : "Bật loa"}
+            className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
+              isSpeakerOn ? 'bg-indigo-500/20 text-indigo-400' : 'bg-white/5 text-white/30 hover:bg-white/10'
+            }`}
+          >
+            {isSpeakerOn ? <Volume2 size={20} /> : <VolumeX size={20} />}
+          </button>
+          
+          {/* Mic Button */}
+          <button
+            onClick={toggleMic}
+            title={isMicOn ? "Tắt mic" : "Bật mic"}
+            className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
+              isMicOn ? 'bg-red-500/20 text-red-500' : 'bg-green-500/10 text-green-500 hover:bg-green-500/20'
+            }`}
+          >
+            {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
+          </button>
+          
+          {/* Chat Button */}
+          <button
+            onClick={() => setIsChatOpen(!isChatOpen)}
+            title="Chat"
+            className={`w-[42px] h-[42px] rounded-full border-none flex items-center justify-center cursor-pointer transition-all ${
+              isChatOpen ? 'bg-[#e6a822] text-black' : 'bg-white/10 text-white/70 hover:bg-white/20'
+            }`}
+          >
+            <MessageSquare size={20} />
+          </button>
+        </div>
+      ) : (
+        <div className="fixed top-6 right-6 z-[500] bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-white/30 text-xs shadow-lg flex items-center gap-2 animate-pulse">
+          <span className="w-2 h-2 rounded-full bg-yellow-500/50" />
+          Đang kết nối voice...
+        </div>
+      )}
+
+      {/* ChatBox */}
+      <div className={`fixed top-24 right-6 w-[340px] z-[499] transition-all duration-300 ${
+        isChatOpen ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-4 pointer-events-none'
+      }`}>
+        {hubConnection && (
+          <ChatBox 
+            connection={hubConnection} 
+            roomId={roomCode} 
+            currentUser={sessionStorage.getItem("username") || "Người chơi"} 
+            playerCount={Object.keys(roomState?.players || {}).length} 
+          />
+        )}
+      </div>
 
       {errorMsg && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 bg-gradient-to-br from-red-900 to-red-800 text-white px-6 py-3 rounded-xl border border-red-500/40 shadow-[0_8px_32px_rgba(239,68,68,0.3)] font-bold text-sm z-[1000]">
