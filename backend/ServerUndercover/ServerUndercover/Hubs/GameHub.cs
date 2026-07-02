@@ -1051,8 +1051,9 @@ namespace ServerUndercover.Hubs
 
             source = source == "speech" ? "speech" : "typed";
 
-            int submittedTurnIndex;
-            bool roundOver;
+            int submittedTurnIndex = -1;
+            bool roundOver = false;
+            bool isNotMyTurn = false;
 
             lock (room)
             {
@@ -1062,13 +1063,22 @@ namespace ServerUndercover.Hubs
                 if (room.CurrentTurnIndex >= room.TurnOrder.Count) return;
                 if (room.TurnOrder[room.CurrentTurnIndex] != userId)
                 {
-                    await Clients.Caller.SendAsync("RoomError", "Chưa đến lượt của bạn.");
-                    return;
+                    isNotMyTurn = true;
                 }
-
-                submittedTurnIndex = room.CurrentTurnIndex;
-                roundOver = _roomManager.SubmitDescription(roomId, userId, word);
+                else
+                {
+                    submittedTurnIndex = room.CurrentTurnIndex;
+                    roundOver = _roomManager.SubmitDescription(roomId, userId, word);
+                }
             }
+
+            if (isNotMyTurn)
+            {
+                await Clients.Caller.SendAsync("RoomError", "Chưa đến lượt của bạn.");
+                return;
+            }
+
+            if (submittedTurnIndex == -1) return; // If phase was not describing or index >= count
 
             await _roomManager.RecordDescriptionAsync(room, userId, word, source, submittedTurnIndex);
 
