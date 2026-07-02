@@ -22,10 +22,10 @@ function read(key: string, def: number): number {
 
 let menuBgmVolume = read(MENU_BGM_KEY, 0.3); 
 let gameBgmVolume = read(GAME_BGM_KEY, 0.3); 
-let sfxUiVolume = read(SFX_UI_KEY, 0.7); 
-let sfxLobbyVolume = read(SFX_LOBBY_KEY, 0.7); 
-let sfxGameplayVolume = read(SFX_GAMEPLAY_KEY, 0.7); 
-let sfxEndgameVolume = read(SFX_ENDGAME_KEY, 0.7); 
+let sfxUiVolume = read(SFX_UI_KEY, 0.3); 
+let sfxLobbyVolume = read(SFX_LOBBY_KEY, 0.3); 
+let sfxGameplayVolume = read(SFX_GAMEPLAY_KEY, 0.3); 
+let sfxEndgameVolume = read(SFX_ENDGAME_KEY, 0.3); 
 let micVolume = read(MIC_VOL_KEY, 1.0); 
 let voiceOutputVolume = read(VOICE_OUTPUT_KEY, 1.0); 
 

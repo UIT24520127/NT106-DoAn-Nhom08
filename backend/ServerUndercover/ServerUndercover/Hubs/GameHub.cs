@@ -246,14 +246,22 @@ namespace ServerUndercover.Hubs
             }
 
             var room = _roomManager.GetRoom(roomId);
-            if (room == null || room.Phase != GamePhase.Describing || room.CurrentTurnIndex != turnIndex || room.RoundNumber != expectedRoundNumber)
-                return;
+            if (room == null) return;
 
-            string currentSpeakerId = room.TurnOrder[turnIndex];
+            string currentSpeakerId;
+            int submittedTurnIndex;
+            bool roundOver;
 
-            // Auto submit timeout description
-            int submittedTurnIndex = room.CurrentTurnIndex;
-            bool roundOver = _roomManager.SubmitDescription(roomId, currentSpeakerId, "(Hết thời gian)");
+            lock (room)
+            {
+                if (room.Phase != GamePhase.Describing || room.CurrentTurnIndex != turnIndex || room.RoundNumber != expectedRoundNumber)
+                    return;
+
+                currentSpeakerId = room.TurnOrder[turnIndex];
+                submittedTurnIndex = room.CurrentTurnIndex;
+                roundOver = _roomManager.SubmitDescription(roomId, currentSpeakerId, "(Hết thời gian)");
+            }
+
             await _roomManager.RecordDescriptionAsync(room, currentSpeakerId, "(Hết thời gian)", "timeout", submittedTurnIndex);
 
             await _hubContext.Clients.Group(roomId).SendAsync("DescriptionSubmitted", new
@@ -389,6 +397,7 @@ namespace ServerUndercover.Hubs
                 await BroadcastRoundTransition(roomId, room, new RoomManagerService.VoteResolution(false, player.UserId, player.DisplayName));
                 await Task.Delay((room.Settings.RoundTransitionDuration * 1000) + 1000);
 
+                room.RoundNumber++; // Tăng vòng chơi để hủy các timeout cũ
                 _roomManager.BuildTurnOrder(roomId);
                 await _roomManager.UpdateGameSessionPhaseAsync(room);
                 await BroadcastTurnOrderGenerated(room);
@@ -1042,16 +1051,35 @@ namespace ServerUndercover.Hubs
 
             source = source == "speech" ? "speech" : "typed";
 
-            // Chỉ đúng người đang lượt mới được submit
-            if (room.CurrentTurnIndex >= room.TurnOrder.Count) return;
-            if (room.TurnOrder[room.CurrentTurnIndex] != userId)
+            int submittedTurnIndex = -1;
+            bool roundOver = false;
+            bool isNotMyTurn = false;
+
+            lock (room)
+            {
+                if (room.Phase != GamePhase.Describing) return;
+                
+                // Chỉ đúng người đang lượt mới được submit
+                if (room.CurrentTurnIndex >= room.TurnOrder.Count) return;
+                if (room.TurnOrder[room.CurrentTurnIndex] != userId)
+                {
+                    isNotMyTurn = true;
+                }
+                else
+                {
+                    submittedTurnIndex = room.CurrentTurnIndex;
+                    roundOver = _roomManager.SubmitDescription(roomId, userId, word);
+                }
+            }
+
+            if (isNotMyTurn)
             {
                 await Clients.Caller.SendAsync("RoomError", "Chưa đến lượt của bạn.");
                 return;
             }
 
-            int submittedTurnIndex = room.CurrentTurnIndex;
-            bool roundOver = _roomManager.SubmitDescription(roomId, userId, word);
+            if (submittedTurnIndex == -1) return; // If phase was not describing or index >= count
+
             await _roomManager.RecordDescriptionAsync(room, userId, word, source, submittedTurnIndex);
 
             // Broadcast từ vừa nói cho cả phòng
@@ -1539,6 +1567,7 @@ namespace ServerUndercover.Hubs
                         await Task.Delay((room.Settings.RoundTransitionDuration * 1000) + 1000);
 
                         // Bắt đầu vòng mới
+                        room.RoundNumber++; // Tăng vòng chơi để hủy các timeout cũ
                         _roomManager.BuildTurnOrder(roomId);
                         await _roomManager.UpdateGameSessionPhaseAsync(room);
                         await BroadcastTurnOrderGenerated(room);

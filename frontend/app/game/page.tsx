@@ -10,6 +10,7 @@ import {
 } from '@microsoft/signalr';
 import { Shield, MessageSquare, Settings, Clock, Vote, Eye, EyeOff, ChevronUp, ChevronDown, CheckCircle2, LogOut, Key, Mic, MicOff, Volume2, VolumeX, BookOpen } from 'lucide-react';
 import ChatBox from '@/components/ChatBox';
+import { useVoiceChat } from '@/hooks/useVoiceChat';
 import RoleRevealingScreen from '@/components/game/RoleRevealingScreen';
 import DescribingPhase from '@/components/game/DescribingPhase';
 import LoadingPhaseScreen from '@/components/game/LoadingPhaseScreen';
@@ -217,15 +218,7 @@ function GamePageContent() {
     const [pendingWinner, setPendingWinner] = useState<string | null>(null);
 
     // ── Voice ────────────────────────────────
-    const [isMicOn, setIsMicOn] = useState(false);
-    const [isSpeakerOn, setIsSpeakerOn] = useState(true);
-    const [isJoinedVoice, setIsJoinedVoice] = useState(false);
-    const userStream = useRef<MediaStream | null>(null);
-    const peers = useRef<Record<string, PeerInstance>>({});
-    const remoteAudios = useRef<Record<string, HTMLAudioElement>>({});
-    const peerCtorRef = useRef<any>(null); // simple-peer constructor (preload để tạo peer đồng bộ, tránh race)
-    const myVoiceId = useRef<string>(''); // connectionId của CHÍNH MÌNH do server báo về (dùng so sánh chọn initiator)
-    const joinedVoiceRef = useRef<boolean>(false); // chống gọi joinVoiceChat 2 lần
+    const { isMicOn, isSpeakerOn, isJoinedVoice, joinVoiceChat, leaveVoice, toggleMic, toggleSpeaker } = useVoiceChat(connection, roomId);
 
     // ── Room / UI ───────────────────────────
     const [roomState, setRoomState] = useState<RoomState | null>(null);
@@ -238,20 +231,6 @@ function GamePageContent() {
     // Lịch sử mô tả toàn ván
     const [globalDescriptionHistory, setGlobalDescriptionHistory] = useState<Record<string, { displayName: string, words: string[] }>>({});
     const [showGlobalHistoryModal, setShowGlobalHistoryModal] = useState(false);
-
-    // Lắng nghe thay đổi âm lượng voice output
-    useEffect(() => {
-        const updateVoiceVols = () => {
-            const vol = getVoiceOutputVolume();
-            Object.values(remoteAudios.current).forEach(audio => {
-                audio.volume = vol;
-            });
-        };
-        // Áp dụng ngay khi mount
-        updateVoiceVols();
-        // Lắng nghe thay đổi từ SettingsModal
-        return subscribeSound(updateVoiceVols);
-    }, []);
 
     // ── Settings ────────────────────────────
     const [showSettings, setShowSettings] = useState(false);
@@ -271,143 +250,7 @@ function GamePageContent() {
         setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);
     };
 
-    // ================================
-    // WebRTC helpers
-    // ================================
-    // Tạo peer ĐỒNG BỘ (constructor đã được preload trong joinVoiceChat) -> không còn await -> tránh race tạo trùng peer
-    const createPeer = (targetId: string, conn: HubConnection, initiator: boolean): PeerInstance | null => {
-        const Peer = peerCtorRef.current;
-        if (!Peer) { console.warn('[VOICE] simple-peer chưa sẵn sàng'); return null; }
-        const hasStream = !!userStream.current;
-        console.log(`[VOICE] createPeer -> ${targetId} | initiator=${initiator} | có mic stream=${hasStream}`);
-        const peer = new Peer({
-            initiator,
-            trickle: true, // gửi offer/candidate ngay -> nối nhanh hơn nhiều (không chờ gom hết ICE/TURN)
-            stream: userStream.current || undefined,
-            config: {
-                iceServers: [
-                    // STUN: tìm IP công khai (đủ cho NAT thường)
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun.relay.metered.ca:80' },
-                    // TURN Metered: relay media khi P2P trực tiếp bị NAT/firewall chặn
-                    { urls: 'turn:global.relay.metered.ca:80', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
-                    { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
-                    { urls: 'turn:global.relay.metered.ca:443', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
-                    { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: '3525f89d123fedefe6b73999', credential: 'ujhX7qeJ/CMcPQuC' },
-                ],
-            },
-        });
-        peer.on('signal', async (data: any) => {
-            console.log(`[VOICE] gửi signal -> ${targetId} (${data?.type || 'candidate'})`);
-            try { await conn.invoke('SendVoiceSignal', targetId, JSON.stringify(data)); }
-            catch (e) { console.error('[VOICE] SendVoiceSignal lỗi:', e); }
-        });
-        peer.on('stream', (stream: MediaStream) => {
-            console.log(`[VOICE] 🔊 NHẬN remote stream từ ${targetId} | tracks=${stream.getAudioTracks().length}`);
-            let audio = document.getElementById(`audio-${targetId}`) as HTMLAudioElement;
-            if (!audio) {
-                audio = document.createElement('audio');
-                audio.id = `audio-${targetId}`;
-                audio.autoplay = true;
-                (audio as any).playsInline = true;
-                document.body.appendChild(audio);
-                remoteAudios.current[targetId] = audio;
-            }
-            audio.srcObject = stream;
-            audio.muted = !isSpeakerOn;
-            audio.volume = getVoiceOutputVolume();
-            audio.play()
-                .then(() => console.log(`[VOICE] ▶️ đang phát audio của ${targetId}`))
-                .catch(err => console.warn(`[VOICE] ⚠️ autoplay bị chặn (${targetId}):`, err?.name || err));
-        });
-        peer.on('connect', () => console.log(`[VOICE] ✅ P2P CONNECTED: ${targetId}`));
-        peer.on('error', (err: any) => { console.error(`[VOICE] ❌ Peer error (${targetId}):`, err); cleanupPeer(targetId); });
-        peer.on('close', () => { console.log(`[VOICE] đóng peer ${targetId}`); cleanupPeer(targetId); });
-        return peer;
-    };
-
-    const cleanupPeer = (id: string) => {
-        if (peers.current[id]) { peers.current[id].destroy(); delete peers.current[id]; }
-        if (remoteAudios.current[id]) { remoteAudios.current[id].remove(); delete remoteAudios.current[id]; }
-    };
-
-    // Kết nối tới 1 peer khác. Quy tắc tất định: chỉ bên có connectionId LỚN HƠN làm initiator
-    // -> mỗi cặp chỉ có 1 offer, tránh glare ("Failed to start SCTP transport").
-    const connectToPeer = (otherId: string, conn: HubConnection) => {
-        if (!otherId || peers.current[otherId]) {
-            console.log(`[VOICE] bỏ qua connectToPeer ${otherId} (đã có peer hoặc rỗng)`);
-            return;
-        }
-        // Ưu tiên id do server báo (myVoiceId), fallback connectionId của client
-        const myId = myVoiceId.current || conn.connectionId || '';
-        const initiator = myId > otherId;
-        console.log(`[VOICE] connectToPeer ${otherId} | myId=${myId} | làm initiator=${initiator}`);
-        const peer = createPeer(otherId, conn, initiator);
-        if (peer) peers.current[otherId] = peer;
-    };
-
-    const joinVoiceChat = async (activeConn: HubConnection) => {
-        if (joinedVoiceRef.current) { console.log('[VOICE] joinVoiceChat: đã vào rồi, bỏ qua'); return; }
-        joinedVoiceRef.current = true;
-        try {
-            console.log('[VOICE] joinVoiceChat: bắt đầu...');
-            // Preload constructor TRƯỚC khi vào voice -> mọi sự kiện signaling sau đó tạo peer đồng bộ
-            if (!peerCtorRef.current) peerCtorRef.current = (await import('simple-peer')).default;
-            if (!userStream.current) {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    audio: {
-                        echoCancellation: true,   // khử tiếng vọng (mic thu lại loa)
-                        noiseSuppression: true,   // lọc ồn nền
-                        autoGainControl: true,    // tự cân âm lượng
-                    },
-                });
-                stream.getAudioTracks().forEach(t => t.enabled = false);
-                userStream.current = stream;
-                console.log(`[VOICE] đã lấy mic, số audio track=${stream.getAudioTracks().length} (đang tắt sẵn)`);
-            }
-            await activeConn.invoke("StartVoiceChat", roomId);
-            setIsJoinedVoice(true);
-            console.log(`[VOICE] đã StartVoiceChat, connectionId=${activeConn.connectionId}`);
-        } catch (err) {
-            joinedVoiceRef.current = false;
-            console.error("[VOICE] ❌ Không vào được voice / mic bị từ chối:", err);
-        }
-    };
-
-    // Rời voice: dọn sạch tất cả peer + tắt mic + báo server. Gọi khi chơi lại / về menu / unmount.
-    const leaveVoice = (conn?: HubConnection | null) => {
-        const c = conn || connection;
-        try { c?.invoke("LeaveVoiceChat", roomId); } catch { /* ignore */ }
-        Object.keys(peers.current).forEach(id => cleanupPeer(id));
-        userStream.current?.getTracks().forEach(t => t.stop());
-        userStream.current = null;
-        joinedVoiceRef.current = false;
-        myVoiceId.current = '';
-        console.log('[VOICE] 🔌 rời voice: đã destroy peers + tắt mic + báo server');
-    };
-
-    // ================================
-    // Controls
-    // ================================
-    const toggleMic = () => {
-        if (!userStream.current) { console.warn('[VOICE] toggleMic: chưa có mic stream'); return; }
-        const newState = !isMicOn;
-        userStream.current.getAudioTracks().forEach(t => t.enabled = newState);
-        setIsMicOn(newState);
-        console.log(`[VOICE] 🎙️ Mic ${newState ? 'BẬT' : 'TẮT'} | số peer đang kết nối=${Object.keys(peers.current).length}`);
-        // Tận dụng cú click (user gesture) để bỏ chặn autoplay cho audio đang nhận
-        Object.values(remoteAudios.current).forEach(a => a.play().catch(() => {}));
-    };
-
-    const toggleSpeaker = () => {
-        const newState = !isSpeakerOn;
-        setIsSpeakerOn(newState);
-        Object.values(remoteAudios.current).forEach(audio => {
-            audio.muted = !newState;
-            if (newState) audio.play().catch(() => {});
-        });
-        console.log(`[VOICE] 🔊 Loa ${newState ? 'BẬT' : 'TẮT'} | số audio remote=${Object.keys(remoteAudios.current).length}`);
-    };
+    // WebRTC logic moved to hooks/useVoiceChat.ts
 
     const handleSkipTurn = async () => {
         if (!connection) return;
@@ -805,30 +648,8 @@ function GamePageContent() {
         });
 
         // ── Voice events ─────────────────────────
-        // Người mới nhận danh sách người đang trong voice -> kết nối tới từng người (tất định)
-        newConn.on('ExistingVoiceUsers', (data: { selfId: string; users: string[] }) => {
-            myVoiceId.current = data?.selfId || '';
-            console.log('[VOICE] 📥 ExistingVoiceUsers | selfId=', data?.selfId, '| users=', data?.users);
-            (data?.users || []).forEach(id => connectToPeer(id, newConn));
-        });
-        // Có người mới vào voice -> kết nối tới họ (tất định)
-        newConn.on('UserJoinedVoice', (newcomerId: string) => {
-            console.log('[VOICE] 📥 UserJoinedVoice:', newcomerId);
-            connectToPeer(newcomerId, newConn);
-        });
-        newConn.on('ReceiveSignal', (senderId: string, signal: string) => {
-            console.log(`[VOICE] 📥 ReceiveSignal từ ${senderId}`);
-            let peer = peers.current[senderId];
-            if (!peer) {
-                // Chưa có peer -> mình là bên non-initiator, tạo để nhận offer
-                console.log(`[VOICE] chưa có peer cho ${senderId} -> tạo non-initiator`);
-                peer = createPeer(senderId, newConn, false);
-                if (peer) peers.current[senderId] = peer;
-            }
-            if (peer) { try { peer.signal(JSON.parse(signal)); } catch (e) { console.error('[VOICE] signal lỗi:', e); } }
-        });
-        newConn.on('PlayerDisconnected', (id: string) => { console.log('[VOICE] 📥 PlayerDisconnected:', id); cleanupPeer(id); });
-        newConn.on('PlayerDisconnected', (id: string) => cleanupPeer(id));
+        // (Xử lý thông qua hook useVoiceChat)
+
         newConn.on("PlayerLeft", (data: { userId: string, displayName: string }) => {
             addNotif(`${data.displayName} đã rời phòng.`, 'warning');
         });
@@ -1287,10 +1108,7 @@ function GamePageContent() {
             newConn.off('RoomError');
             newConn.off('KickedFromRoom');
             newConn.off('RoomUpdated');
-            newConn.off('ExistingVoiceUsers');
-            newConn.off('UserJoinedVoice');
-            newConn.off('ReceiveSignal');
-            newConn.off('PlayerDisconnected');
+
             newConn.off('ReceiveSecretWord');
             newConn.off('RoleAssigned');
             newConn.off('ReturnedToLobby');
@@ -1507,33 +1325,7 @@ function GamePageContent() {
                 {overlayElements}
                 {leaveRoomButton}
                 <div style={pageRootStyle}>
-                    {showWhiteHatGuess && isMyWhiteHatGuess && (
-                    <WhiteHatGuessOverlay
-                        isWhiteHat={true}
-                        onGuess={handleWhiteHatGuess}
-                        onCancel={() => setShowWhiteHatGuess(false)}
-                    />
-                )}
-                {isMyWhiteHatGuess && !isEliminated && !showWhiteHatGuess && (
-                    <button
-                        onClick={() => setShowWhiteHatGuess(true)}
-                        style={{
-                            position: "fixed", bottom: 24, left: 24, zIndex: 60,
-                            padding: "14px 28px", borderRadius: 99, border: "2px solid #FFD700",
-                            background: "linear-gradient(135deg, #2b1b18, #3e2723)",
-                            color: "#FFD700", fontWeight: 900, cursor: "pointer",
-                            boxShadow: "0 4px 20px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255,215,0,0.1)",
-                            display: "flex", alignItems: "center", gap: 10,
-                            letterSpacing: "0.05em",
-                            transition: "transform 0.2s"
-                        }}
-                        onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.05)"}
-                        onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"}
-                    >
-                        <Key size={20} />
-                        ĐOÁN TỪ KHÓA
-                    </button>
-                )}
+
                 <DescribingPhase
                     players={playersForDescribing}
                     turnOrder={turnOrder}
