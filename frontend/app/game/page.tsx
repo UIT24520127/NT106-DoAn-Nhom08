@@ -1325,33 +1325,7 @@ function GamePageContent() {
                 {overlayElements}
                 {leaveRoomButton}
                 <div style={pageRootStyle}>
-                    {showWhiteHatGuess && isMyWhiteHatGuess && (
-                    <WhiteHatGuessOverlay
-                        isWhiteHat={true}
-                        onGuess={handleWhiteHatGuess}
-                        onCancel={() => setShowWhiteHatGuess(false)}
-                    />
-                )}
-                {isMyWhiteHatGuess && !isEliminated && !showWhiteHatGuess && (
-                    <button
-                        onClick={() => setShowWhiteHatGuess(true)}
-                        style={{
-                            position: "fixed", bottom: 24, left: 24, zIndex: 60,
-                            padding: "14px 28px", borderRadius: 99, border: "2px solid #FFD700",
-                            background: "linear-gradient(135deg, #2b1b18, #3e2723)",
-                            color: "#FFD700", fontWeight: 900, cursor: "pointer",
-                            boxShadow: "0 4px 20px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255,215,0,0.1)",
-                            display: "flex", alignItems: "center", gap: 10,
-                            letterSpacing: "0.05em",
-                            transition: "transform 0.2s"
-                        }}
-                        onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1.05)"}
-                        onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"}
-                    >
-                        <Key size={20} />
-                        ĐOÁN TỪ KHÓA
-                    </button>
-                )}
+
                 <DescribingPhase
                     players={playersForDescribing}
                     turnOrder={turnOrder}
